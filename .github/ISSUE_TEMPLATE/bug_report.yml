@@ -15,12 +15,17 @@ body:
       placeholder: ログイン画面でSubmitボタンを押すとアプリがクラッシュする...
     validations:
       required: true
-  - type: textarea
+  - type: dropdown
     id: area
     attributes:
       label: Affected Area
-      description: どの領域の問題ですか？ (TODO.mdのAreaに対応します) 最も近いものを入力してください。
-      placeholder: UI, Docs Core, etc.
+      description: TODO.mdのAreaに対応します。最も近いものを選択してください。
+      options:
+        - Core
+        - UI
+        - Docs
+        - DevOps
+        - General
     validations:
       required: true
   - type: textarea

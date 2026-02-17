@@ -22,11 +22,17 @@ body:
       description: どのような解決策（機能）を想定していますか？
     validations:
       required: true
-  - type: textarea
+  - type: dropdown
     id: area
     attributes:
       label: Target Area
-      placeholder: Core, UI, Inventory, etc.
+      description: TODO.mdのAreaに対応します。最も近いものを選択してください。
+      options:
+        - Core
+        - UI
+        - Docs
+        - DevOps
+        - General
     validations:
       required: true
   - type: checkboxes

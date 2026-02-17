@@ -1,0 +1,98 @@
+"""Gemini APIアダプタ"""
+
+import os
+from typing import Any, Optional
+
+import importlib
+from google.api_core import exceptions as google_exceptions
+
+from .base import LLMAdapter, LLMError
+
+
+class GeminiAdapter(LLMAdapter):
+    """Google Gemini API用アダプタ"""
+
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Args:
+            api_key: Gemini APIキー（Noneの場合は環境変数から取得）
+        """
+        self._api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self._model = None
+        self._client = None
+
+        if self._api_key:
+            genai = self._load_genai()
+            self._client = getattr(genai, "Client")(api_key=self._api_key)
+
+    def is_available(self) -> bool:
+        """APIキーが設定されているか確認"""
+        return self._api_key is not None and len(self._api_key) > 10
+
+    def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+    ) -> str:
+        """
+        Gemini APIを使用してテキスト生成を実行
+
+        Args:
+            system_prompt: システムプロンプト
+            user_prompt: ユーザープロンプト
+            temperature: 温度パラメータ
+            max_tokens: 最大トークン数
+
+        Returns:
+            生成されたテキスト
+
+        Raises:
+            LLMError: API呼び出し失敗時
+        """
+        model_name = os.getenv("JUDGE_GEMINI_MODEL", "gemini-1.5-pro")
+        return self.complete_with_model(
+            model=model_name,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    def complete_with_model(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+    ) -> str:
+        if not self.is_available():
+            raise LLMError("Gemini APIキーが設定されていません")
+
+        try:
+            if self._client is None:
+                genai = self._load_genai()
+                self._client = getattr(genai, "Client")(api_key=self._api_key)
+
+            response = self._client.models.generate_content(
+                model=model,
+                contents=user_prompt,
+                config={
+                    "system_instruction": system_prompt,
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                },
+            )
+
+            return getattr(response, "text", "") or ""
+
+        except google_exceptions.GoogleAPIError as e:
+            raise LLMError(f"Gemini APIエラー: {str(e)}") from e
+        except Exception as e:
+            raise LLMError(f"予期しないエラー: {str(e)}") from e
+
+    @staticmethod
+    def _load_genai() -> Any:
+        return importlib.import_module("google.genai")

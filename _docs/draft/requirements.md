@@ -14,7 +14,7 @@ judgeはGPT系・Claude系・Gemini系それぞれが独立して評価し、結
 
 - **UI**: Streamlit
 - **言語**: Python 3.10+
-- **主要ライブラリ**: `openai`, `anthropic`, `google-generativeai`, `python-dotenv`, `pandas`, `plotly`
+- **主要ライブラリ**: `openai`, `anthropic`, `google-genai`, `python-dotenv`, `pandas`, `plotly`
 
 ---
 

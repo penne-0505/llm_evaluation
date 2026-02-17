@@ -1,0 +1,9 @@
+.streamlit/secrets.toml
+.env
+models/last_selection.json
+.venv
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/

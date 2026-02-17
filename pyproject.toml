@@ -1,7 +1,16 @@
 [project]
 name = "llm-evalution"
 version = "0.1.0"
-description = "Add your description here"
+description = "LLM Benchmark Application with LLM-as-a-Judge"
 readme = "README.md"
-requires-python = ">=3.14"
-dependencies = []
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.40.0",
+    "openai>=1.55.0",
+    "anthropic>=0.42.0",
+    "google-genai>=0.6.0",
+    "python-dotenv>=1.0.0",
+    "pandas>=2.2.0",
+    "plotly>=5.24.0",
+    "pyinstaller>=6.11.0",
+]

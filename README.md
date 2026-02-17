@@ -1,101 +1,78 @@
-# Documentation Driven Development Template
+# LLM Benchmark App
 
-> This README is available in English and Japanese. English speakers, please scroll down.
+タスク固有ルーブリックに基づき、被験LLMを複数judge（OpenAI/Anthropic/Gemini/OpenRouter）で評価するStreamlitアプリです。
 
-## 概要
+## 特徴
 
-このリポジトリは私が常用しているドキュメント駆動開発 *(Documentation Driven Development)* のテンプレートです。
+- 被験LLMの回答を1回生成し、judge系統ごとに複数回評価
+- judge結果は集約せず、系統ごとに並置表示
+- JSON結果の保存・読み込み
+- 起動時にモデル一覧を取得し、UIから被験/ judgeモデルを選択（取得できない場合は手動入力）
+- 11タスクのルーブリック/プロンプトを同梱
 
-開発サイクルはドキュメントと [TODO.md](TODO.md) によって構成されています。
+## 依存関係
 
-人がサイクルを回すことも出来ますが、基本的にはClaude Codeなどのコーディングエージェントが、この規則に従って自律的な開発を行うために設計されました。
+- Python 3.10+
+- Streamlit
+- openai / anthropic / google-genai
+- python-dotenv / pandas / plotly
 
-**詳細については [ガイドライン](_docs/documentation_guide.md) を参照してください。**
+## セットアップ
 
-## 使用方法
+1. 依存関係のインストール
 
-1. このリポジトリをフォークまたはクローンします。
-2. プロジェクトに合わせてドキュメントと設定ファイルを編集します。
-4. 開発を開始します。
+```bash
+uv sync
+```
 
-### カスタマイズ
+2. 環境変数の設定
 
-使用に当たっては、以下のファイルをプロジェクトに合わせてカスタマイズしてください。
+`.env.example` をコピーして `.env` を作成し、APIキーを設定してください。
 
-#### Issue Templates
+```bash
+cp .env.example .env
+```
 
-これらの **"Area"** セクションを、プロジェクトに適した内容に変更してください。
+3. アプリ起動
 
-- `.github/ISSUE_TEMPLATE/bag_report.yml`
-- `.github/ISSUE_TEMPLATE/feature_request.yml`
+```bash
+uv run streamlit run app.py
+```
 
-#### AGENTS.md
+### 追加のリソースパス指定（任意）
 
-変更の推奨事項はありませんが、特定コマンドの使用指示が含まれているので、必要に応じて編集してください。
+- `LLM_BENCHMARK_RUBRICS_DIR`: ルーブリック用ディレクトリ
+- `LLM_BENCHMARK_PROMPTS_DIR`: プロンプト用ディレクトリ
+- `LLM_BENCHMARK_JUDGE_SYSTEM_PROMPT_PATH`: judgeシステムプロンプトのファイルパス
 
-#### CONTRIBUTING.md
+## ディレクトリ構成
 
-- `CONTRIBUTING.md`
+```
+.
+├── app.py
+├── adapters/
+├── core/
+├── ui/
+├── rubrics/                # 11タスクのルーブリック
+├── prompts/                # 11タスクの入力プロンプト
+├── judge_system_prompt.md
+├── results/                # 実行結果JSON
+└── tests/
+```
 
-このファイルの、`2. 開発環境のセットアップ` セクションを、プロジェクトに合わせて編集してください。ただし、プロジェクトによって大きく対応が変化すると思いますので、全面的に、必要に応じて編集してください。
+## 結果ファイル
 
-#### README.md
+`results/YYYYMMDD_HHMMSS_<model_name>.json` として保存されます。
 
-このREADME自体も、プロジェクトに合わせて編集してください。
+## 注意事項
 
-#### LICENSE.txt
-
-[LICENSE](LICENSE.txt)についても、特に著作者の表示を編集してください。
-
-## ライセンス
-
-このリポジトリは [MITライセンス](LICENSE.txt) の下でライセンスされています。
-
----
-
-## Summary
-
-This repository is a template for Documentation Driven Development that I commonly use.
-
-The development cycle is structured around documentation and [TODO.md](TODO.md).
-
-While humans can run the cycle, it is primarily designed for coding agents like Claude Code to autonomously develop according to these rules.
-
-**For more details, please refer to the [Guidelines](_docs/documentation_guide.md).**
-
-## Usage
-
-1. Fork or clone this repository.
-2. Edit the documentation and configuration files to suit your project.
-3. Start development.
-
-### Customization
-
-When using this template, please customize the following files to fit your project.
-
-#### Issue Templates
-
-Please modify the **"Area"** sections to reflect content appropriate for your project.
-- `.github/ISSUE_TEMPLATE/bug_report.yml`
-- `.github/ISSUE_TEMPLATE/feature_request.yml`
-
-#### AGENTS.md
-
-No specific changes are recommended here, but feel free to edit it as needed, especially if you want to suggest the use of certain commands.
-
-#### CONTRIBUTING.md
-
-- `CONTRIBUTING.md`
-
-Please edit the `2. Setting Up Development Environment` section to suit your project. Since this may vary significantly between projects, feel free to overhaul it as necessary.
-
-#### README.md
-
-Feel free to edit this README itself to suit your project.
-
-#### LICENSE.txt
-
-Please edit the [LICENSE](LICENSE.txt) file, particularly the author attribution.
+- APIキーが設定されていないプロバイダはモデル一覧取得時にスキップされます。
+- モデル一覧は起動時に取得し、サイドバーの「モデル一覧を再取得」で更新できます。
+- モデル一覧が空の場合は手動入力欄が表示されます。
+- APIキーをUIから保存する場合は `.streamlit/secrets.toml` が作成されます。gitに含めないでください。
+- 前回のモデル/タスク選択は `models/last_selection.json` に保存され、再起動後に復元されます。
+- judgeのJSONが不正な場合はリトライ後にスキップされます。
 
 ## License
-This repository is licensed under the [MIT License](LICENSE.txt).
+
+MIT License

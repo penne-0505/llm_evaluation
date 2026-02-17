@@ -1,7 +1,7 @@
 # Project Task Management Rules
 
 ## 0. System Metadata
-- **Current Max ID**: `Next ID No: 9` (※タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 14` (※タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一のID発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -180,145 +180,39 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 --- 
 
 ## Inbox
-- 
 
 ---
 
 ## Backlog
 
-- **Title**: [Chore] Customize Issue Templates Area sections
-- **ID**: Docs-Chore-1
-- **Priority**: P1
-- **Size**: S
-- **Area**: Docs
-- **Dependencies**: []
-- **Goal**: `.github/ISSUE_TEMPLATE/bug_report.yml` と `.github/ISSUE_TEMPLATE/feature_request.yml` の "Area" セクションがプロジェクトに適した内容に変更されている。
-- **Steps**:
-  1. [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` を開き、"Area" セクションを確認
-  2. [ ] プロジェクトに適した領域名に変更
-  3. [ ] `.github/ISSUE_TEMPLATE/feature_request.yml` を開き、同様に変更
-  4. [ ] 変更内容を検証
-- **Description**: GitHub Issueテンプレートの"Area"セクションを、プロジェクト固有の内容にカスタマイズする。
-- **Plan**: None
-
-- **Title**: [Chore] Review and customize AGENTS.md
-- **ID**: Docs-Chore-2
-- **Priority**: P2
-- **Size**: XS
-- **Area**: Docs
-- **Dependencies**: []
-- **Goal**: `AGENTS.md` がプロジェクトのニーズに応じて必要に応じて編集されている。
-- **Steps**:
-  1. [ ] `AGENTS.md` を開き、既存の内容を確認
-  2. [ ] 必要に応じて編集（特定コマンドの使用指示など）
-  3. [ ] 変更を保存
-- **Description**: AGENTS.mdをレビューし、プロジェクトの要件に応じてカスタマイズする。
-- **Plan**: None
-
-- **Title**: [Chore] Customize README.md for project
-- **ID**: Docs-Chore-3
-- **Priority**: P0
-- **Size**: S
-- **Area**: Docs
-- **Dependencies**: []
-- **Goal**: `README.md` がプロジェクトの概要、目的、使用方法に合わせて編集されている。
-- **Steps**:
-  1. [ ] 現在のREADME.mdを確認
-  2. [ ] プロジェクト名、概要、説明をプロジェクトに合わせて書き換え
-  3. [ ] 使用方法セクションを編集
-  4. [ ] 不要なテンプレート固有の記述を削除または修正
-  5. [ ] 変更を保存
-- **Description**: README.mdをテンプレートからプロジェクト固有の内容に書き換える。
-- **Plan**: None
-
-- **Title**: [Chore] Update LICENSE.txt author attribution
-- **ID**: Docs-Chore-4
-- **Priority**: P2
-- **Size**: XS
-- **Area**: Docs
-- **Dependencies**: []
-- **Goal**: `LICENSE.txt` の著作者名が正しいものに編集されている。
-- **Steps**:
-  1. [ ] `LICENSE.txt` を開き、著作者名を確認
-  2. [ ] 正しい著作者名に編集
-  3. [ ] 変更を保存
-- **Description**: LICENSEファイルの著作者表示をプロジェクトに合わせて更新する。
-- **Plan**: None
-
 ---
 
 ## Ready
 
-- **Title**: [Feat] アダプタ層実装
-- **ID**: Core-Feat-5
-- **Priority**: P0
+- **Title**: [Chore] Add GitHub Release binary workflow
+- **ID**: DevOps-Chore-12
+- **Priority**: P1
+- **Size**: M
+- **Area**: DevOps
+- **Dependencies**: []
+- **Goal**: GitHub Actionsで単一バイナリのリリース用アーティファクトを生成できる。
+- **Steps**:
+  1. [ ] Planの "Tasks" に従い、リリース用workflowを定義
+  2. [ ] Planの "Test Plan" に従い、リリース成果物の生成を確認
+- **Description**: GitHub Releases向けに単一バイナリ配布の自動化を整備する。
+- **Plan**: `_docs/plan/DevOps/github-release-binary.md`
+
+- **Title**: [Enhance] Packaging supports embedded resources and overrides
+- **ID**: Core-Enhance-13
+- **Priority**: P2
 - **Size**: M
 - **Area**: Core
 - **Dependencies**: []
-- **Goal**: OpenAI/Anthropic/Geminiのアダプタが実装され、API呼び出しが可能な状態になる。
+- **Goal**: バンドルされたリソースと外部パス上書きの優先順位・仕様が明確化されている。
 - **Steps**:
-  1. [ ] Planの「3.1 アダプタ層」セクションに従い基底クラスを実装
-  2. [ ] OpenAIアダプタ実装（adapters/openai_adapter.py）
-  3. [ ] Anthropicアダプタ実装（adapters/anthropic_adapter.py）
-  4. [ ] Geminiアダプタ実装（adapters/gemini_adapter.py）
-  5. [ ] アダプタファクトリ関数実装（モデル名→アダプタ変換）
-  6. [ ] 簡易動作テスト（各アダプタでAPI呼び出し確認）
-- **Description**: LLM API呼び出しの抽象化レイヤーを実装。3プロバイダー（OpenAI/Anthropic/Gemini）に対応。
-- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション3.1, 3.2.1, 5.1参照)
-
-- **Title**: [Feat] 評価エンジン実装
-- **ID**: Core-Feat-6
-- **Priority**: P0
-- **Size**: M
-- **Area**: Core
-- **Dependencies**: [Core-Feat-5]
-- **Goal**: 被験LLM呼び出し → judge評価 → 結果集計の一連の流れが動作する。
-- **Steps**:
-  1. [ ] Planの「3.4 JSONレスポンスパーサー」に従いパーサー実装
-  2. [ ] Planの「3.5 結果集計」に従い集計ロジック実装
-  3. [ ] Planの「3.2 評価エンジン」に従いBenchmarkEngine実装
-  4. [ ] Judgeプロンプト組み立て関数実装
-  5. [ ] エラーハンドリング・リトライ処理実装
-  6. [ ] 単体テスト作成（test_adapters.py, test_engine.py）
-- **Description**: ベンチマーク実行のコアロジック。被験LLM呼び出し、複数judgeでの評価、結果の集計を担当。
-- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション3.2, 3.4, 3.5, 5.1参照)
-
-- **Title**: [Feat] Streamlit UI実装
-- **ID**: Core-Feat-7
-- **Priority**: P0
-- **Size**: M
-- **Area**: Core
-- **Dependencies**: [Core-Feat-6]
-- **Goal**: 設定パネル・実行ボタン・結果表示・過去結果読み込みが動作するUIが完成する。
-- **Steps**:
-  1. [ ] Planの「3.6 Streamlit UI」に従いサイドバー設定パネル実装
-  2. [ ] タスク選択UI（チェックボックス・全選択ボタン）
-  3. [ ] タスク別結果カードコンポーネント実装（judge系統タブ付き）
-  4. [ ] 横断サマリー表示（グラフ・テーブル・警告リスト）
-  5. [ ] 過去結果読み込み機能実装
-  6. [ ] プログレスバー・ステータスメッセージ表示
-- **Description**: ユーザーインターフェース層。Streamlitを使用し、設定から結果表示までの全UIを実装。
-- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション3.6, 3.7参照)
-
-- **Title**: [Feat] 統合・テスト・ルーブリック配置
-- **ID**: Core-Feat-8
-- **Priority**: P0
-- **Size**: M
-- **Area**: Core
-- **Dependencies**: [Core-Feat-7]
-- **Goal**: 11タスクのルーブリック・プロンプトが配置され、1タスクでE2E動作確認が完了する。
-- **Steps**:
-  1. [ ] rubrics/ディレクトリ作成、ドラフトから11ファイルコピー
-  2. [ ] prompts/ディレクトリ作成、ドラフトから11ファイルコピー
-  3. [ ] judge_system_prompt.md配置
-  4. [ ] .env.example作成
-  5. [ ] E2E動作確認（1タスクで被験LLM→judge評価→結果表示→JSON保存）
-  6. [ ] エラーケース動作確認（APIエラー時のスキップ動作）
-  7. [ ] README更新（実行方法記載）
-- **Description**: 統合フェーズ。ルーブリック・プロンプト配置、E2Eテスト、ドキュメント更新を実施。
-- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション4, 6, 7参照)
-
----
+  1. [x] Planの "Scope" と "Requirements" を実装方針に落とし込む
+  2. [ ] Planの "Test Plan" に従い動作確認
+- **Description**: リソース埋め込みとカスタムパス上書きに対応するパッケージング方針を定義し実装する。
+- **Plan**: `_docs/plan/Core/resource-embedding-packaging.md`
 
 ## In Progress
-
