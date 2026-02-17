@@ -1,0 +1,38 @@
+name: Feature Request
+description: 新機能の提案や改善案はこちら
+title: "[Feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        機能の提案ありがとうございます。いくつか簡単な質問にお答えください。
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem & Goal
+      description: 解決したい課題、または達成したいゴールは何ですか？
+      placeholder: 現在の在庫一覧ページでは、期限切れの商品が一目でわからないため...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: どのような解決策（機能）を想定していますか？
+    validations:
+      required: true
+  - type: textarea
+    id: area
+    attributes:
+      label: Target Area
+      placeholder: Core, UI, Inventory, etc.
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: あなた自身でこの機能を実装するPRを作成する意思はありますか？
+      options:
+        - label: はい、私が実装してPRを提出します。

@@ -1,0 +1,54 @@
+name: Bug Report
+description: バグやエラーの報告はこちら
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        バグの報告ありがとうございます！いくつか簡単な質問にお答えください。
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: 何が起きたのか、簡潔に説明してください。
+      placeholder: ログイン画面でSubmitボタンを押すとアプリがクラッシュする...
+    validations:
+      required: true
+  - type: textarea
+    id: area
+    attributes:
+      label: Affected Area
+      description: どの領域の問題ですか？ (TODO.mdのAreaに対応します) 最も近いものを入力してください。
+      placeholder: UI, Docs Core, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction Steps
+      description: 再現手順を箇条書きで記述してください。
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS、ランタイムバージョンなど（例：Node.js, Python, Dockerなど）
+      render: bash
+      value: |
+        - OS: 
+        - ランタイム/バージョン: 
+    validations:
+      required: false
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: あなた自身でこのバグを修正するPRを作成する意思はありますか？
+      options:
+        - label: はい、私が修正してPRを提出します。
