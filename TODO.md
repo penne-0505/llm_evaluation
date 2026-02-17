@@ -1,7 +1,7 @@
 # Project Task Management Rules
 
 ## 0. System Metadata
-- **Current Max ID**: `Next ID No: 5` (※タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 9` (※タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一のID発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -248,6 +248,75 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 ---
 
 ## Ready
+
+- **Title**: [Feat] アダプタ層実装
+- **ID**: Core-Feat-5
+- **Priority**: P0
+- **Size**: M
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: OpenAI/Anthropic/Geminiのアダプタが実装され、API呼び出しが可能な状態になる。
+- **Steps**:
+  1. [ ] Planの「3.1 アダプタ層」セクションに従い基底クラスを実装
+  2. [ ] OpenAIアダプタ実装（adapters/openai_adapter.py）
+  3. [ ] Anthropicアダプタ実装（adapters/anthropic_adapter.py）
+  4. [ ] Geminiアダプタ実装（adapters/gemini_adapter.py）
+  5. [ ] アダプタファクトリ関数実装（モデル名→アダプタ変換）
+  6. [ ] 簡易動作テスト（各アダプタでAPI呼び出し確認）
+- **Description**: LLM API呼び出しの抽象化レイヤーを実装。3プロバイダー（OpenAI/Anthropic/Gemini）に対応。
+- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション3.1, 3.2.1, 5.1参照)
+
+- **Title**: [Feat] 評価エンジン実装
+- **ID**: Core-Feat-6
+- **Priority**: P0
+- **Size**: M
+- **Area**: Core
+- **Dependencies**: [Core-Feat-5]
+- **Goal**: 被験LLM呼び出し → judge評価 → 結果集計の一連の流れが動作する。
+- **Steps**:
+  1. [ ] Planの「3.4 JSONレスポンスパーサー」に従いパーサー実装
+  2. [ ] Planの「3.5 結果集計」に従い集計ロジック実装
+  3. [ ] Planの「3.2 評価エンジン」に従いBenchmarkEngine実装
+  4. [ ] Judgeプロンプト組み立て関数実装
+  5. [ ] エラーハンドリング・リトライ処理実装
+  6. [ ] 単体テスト作成（test_adapters.py, test_engine.py）
+- **Description**: ベンチマーク実行のコアロジック。被験LLM呼び出し、複数judgeでの評価、結果の集計を担当。
+- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション3.2, 3.4, 3.5, 5.1参照)
+
+- **Title**: [Feat] Streamlit UI実装
+- **ID**: Core-Feat-7
+- **Priority**: P0
+- **Size**: M
+- **Area**: Core
+- **Dependencies**: [Core-Feat-6]
+- **Goal**: 設定パネル・実行ボタン・結果表示・過去結果読み込みが動作するUIが完成する。
+- **Steps**:
+  1. [ ] Planの「3.6 Streamlit UI」に従いサイドバー設定パネル実装
+  2. [ ] タスク選択UI（チェックボックス・全選択ボタン）
+  3. [ ] タスク別結果カードコンポーネント実装（judge系統タブ付き）
+  4. [ ] 横断サマリー表示（グラフ・テーブル・警告リスト）
+  5. [ ] 過去結果読み込み機能実装
+  6. [ ] プログレスバー・ステータスメッセージ表示
+- **Description**: ユーザーインターフェース層。Streamlitを使用し、設定から結果表示までの全UIを実装。
+- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション3.6, 3.7参照)
+
+- **Title**: [Feat] 統合・テスト・ルーブリック配置
+- **ID**: Core-Feat-8
+- **Priority**: P0
+- **Size**: M
+- **Area**: Core
+- **Dependencies**: [Core-Feat-7]
+- **Goal**: 11タスクのルーブリック・プロンプトが配置され、1タスクでE2E動作確認が完了する。
+- **Steps**:
+  1. [ ] rubrics/ディレクトリ作成、ドラフトから11ファイルコピー
+  2. [ ] prompts/ディレクトリ作成、ドラフトから11ファイルコピー
+  3. [ ] judge_system_prompt.md配置
+  4. [ ] .env.example作成
+  5. [ ] E2E動作確認（1タスクで被験LLM→judge評価→結果表示→JSON保存）
+  6. [ ] エラーケース動作確認（APIエラー時のスキップ動作）
+  7. [ ] README更新（実行方法記載）
+- **Description**: 統合フェーズ。ルーブリック・プロンプト配置、E2Eテスト、ドキュメント更新を実施。
+- **Plan**: `_docs/plan/Core/llm_benchmark_app.md` (セクション4, 6, 7参照)
 
 ---
 
