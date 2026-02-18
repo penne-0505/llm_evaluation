@@ -3,7 +3,7 @@
 !define APP_NAME "Prism - LLM Evaluation"
 !define APP_EXE "prism-llm-eval.exe"
 !define APP_PUBLISHER "Prism"
-!define APP_ICON "packaging\\assets\\app-icon.ico"
+!define APP_ICON "${__FILEDIR__}\\..\\assets\\app-icon.ico"
 
 Name "${APP_NAME}"
 OutFile "prism-llm-eval-setup.exe"
