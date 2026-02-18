@@ -3,7 +3,7 @@
 from pathlib import Path
 import sys
 
-from PyInstaller.utils.hooks import copy_metadata
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 
 
 spec_dir = Path(globals().get("SPECPATH", Path.cwd()))
@@ -19,6 +19,7 @@ datas = [
     (str(project_root / "app.py"), "."),
 ]
 datas += copy_metadata("streamlit")
+datas += collect_data_files("streamlit", includes=["static/**/*"])
 
 block_cipher = None
 
