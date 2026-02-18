@@ -27,7 +27,7 @@ jobs:
           pip install .
 
       - name: Build binary
-        run: pyinstaller --clean --onefile packaging/llm-benchmark.spec
+        run: python -m pyinstaller --clean packaging/llm-benchmark.spec
 
       - name: Prepare artifact
         run: |
