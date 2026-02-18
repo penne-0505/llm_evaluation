@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Prism - LLM Evaluation
-Exec=prism-llm-eval
-Icon=prism-llm-eval
-Categories=Utility;
-Terminal=true
