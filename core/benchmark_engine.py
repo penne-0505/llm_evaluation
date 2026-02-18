@@ -1,6 +1,7 @@
 """LLMベンチマーク実行エンジン"""
 
 import asyncio
+import random
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -84,6 +85,10 @@ class BenchmarkEngine:
         judge_adapters: Dict[str, LLMAdapter],
         judge_runs: int = 3,
         max_parallel_judges: int = 5,
+        judge_fail_fast_threshold: int = 2,
+        max_parallel_runs_per_judge: int = 3,
+        judge_dispatch_min_interval_sec: float = 0.25,
+        judge_dispatch_jitter_sec: float = 0.15,
     ):
         """
         Args:
@@ -92,12 +97,20 @@ class BenchmarkEngine:
             judge_adapters: judge用アダプタ辞書 {"model_name": adapter, ...}
             judge_runs: 各judgeでの評価回数
             max_parallel_judges: judge並列実行の最大数
+            judge_fail_fast_threshold: 失敗累積時の早期スキップ閾値
+            max_parallel_runs_per_judge: 各judgeモデル内のrun並列数
+            judge_dispatch_min_interval_sec: 同一judgeモデル内の最小投入間隔(秒)
+            judge_dispatch_jitter_sec: 同一judgeモデル内の投入ジッター最大値(秒)
         """
         self.subject_adapter = subject_adapter
         self.subject_model = subject_model
         self.judge_adapters = judge_adapters
         self.judge_runs = judge_runs
         self.max_parallel_judges = max_parallel_judges
+        self.judge_fail_fast_threshold = judge_fail_fast_threshold
+        self.max_parallel_runs_per_judge = max_parallel_runs_per_judge
+        self.judge_dispatch_min_interval_sec = max(0.0, judge_dispatch_min_interval_sec)
+        self.judge_dispatch_jitter_sec = max(0.0, judge_dispatch_jitter_sec)
 
     async def run_task(
         self,
@@ -259,51 +272,124 @@ class BenchmarkEngine:
         Returns:
             評価結果（runs + aggregated）
         """
-        runs = []
+        runs_by_index: List[Optional[Dict[str, Any]]] = [None] * self.judge_runs
+        failure_count = 0
+        should_skip_remaining = False
+        state_lock = asyncio.Lock()
+        queue: asyncio.Queue[Optional[int]] = asyncio.Queue()
+        pacing_lock = asyncio.Lock()
+        last_dispatch_at = 0.0
 
-        for i in range(self.judge_runs):
-            if progress_callback:
-                progress_callback(f"judge: {model_name} {i + 1}/{self.judge_runs}回目")
+        # プロンプトは各runで不変のため1回だけ組み立てる
+        user_prompt = self._build_judge_user_prompt(
+            input_prompt=input_prompt,
+            subject_response=subject_response,
+            rubric_content=rubric_content,
+        )
 
-            # プロンプト組み立て
-            user_prompt = self._build_judge_user_prompt(
-                input_prompt=input_prompt,
-                subject_response=subject_response,
-                rubric_content=rubric_content,
-            )
+        async def _wait_for_dispatch_slot() -> None:
+            nonlocal last_dispatch_at
+            if (
+                self.judge_dispatch_min_interval_sec <= 0
+                and self.judge_dispatch_jitter_sec <= 0
+            ):
+                return
 
-            try:
-                # judge呼び出し（リトライ1回）
-                response = await self._call_judge_with_retry(
-                    adapter=adapter,
-                    model_name=model_name,
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                )
+            async with pacing_lock:
+                now = asyncio.get_running_loop().time()
+                min_interval = self.judge_dispatch_min_interval_sec
+                wait_time = max(0.0, min_interval - (now - last_dispatch_at))
+                if wait_time > 0:
+                    await asyncio.sleep(wait_time)
 
-                # JSONパース
+                jitter = 0.0
+                if self.judge_dispatch_jitter_sec > 0:
+                    jitter = random.uniform(0.0, self.judge_dispatch_jitter_sec)
+                    await asyncio.sleep(jitter)
+
+                last_dispatch_at = asyncio.get_running_loop().time()
+
+        async def _register_failure() -> int:
+            nonlocal failure_count, should_skip_remaining
+            async with state_lock:
+                failure_count += 1
+                if (
+                    self.judge_fail_fast_threshold > 0
+                    and failure_count >= self.judge_fail_fast_threshold
+                ):
+                    should_skip_remaining = True
+                return failure_count
+
+        async def _worker() -> None:
+            while True:
+                run_index = await queue.get()
+                if run_index is None:
+                    queue.task_done()
+                    break
+
                 try:
-                    parsed = JudgeResponseParser.parse_with_retry(
-                        response, max_retries=1
+                    if progress_callback:
+                        progress_callback(
+                            f"judge: {model_name} {run_index + 1}/{self.judge_runs}回目"
+                        )
+
+                    async with state_lock:
+                        skip_now = should_skip_remaining
+                        current_failures = failure_count
+
+                    if skip_now:
+                        runs_by_index[run_index] = {
+                            "error": f"失敗累計({current_failures})のため残り試行をスキップ",
+                            "skipped": True,
+                            "fail_fast_skipped": True,
+                        }
+                        continue
+
+                    await _wait_for_dispatch_slot()
+
+                    response = await self._call_judge_with_retry(
+                        adapter=adapter,
+                        model_name=model_name,
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
                     )
-                    runs.append(parsed)
-                except ParseError as e:
-                    # パース失敗
-                    runs.append(
-                        {
+
+                    try:
+                        parsed = JudgeResponseParser.parse_with_retry(
+                            response, max_retries=1
+                        )
+                        runs_by_index[run_index] = parsed
+                    except ParseError as e:
+                        failures = await _register_failure()
+                        runs_by_index[run_index] = {
                             "error": f"パース失敗: {str(e)}",
                             "raw_response": response,
                             "skipped": True,
+                            "failure_count": failures,
                         }
-                    )
+                except LLMError as e:
+                    failures = await _register_failure()
+                    runs_by_index[run_index] = {
+                        "error": f"APIエラー: {str(e)}",
+                        "skipped": True,
+                        "failure_count": failures,
+                    }
+                finally:
+                    queue.task_done()
 
-            except LLMError as e:
-                # API呼び出し失敗
-                runs.append({"error": f"APIエラー: {str(e)}", "skipped": True})
+        for run_index in range(self.judge_runs):
+            queue.put_nowait(run_index)
 
-            # レート制限対策のため少し待機
-            if i < self.judge_runs - 1:
-                await asyncio.sleep(0.5)
+        worker_count = min(self.max_parallel_runs_per_judge, self.judge_runs)
+        workers = [asyncio.create_task(_worker()) for _ in range(worker_count)]
+
+        await queue.join()
+
+        for _ in workers:
+            queue.put_nowait(None)
+        await asyncio.gather(*workers)
+
+        runs = [run for run in runs_by_index if run is not None]
 
         # 集計
         return ResultAggregator.aggregate(runs)

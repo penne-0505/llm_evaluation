@@ -3,7 +3,7 @@ title: Model Selection From Provider APIs
 status: active
 draft_status: n/a
 created_at: 2026-02-18
-updated_at: 2026-02-18
+updated_at: 2026-02-20
 references:
   - _docs/draft/requirements.md
   - _docs/draft/judge_sys_instruction.md
@@ -36,7 +36,8 @@ related_prs: []
   - judge結果の表示はモデル名をそのまま使い、UIで判別可能にする。
 - **Non-Functional**
   - API取得エラー時は既存キャッシュを使用し、アプリ起動を継続する。
-  - モデル一覧の取得は起動時に1回、手動再取得時に実行する。
+  - モデル一覧の取得はTTLベースで判定し、TTL内はキャッシュを使用する。
+  - 手動再取得とAPIキー更新時はTTLを無視して強制更新する。
 
 ## Tasks
 - `models/` ディレクトリと `models/models.json` のキャッシュ構造を設計・実装
@@ -60,3 +61,5 @@ related_prs: []
 - 実装完了: `core/model_catalog.py` でmodels API取得と `models/models.json` へのキャッシュを追加
 - UI更新: `ui/components.py` で被験/ judgeモデルの検索・複数選択・3未満警告・再取得ボタンを実装
 - judge実行: `core/benchmark_engine.py` と `adapters/*` をモデル名単位で実行するよう変更
+- 追加更新: `core/model_catalog.py` にTTLキャッシュ判定と `force` 更新モードを追加
+- 追加更新: `app.py` で起動時は通常更新、手動再取得とAPIキー更新時は `force=True` を使用

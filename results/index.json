@@ -1,0 +1,110 @@
+[
+  {
+    "filename": "20260220_142053_gemini-3-flash-preview.json",
+    "filepath": "results/20260220_142053_gemini-3-flash-preview.json",
+    "target_model": "gemini-3-flash-preview",
+    "executed_at": "2026-02-20T05:20:52Z",
+    "task_count": 4,
+    "judge_count": 1,
+    "avg_score": 69.2,
+    "run_id": "20260220_142052_gemini-3-flash-preview",
+    "max_score": 91.7,
+    "min_score": 16.0
+  },
+  {
+    "filename": "20260220_132609_openrouter_moonshotai_kimi-k2_5.json",
+    "filepath": "results/20260220_132609_openrouter_moonshotai_kimi-k2_5.json",
+    "target_model": "openrouter/moonshotai/kimi-k2.5",
+    "executed_at": "2026-02-20T04:26:09Z",
+    "task_count": 4,
+    "judge_count": 1,
+    "avg_score": 77.8,
+    "run_id": "20260220_132609_openrouter/moonshotai/kimi-k2.5",
+    "max_score": 87.0,
+    "min_score": 59.0
+  },
+  {
+    "filename": "20260220_130356_gemini-3_1-pro-preview.json",
+    "filepath": "results/20260220_130356_gemini-3_1-pro-preview.json",
+    "target_model": "gemini-3.1-pro-preview",
+    "executed_at": "2026-02-20T04:03:56Z",
+    "task_count": 11,
+    "judge_count": 4,
+    "avg_score": 75.4,
+    "run_id": "20260220_130356_gemini-3.1-pro-preview",
+    "max_score": 100.0,
+    "min_score": 0.0
+  },
+  {
+    "filename": "20260218_114808_openrouter_moonshotai_kimi-k2_5.json",
+    "filepath": "results/20260218_114808_openrouter_moonshotai_kimi-k2_5.json",
+    "target_model": "openrouter/moonshotai/kimi-k2.5",
+    "executed_at": "2026-02-18T02:48:08Z",
+    "task_count": 4,
+    "judge_count": 3,
+    "avg_score": 76.9,
+    "run_id": "20260218_114808_openrouter/moonshotai/kimi-k2.5",
+    "max_score": 100.0,
+    "min_score": 46.3
+  },
+  {
+    "filename": "20260218_104809_openrouter_moonshotai_kimi-k2_5.json",
+    "filepath": "results/20260218_104809_openrouter_moonshotai_kimi-k2_5.json",
+    "target_model": "openrouter/moonshotai/kimi-k2.5",
+    "executed_at": "2026-02-18T01:48:09Z",
+    "task_count": 4,
+    "judge_count": 3,
+    "avg_score": 79.4,
+    "run_id": "20260218_104809_openrouter/moonshotai/kimi-k2.5",
+    "max_score": 100.0,
+    "min_score": 50.0
+  },
+  {
+    "filename": "20260218_103039_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "filepath": "results/20260218_103039_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "target_model": "openrouter/qwen/qwen3.5-plus-02-15",
+    "executed_at": "2026-02-18T01:30:39Z",
+    "task_count": 4,
+    "judge_count": 3,
+    "avg_score": 79.5,
+    "run_id": "20260218_103039_openrouter/qwen/qwen3.5-plus-02-15",
+    "max_score": 100.0,
+    "min_score": 55.0
+  },
+  {
+    "filename": "20260218_101847_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "filepath": "results/20260218_101847_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "target_model": "openrouter/qwen/qwen3.5-plus-02-15",
+    "executed_at": "2026-02-18T01:18:47Z",
+    "task_count": 4,
+    "judge_count": 3,
+    "avg_score": 69.6,
+    "run_id": "20260218_101847_openrouter/qwen/qwen3.5-plus-02-15",
+    "max_score": 100.0,
+    "min_score": 0.0
+  },
+  {
+    "filename": "20260218_100152_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "filepath": "results/20260218_100152_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "target_model": "openrouter/qwen/qwen3.5-plus-02-15",
+    "executed_at": "2026-02-18T01:01:52Z",
+    "task_count": 8,
+    "judge_count": 3,
+    "avg_score": 68.4,
+    "run_id": "20260218_100152_openrouter/qwen/qwen3.5-plus-02-15",
+    "max_score": 100.0,
+    "min_score": 25.0
+  },
+  {
+    "filename": "20260218_093535_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "filepath": "results/20260218_093535_openrouter_qwen_qwen3_5-plus-02-15.json",
+    "target_model": "openrouter/qwen/qwen3.5-plus-02-15",
+    "executed_at": "2026-02-18T00:35:35Z",
+    "task_count": 11,
+    "judge_count": 3,
+    "avg_score": 67.4,
+    "run_id": "20260218_093535_openrouter/qwen/qwen3.5-plus-02-15",
+    "max_score": 100.0,
+    "min_score": 0.0
+  }
+]

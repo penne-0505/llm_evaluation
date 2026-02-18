@@ -4,7 +4,6 @@ import os
 from typing import Any, Optional
 
 import importlib
-from google.api_core import exceptions as google_exceptions
 
 from .base import LLMAdapter, LLMError
 
@@ -88,11 +87,21 @@ class GeminiAdapter(LLMAdapter):
 
             return getattr(response, "text", "") or ""
 
-        except google_exceptions.GoogleAPIError as e:
-            raise LLMError(f"Gemini APIエラー: {str(e)}") from e
         except Exception as e:
+            if self._is_genai_api_error(e):
+                raise LLMError(f"Gemini APIエラー: {str(e)}") from e
             raise LLMError(f"予期しないエラー: {str(e)}") from e
 
     @staticmethod
     def _load_genai() -> Any:
         return importlib.import_module("google.genai")
+
+    @staticmethod
+    def _is_genai_api_error(error: Exception) -> bool:
+        try:
+            genai_errors = importlib.import_module("google.genai.errors")
+        except ModuleNotFoundError:
+            return False
+
+        api_error_type = getattr(genai_errors, "APIError", None)
+        return isinstance(api_error_type, type) and isinstance(error, api_error_type)

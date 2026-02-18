@@ -19,12 +19,21 @@ class ModelCatalog:
 
     CACHE_PATH = Path("models/models.json")
     PROVIDERS = ("openai", "anthropic", "gemini", "openrouter")
+    DEFAULT_TTL_SECONDS = 21600
+    TTL_ENV_NAME = "LLM_BENCHMARK_MODEL_CATALOG_TTL_SECONDS"
 
     @classmethod
-    def update(cls) -> Dict[str, Any]:
+    def update(
+        cls, force: bool = False, ttl_seconds: int | None = None
+    ) -> Dict[str, Any]:
         """Fetch model lists and update the cache."""
         cached = cls._load_cache()
         api_keys = SecretsStore.load_existing()
+        effective_ttl = cls._resolve_ttl_seconds(ttl_seconds)
+
+        if not force and cls._is_cache_fresh(cached, effective_ttl):
+            return cls._build_catalog_from_cache(cached, api_keys)
+
         catalog = {
             "updated_at": cls._now_iso(),
             "providers": {},
@@ -87,6 +96,30 @@ class ModelCatalog:
             }
 
         cls._write_cache(catalog)
+        return catalog
+
+    @classmethod
+    def _build_catalog_from_cache(
+        cls, cached: Dict[str, Any], api_keys: Dict[str, str]
+    ) -> Dict[str, Any]:
+        catalog = {
+            "updated_at": cached.get("updated_at", cls._now_iso()),
+            "providers": {},
+            "errors": {},
+            "missing_keys": [],
+        }
+
+        for provider in cls.PROVIDERS:
+            api_key = api_keys.get(provider)
+            models = cls._cached_provider_models(cached, provider)
+            if not api_key:
+                catalog["missing_keys"].append(cls._provider_env_key(provider))
+                models = []
+
+            catalog["providers"][provider] = {
+                "models": cls._unique_sorted(models),
+            }
+
         return catalog
 
     @classmethod
@@ -179,6 +212,39 @@ class ModelCatalog:
         except Exception:
             return {}
 
+    @classmethod
+    def _resolve_ttl_seconds(cls, ttl_seconds: int | None) -> int:
+        if ttl_seconds is not None:
+            return max(0, int(ttl_seconds))
+
+        env_value = os.getenv(cls.TTL_ENV_NAME)
+        if env_value is None:
+            return cls.DEFAULT_TTL_SECONDS
+
+        try:
+            return max(0, int(env_value))
+        except ValueError:
+            return cls.DEFAULT_TTL_SECONDS
+
+    @classmethod
+    def _is_cache_fresh(cls, cached: Dict[str, Any], ttl_seconds: int) -> bool:
+        if ttl_seconds <= 0:
+            return False
+
+        updated_at = cached.get("updated_at")
+        if not isinstance(updated_at, str):
+            return False
+
+        try:
+            updated_at_dt = datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            return False
+
+        age = datetime.now(timezone.utc) - updated_at_dt
+        return age.total_seconds() < ttl_seconds
+
     @staticmethod
     def _load_gemini_module() -> Any:
         return importlib.import_module("google.genai")
@@ -195,6 +261,16 @@ class ModelCatalog:
         cls, cached: Dict[str, Any], provider: str
     ) -> List[str]:
         return cached.get("providers", {}).get(provider, {}).get("models", [])
+
+    @staticmethod
+    def _provider_env_key(provider: str) -> str:
+        mapping = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "openrouter": "OPENROUTER_API_KEY",
+        }
+        return mapping.get(provider, provider.upper())
 
     @staticmethod
     def _unique_sorted(models: List[str]) -> List[str]:

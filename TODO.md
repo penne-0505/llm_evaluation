@@ -1,7 +1,7 @@
 # Project Task Management Rules
 
 ## 0. System Metadata
-- **Current Max ID**: `Next ID No: 14` (※タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 16` (※タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一のID発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -181,9 +181,32 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 
 ## Inbox
 
+- `_docs/draft/ui_rebuild/feature_inventory.md` の機能インベントリをベースに、UIの再構築案（レイアウト・ナビゲーション・コンポーネント構成）を設計・検討する。
+- モデル一覧取得のTTL/並列化
+- ROI可視化グラフ：横軸をスコア、縦軸を1MトークンあたりのAPI価格とした散布図。コストパフォーマンスの良いモデルを視覚的に比較できる。将来的にはダッシュボードに追加したい。
+- Strict Modeリーダーボード：認証マーク付きのモデルランキングを公開。全ユーザーが同じ条件で評価したスコアを集計し、コストパフォーマンスも考慮したランキング表示を実装したい。
+
 ---
 
 ## Backlog
+
+## In Progress
+
+- **Title**: [Feature] ダッシュボード拡張：評価履歴と詳細比較
+- **ID**: UI-Feature-16
+- **Priority**: P2
+- **Size**: M
+- **Area**: UI
+- **Dependencies**: []
+- **Goal**: ダッシュボードに「評価履歴」と「詳細比較」機能を追加し、サイドバーの「過去の結果」を統合する
+- **Steps**:
+  1. [x] Planの "Phase 1" に従い、基盤整備（データ読み込み、セッション状態）
+  2. [ ] Planの "Phase 2" に従い、評価履歴タブを実装
+  3. [ ] Planの "Phase 3" に従い、詳細比較タブを実装
+  4. [ ] Planの "Phase 4" に従い、サイドバー修正
+  5. [ ] Planの "Phase 5" に従い、テスト
+- **Description**: ダッシュボードに評価履歴（カード形式+ページネーション）と詳細比較（2モデル比較）機能を追加する
+- **Plan**: `_docs/plan/UI-Feature-15-Ext-dashboard-enhancement.md`
 
 ---
 
@@ -216,3 +239,17 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 - **Plan**: `_docs/plan/Core/resource-embedding-packaging.md`
 
 ## In Progress
+
+---
+
+## Done
+
+- **Title**: [Feature] ダッシュボード拡張：評価履歴と詳細比較
+- **ID**: UI-Feature-16
+- **Priority**: P2
+- **Size**: M
+- **Area**: UI
+- **Dependencies**: []
+- **Goal**: ダッシュボードに「評価履歴」と「詳細比較」機能を追加し、サイドバーの「過去の結果」を統合する
+- **Description**: ダッシュボードに評価履歴（カード形式+ページネーション）と詳細比較（2モデル比較）機能を追加し、サイドバーの「過去の結果」セクションを削除
+- **Plan**: `_docs/plan/UI-Feature-15-Ext-dashboard-enhancement.md`
