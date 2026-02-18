@@ -3,6 +3,8 @@
 from pathlib import Path
 import sys
 
+from PyInstaller.utils.hooks import copy_metadata
+
 
 spec_dir = Path(globals().get("SPECPATH", Path.cwd()))
 project_root = spec_dir.resolve().parent
@@ -15,6 +17,7 @@ datas = [
     (str(project_root / "prompts"), "prompts"),
     (str(project_root / "judge_system_prompt.md"), "."),
 ]
+datas += copy_metadata("streamlit")
 
 block_cipher = None
 
