@@ -104,7 +104,7 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $name = "prism-llm-eval-$tag-windows-x86_64-setup.exe"
-          Move-Item "prism-llm-eval-setup.exe" $name
+          Move-Item "packaging\\windows\\prism-llm-eval-setup.exe" $name
           Get-FileHash $name -Algorithm SHA256 | ForEach-Object { $_.Hash + "  " + $_.Path } | Out-File "$name.sha256" -Encoding ASCII
 
       - name: Publish Release
