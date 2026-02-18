@@ -36,6 +36,8 @@ def main() -> None:
         extra_args.append("--browser.serverPort=8501")
     if not any(arg.startswith("--browser.serverAddress") for arg in extra_args):
         extra_args.append("--browser.serverAddress=127.0.0.1")
+    if not any(arg.startswith("--global.developmentMode") for arg in extra_args):
+        extra_args.append("--global.developmentMode=false")
 
     sys.argv = ["streamlit", "run", str(app_path), *extra_args]
     sys.exit(stcli.main())
