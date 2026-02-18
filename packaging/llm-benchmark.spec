@@ -1,10 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import sys
 
 
 spec_dir = Path(globals().get("SPECPATH", Path.cwd()))
 project_root = spec_dir.resolve().parent
+if sys.platform.startswith("win"):
+    icon_path = project_root / "packaging" / "assets" / "app-icon.ico"
+else:
+    icon_path = project_root / "packaging" / "assets" / "app-icon.png"
 datas = [
     (str(project_root / "rubrics"), "rubrics"),
     (str(project_root / "prompts"), "prompts"),
@@ -36,7 +41,8 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="llm-benchmark",
+    name="prism-llm-eval",
+    icon=str(icon_path),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

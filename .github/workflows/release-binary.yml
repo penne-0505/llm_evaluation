@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build-release:
+  build-linux:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -29,16 +29,87 @@ jobs:
       - name: Build binary
         run: python -m PyInstaller --clean packaging/llm-benchmark.spec
 
+      - name: Prepare AppImage tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2
+          curl -L -o appimagetool.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool.AppImage
+
+      - name: Build AppImage
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NAME="prism-llm-eval-${TAG}-linux-x86_64"
+
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+
+          cp dist/prism-llm-eval AppDir/usr/bin/prism-llm-eval
+          cp packaging/appimage/prism-llm-eval.desktop AppDir/usr/share/applications/
+          cp packaging/assets/app-icon.png AppDir/usr/share/icons/hicolor/512x512/apps/prism-llm-eval.png
+
+          cp packaging/appimage/prism-llm-eval.desktop AppDir/
+          cp packaging/assets/app-icon.png AppDir/prism-llm-eval.png
+          printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/prism-llm-eval"\n' > AppDir/AppRun
+          chmod +x AppDir/AppRun
+
+          ./appimagetool.AppImage AppDir "${NAME}.AppImage"
+          sha256sum "${NAME}.AppImage" > "${NAME}.AppImage.sha256"
+
       - name: Prepare artifact
         run: |
           TAG="${GITHUB_REF_NAME}"
-          NAME="llm-benchmark-${TAG}-linux-x86_64"
-          mv dist/llm-benchmark "$NAME"
+          NAME="prism-llm-eval-${TAG}-linux-x86_64"
+          mv dist/prism-llm-eval "$NAME"
           sha256sum "$NAME" > "$NAME.sha256"
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            llm-benchmark-*-linux-x86_64
-            llm-benchmark-*-linux-x86_64.sha256
+            prism-llm-eval-*-linux-x86_64
+            prism-llm-eval-*-linux-x86_64.sha256
+            prism-llm-eval-*-linux-x86_64.AppImage
+            prism-llm-eval-*-linux-x86_64.AppImage.sha256
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Build binary
+        run: python -m PyInstaller --clean packaging/llm-benchmark.spec
+
+      - name: Build installer
+        run: |
+          makensis packaging\\windows\\installer.nsi
+
+      - name: Prepare artifact
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $name = "prism-llm-eval-$tag-windows-x86_64-setup.exe"
+          Move-Item "prism-llm-eval-setup.exe" $name
+          Get-FileHash $name -Algorithm SHA256 | ForEach-Object { $_.Hash + "  " + $_.Path } | Out-File "$name.sha256" -Encoding ASCII
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            prism-llm-eval-*-windows-x86_64-setup.exe
+            prism-llm-eval-*-windows-x86_64-setup.exe.sha256
