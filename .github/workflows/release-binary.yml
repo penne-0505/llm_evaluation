@@ -26,18 +26,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
 
-      - name: Verify PyInstaller install
-        run: |
-          python -c "import sys; print('python:', sys.executable)"
-          python -m pip --version
-          python -m pip show pyinstaller
-          python - <<'PY'
-          import importlib.util
-          print('PyInstaller spec:', importlib.util.find_spec('PyInstaller'))
-          PY
-
       - name: Build binary
-        run: python -m pyinstaller --clean packaging/llm-benchmark.spec
+        run: python -m PyInstaller --clean packaging/llm-benchmark.spec
 
       - name: Prepare artifact
         run: |
