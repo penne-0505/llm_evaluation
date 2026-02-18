@@ -3,7 +3,8 @@
 from pathlib import Path
 
 
-project_root = Path(__file__).resolve().parents[1]
+spec_dir = Path(globals().get("SPECPATH", Path.cwd()))
+project_root = spec_dir.resolve().parent
 datas = [
     (str(project_root / "rubrics"), "rubrics"),
     (str(project_root / "prompts"), "prompts"),
