@@ -16,6 +16,7 @@ datas = [
     (str(project_root / "rubrics"), "rubrics"),
     (str(project_root / "prompts"), "prompts"),
     (str(project_root / "judge_system_prompt.md"), "."),
+    (str(project_root / "app.py"), "."),
 ]
 datas += copy_metadata("streamlit")
 
