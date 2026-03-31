@@ -7,26 +7,39 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
+from core.app_paths import AppPaths
+
 
 class SelectionStore:
     """Save and load last used selection values."""
 
-    FILE_PATH = Path("models/last_selection.json")
+    FILE_PATH: Path | None = None
+
+    @classmethod
+    def _file_path(cls) -> Path:
+        return cls.FILE_PATH or AppPaths.selection_file()
+
+    @classmethod
+    def _legacy_file_path(cls) -> Path:
+        return AppPaths.repo_path("models", "last_selection.json")
 
     @classmethod
     def load(cls) -> Dict[str, Any]:
-        if not cls.FILE_PATH.exists():
-            return {}
-        try:
-            return json.loads(cls.FILE_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
+        for path in (cls._file_path(), cls._legacy_file_path()):
+            if not path.exists():
+                continue
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+        return {}
 
     @classmethod
     def save(cls, selection: Dict[str, Any]) -> None:
         data = dict(selection)
         data["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        cls.FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        cls.FILE_PATH.write_text(
+        file_path = cls._file_path()
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )

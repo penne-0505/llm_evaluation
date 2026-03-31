@@ -6,17 +6,48 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
+from core.app_paths import AppPaths
+
+
+class _FileSecretBackend:
+    """将来の keychain 対応に備えたファイル保存バックエンド。"""
+
+    def __init__(self, file_path: Path):
+        self.file_path = file_path
+
+    def read_text(self) -> str:
+        return self.file_path.read_text(encoding="utf-8")
+
+    def exists(self) -> bool:
+        return self.file_path.exists()
+
+    def write_text(self, content: str) -> None:
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.file_path.write_text(content, encoding="utf-8")
+
 
 class SecretsStore:
-    """Persist API keys to .streamlit/secrets.toml."""
+    """Persist API keys to an app-local secrets file."""
 
-    FILE_PATH = Path(".streamlit/secrets.toml")
+    FILE_PATH: Path | None = None
     KEYS = {
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
         "gemini": "GEMINI_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
     }
+
+    @classmethod
+    def _file_path(cls) -> Path:
+        return cls.FILE_PATH or AppPaths.secrets_file()
+
+    @classmethod
+    def _legacy_file_path(cls) -> Path:
+        return AppPaths.repo_path(".streamlit", "secrets.toml")
+
+    @classmethod
+    def _backend(cls, path: Path | None = None) -> _FileSecretBackend:
+        return _FileSecretBackend(path or cls._file_path())
 
     @classmethod
     def load_existing(cls) -> Dict[str, str]:
@@ -61,9 +92,16 @@ class SecretsStore:
 
     @classmethod
     def _read_file(cls) -> Dict[str, Dict[str, str]]:
-        if not cls.FILE_PATH.exists():
-            return {}
-        content = cls.FILE_PATH.read_text(encoding="utf-8")
+        backend = cls._backend()
+        if backend.exists():
+            content = backend.read_text()
+        else:
+            legacy_path = cls._legacy_file_path()
+            legacy_backend = cls._backend(legacy_path)
+            if not legacy_backend.exists():
+                return {}
+            content = legacy_backend.read_text()
+
         data: Dict[str, Dict[str, str]] = {"secrets": {}}
         current_section = None
         for line in content.splitlines():
@@ -86,10 +124,9 @@ class SecretsStore:
 
     @classmethod
     def _write_file(cls, data: Dict[str, Dict[str, str]]) -> None:
-        cls.FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         lines = ["[secrets]"]
         for key, value in sorted(data.get("secrets", {}).items()):
             escaped = str(value).replace('"', '\\"')
             lines.append(f'{key} = "{escaped}"')
         content = "\n".join(lines) + "\n"
-        cls.FILE_PATH.write_text(content, encoding="utf-8")
+        cls._backend().write_text(content)

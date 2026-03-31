@@ -8,26 +8,31 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import queue as _queue
 import time
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from adapters import get_adapter_for_model, get_available_judge_adapters
 from core import BenchmarkEngine, ResultStorage
+from core.app_paths import AppPaths
 from core.model_catalog import ModelCatalog
 from core.secrets_store import SecretsStore
 from core.selection_store import SelectionStore
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LLM Benchmark API", version="1.0.0")
 
@@ -51,45 +56,218 @@ JUDGE_SYSTEM_PROMPT_ENV = "LLM_BENCHMARK_JUDGE_SYSTEM_PROMPT_PATH"
 _cancel_flags: Dict[str, bool] = {}
 
 
-def _resolve_rubrics_dir() -> Path:
-    env = os.getenv(RUBRICS_DIR_ENV)
-    if env:
-        p = Path(env)
-        if p.exists() and p.is_dir():
-            return p
-    return Path("rubrics")
+@dataclass(frozen=True)
+class ResourceCandidate:
+    path: Path
+    source: str
 
 
-def _resolve_prompts_dir() -> Path:
-    env = os.getenv(PROMPTS_DIR_ENV)
-    if env:
-        p = Path(env)
-        if p.exists() and p.is_dir():
-            return p
-    return Path("prompts")
+@dataclass(frozen=True)
+class ResolvedResource:
+    path: Path
+    source: str
+def _resolve_path_override(env_name: str, *, kind: str) -> Optional[Path]:
+    raw = os.getenv(env_name)
+    if not raw:
+        return None
+
+    path = Path(raw).expanduser()
+    is_valid = path.is_dir() if kind == "dir" else path.is_file()
+    if is_valid:
+        return path
+
+    logger.warning("Ignoring invalid %s override: %s", env_name, path)
+    return None
 
 
-def _resolve_judge_system_prompt_path() -> Path:
-    env = os.getenv(JUDGE_SYSTEM_PROMPT_ENV)
-    if env:
-        p = Path(env)
-        if p.exists() and p.is_file():
-            return p
-    return Path("judge_system_prompt.md")
+def _directory_candidates(
+    *,
+    env_name: str,
+    user_dir: Path,
+    bundled_dir: Path,
+) -> List[ResourceCandidate]:
+    candidates: List[ResourceCandidate] = []
+    env_path = _resolve_path_override(env_name, kind="dir")
+    if env_path is not None:
+        candidates.append(ResourceCandidate(env_path, "env_override"))
+    candidates.append(ResourceCandidate(user_dir, "user_override"))
+    candidates.append(ResourceCandidate(bundled_dir, "bundled"))
+    return candidates
+
+
+def _file_candidates(
+    *,
+    env_name: str,
+    user_file: Path,
+    bundled_file: Path,
+) -> List[ResourceCandidate]:
+    candidates: List[ResourceCandidate] = []
+    env_path = _resolve_path_override(env_name, kind="file")
+    if env_path is not None:
+        candidates.append(ResourceCandidate(env_path, "env_override"))
+    candidates.append(ResourceCandidate(user_file, "user_override"))
+    candidates.append(ResourceCandidate(bundled_file, "bundled"))
+    return candidates
+
+
+def _resolve_candidate_file(
+    candidates: List[ResourceCandidate],
+    filename: Optional[str] = None,
+) -> ResolvedResource:
+    fallback: Optional[Path] = None
+    for candidate in candidates:
+        current = candidate.path if filename is None else candidate.path / filename
+        fallback = current
+        if current.is_file():
+            return ResolvedResource(current, candidate.source)
+
+    return ResolvedResource(fallback or Path(filename or "."), "missing")
+
+
+def _rubrics_candidates() -> List[ResourceCandidate]:
+    return _directory_candidates(
+        env_name=RUBRICS_DIR_ENV,
+        user_dir=AppPaths.rubrics_override_dir(),
+        bundled_dir=AppPaths.bundled_rubrics_dir(),
+    )
+
+
+def _prompts_candidates() -> List[ResourceCandidate]:
+    return _directory_candidates(
+        env_name=PROMPTS_DIR_ENV,
+        user_dir=AppPaths.prompts_override_dir(),
+        bundled_dir=AppPaths.bundled_prompts_dir(),
+    )
+
+
+def _judge_system_prompt_candidates() -> List[ResourceCandidate]:
+    return _file_candidates(
+        env_name=JUDGE_SYSTEM_PROMPT_ENV,
+        user_file=AppPaths.judge_system_prompt_override_file(),
+        bundled_file=AppPaths.bundled_judge_system_prompt_file(),
+    )
+
+
+def _resolve_rubric_file(filename: str) -> ResolvedResource:
+    return _resolve_candidate_file(_rubrics_candidates(), filename)
+
+
+def _resolve_prompt_file(filename: str) -> ResolvedResource:
+    return _resolve_candidate_file(_prompts_candidates(), filename)
+
+
+def _resolve_judge_system_prompt_resource() -> ResolvedResource:
+    return _resolve_candidate_file(_judge_system_prompt_candidates())
+
+
+def _serialize_candidates(candidates: List[ResourceCandidate]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "source": candidate.source,
+            "path": str(candidate.path),
+            "exists": candidate.path.exists(),
+        }
+        for candidate in candidates
+    ]
+
+
+def get_runtime_diagnostics() -> Dict[str, Any]:
+    rubrics_candidates = _rubrics_candidates()
+    prompts_candidates = _prompts_candidates()
+    judge_resource = _resolve_judge_system_prompt_resource()
+    frontend_index = _frontend_dist_dir() / "index.html"
+    tasks = _load_tasks()
+
+    issues: List[str] = []
+    if not frontend_index.is_file():
+        issues.append(
+            "frontend/dist/index.html が見つかりません。開発環境では `npm run build --prefix frontend` を実行し、配布 ZIP では再展開してください。"
+        )
+    if not tasks:
+        issues.append(
+            "有効な task が 0 件です。prompt/rubric の同梱漏れ、または override 設定を確認してください。"
+        )
+    if not judge_resource.path.is_file():
+        issues.append(
+            "judge_system_prompt.md が見つかりません。配布 ZIP の再展開、または override 設定を確認してください。"
+        )
+
+    return {
+        "issues": issues,
+        "frontend": {
+            "dist_dir": str(_frontend_dist_dir()),
+            "index_exists": frontend_index.is_file(),
+        },
+        "resources": {
+            "rubrics": {"layers": _serialize_candidates(rubrics_candidates)},
+            "prompts": {"layers": _serialize_candidates(prompts_candidates)},
+            "judge_system_prompt": {
+                "resolved_path": str(judge_resource.path),
+                "resolved_source": judge_resource.source,
+                "exists": judge_resource.path.is_file(),
+                "layers": _serialize_candidates(_judge_system_prompt_candidates()),
+            },
+        },
+    }
+
+
+def _frontend_dist_dir() -> Path:
+    return AppPaths.frontend_dist_dir()
+
+
+def _resolve_frontend_asset(full_path: str) -> Optional[Path]:
+    dist_dir = _frontend_dist_dir()
+    candidate = (dist_dir / full_path.lstrip("/")).resolve()
+    try:
+        candidate.relative_to(dist_dir.resolve())
+    except ValueError:
+        return None
+
+    if candidate.is_file():
+        return candidate
+    return None
+
+
+def _serve_frontend(full_path: str):
+    dist_dir = _frontend_dist_dir()
+    index_file = dist_dir / "index.html"
+    if not index_file.exists():
+        return PlainTextResponse(
+            (
+                "配布用 frontend が見つかりません。\n"
+                "開発環境では `npm run build --prefix frontend` を実行してください。\n"
+                "portable ZIP を使っている場合は、ZIP を再展開して `frontend/dist` が含まれているか確認してください。"
+            ),
+            status_code=503,
+        )
+
+    asset = _resolve_frontend_asset(full_path)
+    if asset is not None:
+        return FileResponse(asset)
+
+    if full_path and "." in Path(full_path).name:
+        raise HTTPException(status_code=404, detail="静的ファイルが見つかりません")
+
+    return FileResponse(index_file)
 
 
 def _load_tasks() -> List[Dict[str, str]]:
-    rubrics_dir = _resolve_rubrics_dir()
-    prompts_dir = _resolve_prompts_dir()
     tasks: List[Dict[str, str]] = []
 
-    if not rubrics_dir.exists() or not prompts_dir.exists():
-        return tasks
+    task_ids = set()
+    for candidate in _rubrics_candidates():
+        if candidate.path.is_dir():
+            task_ids.update(path.stem for path in candidate.path.glob("*.md"))
+    for candidate in _prompts_candidates():
+        if candidate.path.is_dir():
+            task_ids.update(path.stem for path in candidate.path.glob("*.md"))
 
-    for rubric_file in sorted(rubrics_dir.glob("*.md")):
-        task_id = rubric_file.stem
-        prompt_file = prompts_dir / f"{task_id}.md"
-        if not prompt_file.exists():
+    for task_id in sorted(task_ids):
+        rubric_resource = _resolve_rubric_file(f"{task_id}.md")
+        prompt_resource = _resolve_prompt_file(f"{task_id}.md")
+        rubric_file = rubric_resource.path
+        prompt_file = prompt_resource.path
+        if not rubric_file.is_file() or not prompt_file.is_file():
             continue
 
         task_type = "fact"
@@ -110,6 +288,8 @@ def _load_tasks() -> List[Dict[str, str]]:
                 "id": task_id,
                 "rubric_file": str(rubric_file),
                 "prompt_file": str(prompt_file),
+                "rubric_source": rubric_resource.source,
+                "prompt_source": prompt_resource.source,
                 "type": task_type,
             }
         )
@@ -199,8 +379,22 @@ def get_tasks() -> List[Dict[str, str]]:
             prompt = Path(t["prompt_file"]).read_text(encoding="utf-8")
         except Exception:
             pass
-        result.append({"id": t["id"], "type": t["type"], "prompt": prompt})
+        result.append(
+            {
+                "id": t["id"],
+                "type": t["type"],
+                "prompt": prompt,
+                "prompt_source": t["prompt_source"],
+                "rubric_source": t["rubric_source"],
+            }
+        )
     return result
+
+
+@app.get("/api/resources")
+def get_resources() -> Dict[str, Any]:
+    """現在の resource 解決状態を返す。"""
+    return get_runtime_diagnostics()["resources"]
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +534,13 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 )
                 return
 
-            judge_system_prompt_path = _resolve_judge_system_prompt_path()
+            judge_system_prompt_resource = _resolve_judge_system_prompt_resource()
+            judge_system_prompt_path = judge_system_prompt_resource.path
+            logger.info(
+                "judge system prompt source=%s path=%s",
+                judge_system_prompt_resource.source,
+                judge_system_prompt_path,
+            )
             system_prompt = (
                 judge_system_prompt_path.read_text(encoding="utf-8")
                 if judge_system_prompt_path.exists()
@@ -582,7 +782,7 @@ def list_results() -> List[Dict[str, Any]]:
                 filename = s.get("filename", "")
                 if filename:
                     try:
-                        filepath = ResultStorage.RESULTS_DIR / filename
+                        filepath = ResultStorage.resolve_result_path(filename)
                         if filepath.exists():
                             data = ResultStorage.load(filepath)
                             if missing_run_id:
@@ -639,7 +839,7 @@ def list_results() -> List[Dict[str, Any]]:
 @app.get("/api/results/{filename}")
 def get_result(filename: str) -> Dict[str, Any]:
     """指定ファイルの評価結果詳細を返す"""
-    filepath = ResultStorage.RESULTS_DIR / filename
+    filepath = ResultStorage.resolve_result_path(filename)
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="結果ファイルが見つかりません")
     try:
@@ -648,3 +848,13 @@ def get_result(filename: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=500, detail=f"結果の読み込みに失敗しました: {e}"
         )
+
+
+@app.get("/", include_in_schema=False)
+def serve_frontend_root():
+    return _serve_frontend("")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_frontend_path(full_path: str):
+    return _serve_frontend(full_path)

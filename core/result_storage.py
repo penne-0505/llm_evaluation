@@ -2,10 +2,11 @@
 
 import json
 import re
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from core.app_paths import AppPaths
 
 
 class ResultStorage:
@@ -13,8 +14,44 @@ class ResultStorage:
     実行結果の保存・読み込みを管理
     """
 
-    RESULTS_DIR = Path("results")
-    INDEX_FILE = RESULTS_DIR / "index.json"
+    RESULTS_DIR: Path | None = None
+    INDEX_FILE: Path | None = None
+
+    @classmethod
+    def results_dir(cls) -> Path:
+        return cls.RESULTS_DIR or AppPaths.results_dir()
+
+    @classmethod
+    def index_file(cls) -> Path:
+        return cls.INDEX_FILE or (cls.results_dir() / "index.json")
+
+    @classmethod
+    def legacy_results_dir(cls) -> Path:
+        return AppPaths.repo_path("results")
+
+    @classmethod
+    def _result_dirs(cls) -> List[Path]:
+        current = cls.results_dir()
+        legacy = cls.legacy_results_dir()
+        if legacy == current:
+            return [current]
+        return [current, legacy]
+
+    @classmethod
+    def _has_legacy_result_files(cls) -> bool:
+        legacy = cls.legacy_results_dir()
+        if legacy == cls.results_dir() or not legacy.exists():
+            return False
+        return any(path.name != "index.json" for path in legacy.glob("*.json"))
+
+    @classmethod
+    def resolve_result_path(cls, filename: str) -> Path:
+        safe_name = Path(filename).name
+        for directory in cls._result_dirs():
+            candidate = directory / safe_name
+            if candidate.exists():
+                return candidate
+        return cls.results_dir() / safe_name
 
     @classmethod
     def save(cls, benchmark_result: Dict[str, Any]) -> Path:
@@ -29,7 +66,8 @@ class ResultStorage:
 
         ファイル名: YYYYMMDD_HHMMSS_<model_name>.json
         """
-        cls.RESULTS_DIR.mkdir(exist_ok=True)
+        results_dir = cls.results_dir()
+        results_dir.mkdir(parents=True, exist_ok=True)
 
         # ファイル名生成
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -37,7 +75,7 @@ class ResultStorage:
         safe_model_name = re.sub(r"[^\w\-]", "_", target_model)
         filename = f"{timestamp}_{safe_model_name}.json"
 
-        filepath = cls.RESULTS_DIR / filename
+        filepath = results_dir / filename
 
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(benchmark_result, f, ensure_ascii=False, indent=2)
@@ -68,9 +106,20 @@ class ResultStorage:
         Returns:
             新しい順にソートされたファイルパスのリスト
         """
-        if not cls.RESULTS_DIR.exists():
-            return []
-        return sorted(cls.RESULTS_DIR.glob("*.json"), reverse=True)
+        results: List[Path] = []
+        seen: set[Path] = set()
+        for directory in cls._result_dirs():
+            if not directory.exists():
+                continue
+            for filepath in directory.glob("*.json"):
+                if filepath.name == "index.json":
+                    continue
+                resolved = filepath.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                results.append(filepath)
+        return sorted(results, reverse=True)
 
     @classmethod
     def list_summaries(cls) -> List[Dict[str, Any]]:
@@ -80,7 +129,8 @@ class ResultStorage:
         Returns:
             サマリーのリスト（新しい順）
         """
-        index = cls._load_index()
+        use_index_cache = not cls._has_legacy_result_files()
+        index = cls._load_index() if use_index_cache else []
         if index:
             return index
 
@@ -94,7 +144,8 @@ class ResultStorage:
 
         if summaries:
             summaries.sort(key=lambda x: x.get("executed_at", ""), reverse=True)
-            cls._save_index(summaries)
+            if use_index_cache:
+                cls._save_index(summaries)
 
         return summaries
 
@@ -153,10 +204,11 @@ class ResultStorage:
 
     @classmethod
     def _load_index(cls) -> List[Dict[str, Any]]:
-        if not cls.INDEX_FILE.exists():
+        index_file = cls.index_file()
+        if not index_file.exists():
             return []
         try:
-            with open(cls.INDEX_FILE, "r", encoding="utf-8") as f:
+            with open(index_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, list):
                 return data
@@ -166,8 +218,9 @@ class ResultStorage:
 
     @classmethod
     def _save_index(cls, index: List[Dict[str, Any]]) -> None:
-        cls.RESULTS_DIR.mkdir(exist_ok=True)
-        with open(cls.INDEX_FILE, "w", encoding="utf-8") as f:
+        results_dir = cls.results_dir()
+        results_dir.mkdir(parents=True, exist_ok=True)
+        with open(cls.index_file(), "w", encoding="utf-8") as f:
             json.dump(index, f, ensure_ascii=False, indent=2)
 
     @classmethod

@@ -1,7 +1,7 @@
 # Project Task Management Rules
 
 ## 0. System Metadata
-- **Current Max ID**: `Next ID No: 16` (※タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 21` (※タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一のID発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -185,10 +185,26 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 - モデル一覧取得のTTL/並列化
 - ROI可視化グラフ：横軸をスコア、縦軸を1MトークンあたりのAPI価格とした散布図。コストパフォーマンスの良いモデルを視覚的に比較できる。将来的にはダッシュボードに追加したい。
 - Strict Modeリーダーボード：認証マーク付きのモデルランキングを公開。全ユーザーが同じ条件で評価したスコアを集計し、コストパフォーマンスも考慮したランキング表示を実装したい。
+- 検索結果JSON＋記事本文テキストを複数集めて、Deep Research向けの grounding / 因果飛躍チェック用コーパスを作る。
 
 ---
 
 ## Backlog
+
+- **Title**: [Feat] Finalize Windows portable ZIP distribution
+- **ID**: DevOps-Feat-17
+- **Priority**: P1
+- **Size**: M
+- **Area**: DevOps
+- **Dependencies**: [Core-Enhance-18, Core-Enhance-19, DevOps-Test-20, DevOps-Doc-21]
+- **Goal**: Windows portable ZIP を展開して `prism-llm-eval.exe` を実行するだけでアプリがフル起動し、user override と release 成果物の運用まで含めて配布可能な状態にする。
+- **Steps**:
+  1. [ ] `Core-Enhance-18` に従い、portable 運用向けの差し替えリソース優先順位を完成させる
+  2. [ ] `Core-Enhance-19` に従い、launcher と配布向けエラーメッセージを調整する
+  3. [ ] `DevOps-Test-20` に従い、Windows クリーン環境での起動・評価・履歴確認を通す
+  4. [ ] `DevOps-Doc-21` に従い、portable ZIP の生成・命名・利用ガイドを確定する
+- **Description**: installer を最終ターゲットにせず、Windows 向け portable ZIP を正式配布形態として完成させる。既存の launcher / bundled frontend / app data 保存をベースに、差し替えリソース運用、実機検証、release 成果物整備をまとめて完了させる。
+- **Plan**: `_docs/plan/DevOps/windows-portable-zip-finalization.md`
 
 ## In Progress
 
@@ -212,44 +228,37 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 
 ## Ready
 
-- **Title**: [Chore] Add GitHub Release binary workflow
-- **ID**: DevOps-Chore-12
-- **Priority**: P1
-- **Size**: M
-- **Area**: DevOps
-- **Dependencies**: []
-- **Goal**: GitHub Actionsで単一バイナリのリリース用アーティファクトを生成できる。
-- **Steps**:
-  1. [ ] Planの "Tasks" に従い、リリース用workflowを定義
-  2. [ ] Planの "Test Plan" に従い、リリース成果物の生成を確認
-- **Description**: GitHub Releases向けに単一バイナリ配布の自動化を整備する。
-- **Plan**: `_docs/plan/DevOps/github-release-binary.md`
 
-- **Title**: [Enhance] Packaging supports embedded resources and overrides
-- **ID**: Core-Enhance-13
-- **Priority**: P2
-- **Size**: M
-- **Area**: Core
-- **Dependencies**: []
-- **Goal**: バンドルされたリソースと外部パス上書きの優先順位・仕様が明確化されている。
+- **Title**: [Test] Validate Windows portable ZIP on clean environment
+- **ID**: DevOps-Test-20
+- **Priority**: P1
+- **Size**: S
+- **Area**: DevOps
+- **Dependencies**: [Core-Enhance-18, Core-Enhance-19]
+- **Goal**: Windows クリーン環境で ZIP 展開後に exe 実行だけで起動し、API キー保存・評価実行・履歴参照まで通ることが確認され、packaging の不足が反映されている。
 - **Steps**:
-  1. [x] Planの "Scope" と "Requirements" を実装方針に落とし込む
-  2. [ ] Planの "Test Plan" に従い動作確認
-- **Description**: リソース埋め込みとカスタムパス上書きに対応するパッケージング方針を定義し実装する。
-- **Plan**: `_docs/plan/Core/resource-embedding-packaging.md`
+  1. [ ] `_docs/plan/DevOps/windows-portable-zip-execution-breakdown.md` の `WP3` を読み、実機検証観点と対象ファイルを確認する
+  2. [ ] `scripts/build_windows_bundle.ps1` で Windows 向け bundle を生成し、ZIP 展開後の実行確認を行う
+  3. [ ] 実機で見つかった hidden import / DLL / resource 不足を `packaging/windows/prism-llm-eval.spec`、workflow、コードへ反映する
+  4. [ ] 実機検証結果を README または関連 docs に反映する
+- **Description**: portable ZIP の成立性を Windows 実機で確認し、packaging 上の不足を潰す。
+- **Plan**: None
+
+- **Title**: [Doc] Finalize portable ZIP release artifact and guide
+- **ID**: DevOps-Doc-21
+- **Priority**: P1
+- **Size**: S
+- **Area**: DevOps
+- **Dependencies**: [DevOps-Test-20]
+- **Goal**: GitHub Releases 向け成果物名が portable ZIP 前提で確定し、ZIP 展開・起動・保存先・override 方法を説明するドキュメントが整備されている。
+- **Steps**:
+  1. [ ] `_docs/plan/DevOps/windows-portable-zip-execution-breakdown.md` の `WP4` を読み、成果物名とドキュメント要件を確認する
+  2. [ ] `.github/workflows/windows-bundle.yml` の成果物命名と必要なら SHA256 出力を確定する
+  3. [ ] README と必要なら `_docs/guide/` 配下に portable ZIP 利用ガイドを追加する
+  4. [ ] user override の保存先、差し替え方法、トラブルシュートを利用者向けに記述する
+- **Description**: portable ZIP を release できる状態にし、配布物だけ受け取ったユーザーがドキュメントを読めば利用開始できるようにする。
+- **Plan**: None
 
 ## In Progress
 
 ---
-
-## Done
-
-- **Title**: [Feature] ダッシュボード拡張：評価履歴と詳細比較
-- **ID**: UI-Feature-16
-- **Priority**: P2
-- **Size**: M
-- **Area**: UI
-- **Dependencies**: []
-- **Goal**: ダッシュボードに「評価履歴」と「詳細比較」機能を追加し、サイドバーの「過去の結果」を統合する
-- **Description**: ダッシュボードに評価履歴（カード形式+ページネーション）と詳細比較（2モデル比較）機能を追加し、サイドバーの「過去の結果」セクションを削除
-- **Plan**: `_docs/plan/UI-Feature-15-Ext-dashboard-enhancement.md`

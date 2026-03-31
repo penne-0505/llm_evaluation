@@ -11,16 +11,29 @@ from typing import Any, Dict, List
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from core.app_paths import AppPaths
 from core.secrets_store import SecretsStore
 
 
 class ModelCatalog:
     """Fetch and cache provider model lists."""
 
-    CACHE_PATH = Path("models/models.json")
+    CACHE_PATH: Path | None = None
     PROVIDERS = ("openai", "anthropic", "gemini", "openrouter")
     DEFAULT_TTL_SECONDS = 21600
     TTL_ENV_NAME = "LLM_BENCHMARK_MODEL_CATALOG_TTL_SECONDS"
+
+    @classmethod
+    def _cache_path(cls) -> Path:
+        return cls.CACHE_PATH or AppPaths.model_cache_file()
+
+    @classmethod
+    def _legacy_cache_path(cls) -> Path:
+        return AppPaths.repo_path("models", "models.json")
+
+    @classmethod
+    def _bundled_cache_path(cls) -> Path:
+        return AppPaths.bundled_path("models", "models.json")
 
     @classmethod
     def update(
@@ -205,12 +218,23 @@ class ModelCatalog:
 
     @classmethod
     def _load_cache(cls) -> Dict[str, Any]:
-        if not cls.CACHE_PATH.exists():
-            return {}
-        try:
-            return json.loads(cls.CACHE_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
+        candidates: list[Path] = []
+        for path in (
+            cls._cache_path(),
+            cls._bundled_cache_path(),
+            cls._legacy_cache_path(),
+        ):
+            if path not in candidates:
+                candidates.append(path)
+
+        for path in candidates:
+            if not path.exists():
+                continue
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+        return {}
 
     @classmethod
     def _resolve_ttl_seconds(cls, ttl_seconds: int | None) -> int:
@@ -251,8 +275,9 @@ class ModelCatalog:
 
     @classmethod
     def _write_cache(cls, catalog: Dict[str, Any]) -> None:
-        cls.CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        cls.CACHE_PATH.write_text(
+        cache_path = cls._cache_path()
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
             json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
