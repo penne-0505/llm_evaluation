@@ -5,8 +5,8 @@ draft_status: n/a
 created_at: 2026-04-01
 updated_at: 2026-04-01
 references:
-  - ../../plan/DevOps/windows-portable-zip-finalization.md
-  - ../../plan/DevOps/windows-portable-zip-execution-breakdown.md
+  - ../../intent/DevOps/windows-portable-zip-distribution.md
+  - ../../reference/DevOps/windows-portable-runtime.md
 related_issues: []
 related_prs: []
 ---
@@ -53,6 +53,7 @@ user override は以下の優先順位で解決される。
 ## Best Practices
 - ZIP は毎回新しいフォルダへ展開する。既存展開先へ手作業で上書きするより、展開し直した方が不足ファイルを切り分けやすい。
 - prompt / rubric の override は必要なファイルだけ置けばよい。未配置の task は bundled resource に自動フォールバックする。
+- `task08` の local search tool-use は bundled の `task_configs/08.json` と `task_fixtures/08.json` を使うため、portable ZIP でもそのまま動作する。
 - support 用には `http://127.0.0.1:<port>/api/resources` を開くと、judge system prompt の解決元と候補 layer を確認できる。
 - 開発環境で portable 相当の起動確認をするときは `npm run build --prefix frontend` 後に `uv run prism-llm-eval --no-browser --port 8765` を使う。
 
@@ -69,6 +70,6 @@ user override は以下の優先順位で解決される。
   - そのポートが使用中。launcher は空きポートへフォールバックするため、コンソール出力の URL を利用する。
 
 ## References
-- `_docs/plan/DevOps/windows-portable-zip-finalization.md`
-- `_docs/plan/DevOps/windows-portable-zip-execution-breakdown.md`
+- `_docs/intent/DevOps/windows-portable-zip-distribution.md`
+- `_docs/reference/DevOps/windows-portable-runtime.md`
 - `README.md`

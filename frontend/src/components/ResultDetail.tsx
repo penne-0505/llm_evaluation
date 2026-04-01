@@ -1,4 +1,4 @@
-import type { EvaluationRun, JudgeEvaluation, ReviewFlag, JudgeSummary } from '../types';
+import type { EvaluationRun, JudgeEvaluation, ReviewFlag, JudgeSummary, TaskType } from '../types';
 import { format } from 'date-fns';
 import {
     AlertTriangle,
@@ -7,6 +7,8 @@ import {
     ChevronUp,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { TASK_TYPE_LABELS, TASK_TYPE_STYLE } from '../lib/taskTypeStyles';
+import { CONFIDENCE_META } from '../lib/confidence';
 
 function scoreColor(score: number): string {
     if (score >= 80) return 'text-score-high';
@@ -24,6 +26,25 @@ function scoreGlow(score: number): string {
     if (score >= 80) return 'glow-high';
     if (score >= 60) return 'glow-mid';
     return 'glow-low';
+}
+
+const TASK_TYPE_AXIS_MAX: Record<TaskType, { logicAndFact: number; constraintAdherence: number; helpfulness: number }> = {
+    fact: { logicAndFact: 60, constraintAdherence: 30, helpfulness: 10 },
+    creative: { logicAndFact: 30, constraintAdherence: 30, helpfulness: 40 },
+    speculative: { logicAndFact: 40, constraintAdherence: 20, helpfulness: 40 },
+};
+
+function normalizeScore(score: number, maxScore: number): number {
+    if (maxScore <= 0) return 0;
+    return Math.max(0, Math.min(100, (score / maxScore) * 100));
+}
+
+function normalizedScoreColor(score: number, maxScore: number): string {
+    return scoreColor(normalizeScore(score, maxScore));
+}
+
+function normalizedScoreBg(score: number, maxScore: number): string {
+    return scoreBg(normalizeScore(score, maxScore));
 }
 
 function computeJudgeSummaries(run: EvaluationRun): JudgeSummary[] {
@@ -48,9 +69,9 @@ function computeReviewFlags(run: EvaluationRun): ReviewFlag[] {
     run.taskResults.forEach((tr) => {
         tr.judgeEvaluations.forEach((je) => {
             const reasons: string[] = [];
-            if (je.totalScore.sd > 5) reasons.push(`High variance (SD ${je.totalScore.sd})`);
-            if (je.criticalFail.detected) reasons.push('Critical failure detected');
-            if (je.confidenceDistribution.low > 0) reasons.push(`${je.confidenceDistribution.low} low-confidence scores`);
+            if (je.totalScore.sd > 5) reasons.push(`ばらつき大（SD ${je.totalScore.sd}）`);
+            if (je.criticalFail.detected) reasons.push('重大な失敗を検出');
+            if (je.confidenceDistribution.low > 0) reasons.push(`低信頼レビュー ${je.confidenceDistribution.low} 件`);
             if (reasons.length > 0) {
                 flags.push({ taskId: tr.taskId, judgeModelName: je.judgeModelName, reasons });
             }
@@ -76,26 +97,38 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
 
                     {/* Right: Metadata */}
                     <div className="flex-1 grid grid-cols-2 gap-4">
+                        <div className="col-span-2 flex flex-wrap gap-2">
+                            {run.strictMode?.enforced && (
+                                <span className="rounded-full border border-score-high/25 bg-score-high/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-score-high">
+                                    strict run
+                                </span>
+                            )}
+                            {run.strictMode?.requested && !run.strictMode?.enforced && (
+                                <span className="rounded-full border border-score-low/25 bg-score-low/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-score-low">
+                                    strict rejected
+                                </span>
+                            )}
+                        </div>
                         <div>
-                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">Subject</p>
+                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">被験モデル</p>
                             <p className="text-[13px] font-medium text-text-primary">{run.subjectModelName}</p>
                         </div>
                         <div>
-                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">Timestamp</p>
+                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">実行日時</p>
                             <p className="text-[13px] text-text-primary">
-                                {format(new Date(run.timestamp), 'MMM d, yyyy HH:mm')}
+                                {format(new Date(run.timestamp), 'yyyy/MM/dd HH:mm')}
                             </p>
                         </div>
                         <div>
-                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">Best Score</p>
+                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">最高点</p>
                             <p className={`data-display text-lg ${scoreColor(run.bestScore)}`}>{run.bestScore > 0 ? run.bestScore.toFixed(1) : '\u2014'}</p>
                         </div>
                         <div>
-                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">Tasks</p>
+                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">タスク数</p>
                             <p className="data-display text-lg text-text-primary">{run.taskCount}</p>
                         </div>
                         <div className="col-span-2">
-                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-1">Judges</p>
+                            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-1">評価モデル</p>
                             <div className="flex flex-wrap gap-1">
                                 {run.judgeModels.length > 0 ? (
                                     run.judgeModels.map((j) => (
@@ -104,7 +137,7 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
                                         </span>
                                     ))
                                 ) : run.judgeCount ? (
-                                    <span className="text-[11px] text-text-tertiary">{run.judgeCount} judge{run.judgeCount > 1 ? 's' : ''}</span>
+                                    <span className="text-[11px] text-text-tertiary">{run.judgeCount} 件</span>
                                 ) : null}
                             </div>
                         </div>
@@ -112,9 +145,11 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
                 </div>
             </div>
 
+            <ConfidenceGuide />
+
             {/* Per-Task Results */}
             <section className="space-y-2">
-                <h2 className="section-label">Per-Task Results</h2>
+                <h2 className="section-label">タスク別結果</h2>
                 {run.taskResults.map((tr, i) => (
                     <TaskResultCard key={tr.taskId} tr={tr} delay={i * 30} />
                 ))}
@@ -122,7 +157,7 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
 
             {/* Cross-Task Summary */}
             <section className="space-y-3">
-                <h2 className="section-label">Cross-Task Summary</h2>
+                <h2 className="section-label">横断サマリー</h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     {summaries.map((s) => (
@@ -130,7 +165,7 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
                             <p className="text-[12px] text-text-secondary mb-2">{s.judgeModelName}</p>
                             <div className="flex items-end justify-between">
                                 <p className={`data-display text-lg ${scoreColor(s.averageScore)}`}>{s.averageScore}</p>
-                                <p className="text-[11px] text-text-tertiary">{s.tasksEvaluated} tasks</p>
+                                <p className="text-[11px] text-text-tertiary">{s.tasksEvaluated} タスク</p>
                             </div>
                             <GaugeBar value={s.averageScore} className="mt-2" />
                         </div>
@@ -141,7 +176,7 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
                     <div className="space-y-1.5">
                         <h3 className="text-[12px] font-medium text-text-secondary flex items-center gap-1.5">
                             <AlertTriangle size={13} className="text-score-mid" />
-                            {flags.length} flagged {flags.length === 1 ? 'evaluation' : 'evaluations'}
+                            要確認 {flags.length} 件
                         </h3>
                         {flags.map((f, i) => (
                             <div key={i} className="card p-3 flex items-start gap-3 accent-bar-mid">
@@ -194,11 +229,11 @@ function AnimatedScore({ value }: { value: number }) {
 }
 
 /* ======= Gauge Bar ======= */
-function GaugeBar({ value, className = '' }: { value: number; className?: string }) {
+function GaugeBar({ value, className = '', barClassName }: { value: number; className?: string; barClassName?: string }) {
     return (
         <div className={`h-1.5 bg-border/60 rounded-full overflow-hidden ${className}`}>
             <div
-                className={`h-full ${scoreBg(value)} rounded-full`}
+                className={`h-full ${barClassName || scoreBg(value)} rounded-full`}
                 style={{
                     width: `${value}%`,
                     animation: 'countup-bar 0.6s cubic-bezier(0.16, 1, 0.3, 1) both',
@@ -223,8 +258,8 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
             >
                 <div className="flex items-center gap-2">
                     <span className="data-display text-[13px] text-text-primary">{tr.taskId}</span>
-                    <span className="px-1.5 py-0 rounded text-[10px] font-medium bg-amber-dim text-amber">
-                        {tr.taskType}
+                    <span className={`px-1.5 py-0 rounded text-[10px] font-medium ${TASK_TYPE_STYLE[tr.taskType]}`}>
+                        {TASK_TYPE_LABELS[tr.taskType] || tr.taskType}
                     </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -245,7 +280,7 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
             {expanded && (
                 <div className="px-4 pb-4 space-y-4 border-t border-border animate-fade-in">
                     <div className="pt-3 space-y-1.5">
-                        <p className="text-[9px] text-text-tertiary uppercase tracking-wider">Subject Response</p>
+                        <p className="text-[9px] text-text-tertiary uppercase tracking-wider">被験モデルの回答</p>
                         <div className="bg-bg rounded p-3 text-[12px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
                             {tr.subjectResponse}
                         </div>
@@ -253,7 +288,7 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
 
                     <div className="space-y-2">
                         {tr.judgeEvaluations.map((je) => (
-                            <JudgeEvaluationCard key={je.judgeModelId} je={je} />
+                            <JudgeEvaluationCard key={je.judgeModelId} je={je} taskType={tr.taskType} />
                         ))}
                     </div>
                 </div>
@@ -263,8 +298,10 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
 }
 
 /* ======= Judge Evaluation Card ======= */
-function JudgeEvaluationCard({ je }: { je: JudgeEvaluation }) {
+function JudgeEvaluationCard({ je, taskType }: { je: JudgeEvaluation; taskType: TaskType }) {
     const [showReasoning, setShowReasoning] = useState(false);
+    const axisMax = TASK_TYPE_AXIS_MAX[taskType] || TASK_TYPE_AXIS_MAX.fact;
+    const totalConfidenceVotes = je.confidenceDistribution.high + je.confidenceDistribution.medium + je.confidenceDistribution.low;
 
     return (
         <div className="bg-bg border border-border rounded-md p-4 space-y-3 accent-bar-ice">
@@ -275,23 +312,29 @@ function JudgeEvaluationCard({ je }: { je: JudgeEvaluation }) {
 
             {/* Gauge Bars */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <ScoreBar label="Logic & Fact" score={je.logicAndFact} />
-                <ScoreBar label="Constraint" score={je.constraintAdherence} />
-                <ScoreBar label="Helpfulness" score={je.helpfulness} />
-                <ScoreBar label="Total" score={je.totalScore} />
+                <ScoreBar label="論理・事実" score={je.logicAndFact} maxScore={axisMax.logicAndFact} />
+                <ScoreBar label="制約遵守" score={je.constraintAdherence} maxScore={axisMax.constraintAdherence} />
+                <ScoreBar label="有用性" score={je.helpfulness} maxScore={axisMax.helpfulness} />
+                <ScoreBar label="合計" score={je.totalScore} maxScore={100} />
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-[10px]">
-                <span className="text-text-tertiary">Confidence:</span>
-                <span className="px-1.5 py-0.5 bg-score-high/10 text-score-high rounded">{je.confidenceDistribution.high} high</span>
-                <span className="px-1.5 py-0.5 bg-score-mid/10 text-score-mid rounded">{je.confidenceDistribution.medium} med</span>
-                <span className="px-1.5 py-0.5 bg-score-low/10 text-score-low rounded">{je.confidenceDistribution.low} low</span>
+            <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-3 text-[10px]">
+                    <span className="text-text-tertiary">信頼度:</span>
+                    <span className={`px-1.5 py-0.5 rounded ${CONFIDENCE_META.high.chipClass}`}>{je.confidenceDistribution.high} {CONFIDENCE_META.high.shortLabel}</span>
+                    <span className={`px-1.5 py-0.5 rounded ${CONFIDENCE_META.medium.chipClass}`}>{je.confidenceDistribution.medium} {CONFIDENCE_META.medium.shortLabel}</span>
+                    <span className={`px-1.5 py-0.5 rounded ${CONFIDENCE_META.low.chipClass}`}>{je.confidenceDistribution.low} {CONFIDENCE_META.low.shortLabel}</span>
 
-                {je.criticalFail.detected && (
-                    <span className="flex items-center gap-1 px-1.5 py-0.5 bg-danger/10 text-score-low rounded">
-                        <AlertCircle size={9} /> {je.criticalFail.reason}
-                    </span>
-                )}
+                    {je.criticalFail.detected && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-danger/10 text-score-low rounded">
+                            <AlertCircle size={9} /> {je.criticalFail.reason}
+                        </span>
+                    )}
+                </div>
+                <p className="text-[10px] leading-5 text-text-tertiary">
+                    信頼度は、各実行に対する judge 自身の確信度です。低信頼は自動失敗ではなく、手動確認の優先度が高いことを示します。
+                    {totalConfidenceVotes > 0 ? ` ${je.confidenceDistribution.low}/${totalConfidenceVotes} 件が低信頼でした。` : ''}
+                </p>
             </div>
 
             {je.reasoningSamples.length > 0 && (
@@ -301,7 +344,7 @@ function JudgeEvaluationCard({ je }: { je: JudgeEvaluation }) {
                         className="text-[11px] text-ice hover:text-amber transition-colors flex items-center gap-1"
                     >
                         {showReasoning ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                        {showReasoning ? 'Hide' : 'Show'} reasoning ({je.reasoningSamples.length})
+                        {showReasoning ? '理由を隠す' : '理由を表示'} ({je.reasoningSamples.length})
                     </button>
                     {showReasoning && (
                         <div className="mt-2 space-y-1 animate-fade-in">
@@ -319,16 +362,39 @@ function JudgeEvaluationCard({ je }: { je: JudgeEvaluation }) {
 }
 
 /* ======= Score Bar ======= */
-function ScoreBar({ label, score }: { label: string; score: { mean: number; sd: number } }) {
+function ScoreBar({ label, score, maxScore }: { label: string; score: { mean: number; sd: number }; maxScore: number }) {
     return (
         <div className="space-y-1 group/bar">
             <div className="flex items-center justify-between">
                 <span className="text-[10px] text-text-tertiary">{label}</span>
-                <span className={`data-display text-[11px] ${scoreColor(score.mean)}`}>
-                    {score.mean}
+                <span className={`data-display text-[11px] ${normalizedScoreColor(score.mean, maxScore)}`}>
+                    {score.mean} / {maxScore}
                 </span>
             </div>
-            <GaugeBar value={score.mean} />
+            <GaugeBar value={normalizeScore(score.mean, maxScore)} barClassName={normalizedScoreBg(score.mean, maxScore)} />
+            <p className="text-[10px] text-text-tertiary">標準偏差 {score.sd}</p>
         </div>
+    );
+}
+
+function ConfidenceGuide() {
+    return (
+        <section className="card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+                <h2 className="section-label">信頼度ガイド</h2>
+                <span className="text-[10px] text-text-tertiary">judge の自己申告</span>
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+                {Object.entries(CONFIDENCE_META).map(([key, meta]) => (
+                    <div key={key} className="rounded-md border border-border bg-bg/80 p-3 space-y-1.5">
+                        <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] ${meta.chipClass}`}>{meta.label}</span>
+                        <p className="text-[11px] leading-5 text-text-secondary">{meta.description}</p>
+                    </div>
+                ))}
+            </div>
+            <p className="text-[11px] leading-5 text-text-tertiary">
+                信頼度は、どの程度手動確認が必要かを見るために使います。低信頼は曖昧さや根拠不足を示し、重大失敗フラグの方がより強い警告です。
+            </p>
+        </section>
     );
 }

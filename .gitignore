@@ -11,3 +11,5 @@ dist/
 .playwright/
 llm_evalution.egg-info/
 
+.pytest_cache/
+.ruff_cache/

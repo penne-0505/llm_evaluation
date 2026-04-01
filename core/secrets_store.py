@@ -36,6 +36,7 @@ class SecretsStore:
         "gemini": "GEMINI_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
     }
+    OPENROUTER_MANAGEMENT_ENV_KEY = "OPENROUTER_MANAGEMENT_KEY"
 
     @classmethod
     def _file_path(cls) -> Path:
@@ -87,6 +88,30 @@ class SecretsStore:
             env_key = cls.KEYS.get(provider)
             if env_key and env_key in secrets:
                 secrets.pop(env_key, None)
+        data["secrets"] = secrets
+        cls._write_file(data)
+
+    @classmethod
+    def load_openrouter_management_key(cls) -> str | None:
+        data = cls._read_file()
+        secrets = data.get("secrets", {})
+        if cls.OPENROUTER_MANAGEMENT_ENV_KEY in secrets:
+            return str(secrets[cls.OPENROUTER_MANAGEMENT_ENV_KEY])
+        return os.environ.get(cls.OPENROUTER_MANAGEMENT_ENV_KEY)
+
+    @classmethod
+    def save_openrouter_management_key(cls, value: str) -> None:
+        data = cls._read_file()
+        secrets = data.get("secrets", {})
+        secrets[cls.OPENROUTER_MANAGEMENT_ENV_KEY] = value
+        data["secrets"] = secrets
+        cls._write_file(data)
+
+    @classmethod
+    def clear_openrouter_management_key(cls) -> None:
+        data = cls._read_file()
+        secrets = data.get("secrets", {})
+        secrets.pop(cls.OPENROUTER_MANAGEMENT_ENV_KEY, None)
         data["secrets"] = secrets
         cls._write_file(data)
 

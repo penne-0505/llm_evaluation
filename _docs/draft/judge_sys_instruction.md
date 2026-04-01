@@ -64,9 +64,9 @@
   },
   "total_score": 0-100,
   "reasoning": {
-    "logic_and_fact": "採点根拠（200文字以内）",
-    "constraint_adherence": "採点根拠（200文字以内）",
-    "helpfulness_and_creativity": "採点根拠（200文字以内）"
+    "logic_and_fact": "採点根拠（150文字以内）",
+    "constraint_adherence": "採点根拠（150文字以内）",
+    "helpfulness_and_creativity": "採点根拠（150文字以内）"
   },
   "critical_fail": false,
   "critical_fail_reason": "critical_failがtrueの場合のみ記載。それ以外はnull",

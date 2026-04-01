@@ -757,6 +757,20 @@ class TestJsonParser:
   },
   "judge_runs": 3,
   "executed_at": "2026-02-17T15:30:00Z",
+  "execution_duration_ms": 12345,
+  "estimated_cost_usd": 0.0123,
+  "cost_estimate_status": "partial",
+  "usage_summary": {
+    "calls": [...],
+    "totals": {
+      "call_count": 44,
+      "input_tokens": 123456,
+      "output_tokens": 7890,
+      "estimated_cost_usd": 0.0123,
+      "pricing_status": "partial",
+      "unpriced_models": ["gemini:gemini-3.1-pro-preview"]
+    }
+  },
   "tasks": [...]
 }
 ```

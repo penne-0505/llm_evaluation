@@ -18,6 +18,7 @@ interface RunState {
     requestCancel: () => void;
     reset: () => void;
     setResult: (result: EvaluationRun | null) => void;
+    clearResult: () => void;
     setError: (message: string) => void;
 }
 
@@ -37,12 +38,19 @@ export const useRunStore = create<RunState>((set) => ({
             errorMessage: null,
             runId: null,
             progress: {
+                startedAtMs: Date.now(),
                 currentStep: 0,
                 totalSteps,
                 currentTaskIndex: 0,
                 currentTaskId: '',
                 currentJudgeModel: '',
                 elapsedMs: 0,
+                completedTaskCount: 0,
+                activeTaskCount: 0,
+                queuedTaskCount: 0,
+                completedTasks: [],
+                activeTasks: [],
+                queuedTasks: [],
             },
             result: null,
             resultFilePath: null,
@@ -55,12 +63,19 @@ export const useRunStore = create<RunState>((set) => ({
             progress: s.progress
                 ? { ...s.progress, ...update }
                 : {
+                    startedAtMs: update.startedAtMs ?? Date.now(),
                     currentStep: update.currentStep ?? 0,
                     totalSteps: update.totalSteps ?? 0,
                     currentTaskIndex: update.currentTaskIndex ?? 0,
                     currentTaskId: update.currentTaskId ?? '',
                     currentJudgeModel: update.currentJudgeModel ?? '',
                     elapsedMs: update.elapsedMs ?? 0,
+                    completedTaskCount: update.completedTaskCount ?? 0,
+                    activeTaskCount: update.activeTaskCount ?? 0,
+                    queuedTaskCount: update.queuedTaskCount ?? 0,
+                    completedTasks: update.completedTasks ?? [],
+                    activeTasks: update.activeTasks ?? [],
+                    queuedTasks: update.queuedTasks ?? [],
                 },
         })),
 
@@ -87,6 +102,8 @@ export const useRunStore = create<RunState>((set) => ({
         }),
 
     setResult: (result) => set({ result }),
+
+    clearResult: () => set({ result: null, resultFilePath: null }),
 
     setError: (message) =>
         set({

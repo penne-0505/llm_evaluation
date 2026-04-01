@@ -6,7 +6,7 @@
 
 from typing import Optional, Dict, Type, List
 
-from .base import LLMAdapter, LLMError
+from .base import CompletionResult, LLMAdapter, LLMError, UsageMetrics
 from .openai_adapter import OpenAIAdapter
 from .anthropic_adapter import AnthropicAdapter
 from .gemini_adapter import GeminiAdapter
@@ -15,6 +15,8 @@ from .openrouter_adapter import OpenRouterAdapter
 __all__ = [
     "LLMAdapter",
     "LLMError",
+    "CompletionResult",
+    "UsageMetrics",
     "OpenAIAdapter",
     "AnthropicAdapter",
     "GeminiAdapter",

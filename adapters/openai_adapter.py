@@ -5,11 +5,13 @@ from typing import Optional
 
 from openai import OpenAI, OpenAIError
 
-from .base import LLMAdapter, LLMError
+from .base import CompletionResult, LLMAdapter, LLMError, UsageMetrics
 
 
 class OpenAIAdapter(LLMAdapter):
     """OpenAI API用アダプタ"""
+
+    PROVIDER = "openai"
 
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -65,6 +67,22 @@ class OpenAIAdapter(LLMAdapter):
         temperature: float = 0.0,
         max_tokens: int = 1024,
     ) -> str:
+        return self.complete_with_model_result(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ).text
+
+    def complete_with_model_result(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+    ) -> CompletionResult:
         if not self.is_available():
             raise LLMError("OpenAI APIキーが設定されていません")
 
@@ -82,7 +100,19 @@ class OpenAIAdapter(LLMAdapter):
                 max_tokens=max_tokens,
             )
 
-            return response.choices[0].message.content or ""
+            usage = getattr(response, "usage", None)
+            return CompletionResult(
+                text=response.choices[0].message.content or "",
+                usage=UsageMetrics(
+                    provider=self.PROVIDER,
+                    model=model,
+                    input_tokens=getattr(usage, "prompt_tokens", None),
+                    output_tokens=getattr(usage, "completion_tokens", None),
+                    total_tokens=getattr(usage, "total_tokens", None),
+                )
+                if usage is not None
+                else None,
+            )
 
         except OpenAIError as e:
             raise LLMError(f"OpenAI APIエラー: {str(e)}") from e

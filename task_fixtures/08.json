@@ -1,0 +1,411 @@
+{
+  "id": "task08-local-search",
+  "schema_version": "query-snapshot-v1",
+  "notes": "Closed local-search corpus for task08. Query results come from temp/search_result*.json. Documents are keyed by URL and will be filled with masked/abridged excerpts.",
+  "query_snapshots": [
+    {
+      "query": "ChatGPT Deep Research model changed",
+      "source_file": "temp/search_result1.json",
+      "request_id": "f8db9f90-0c6e-40ed-b5fc-c7f8765c81e0",
+      "response_time": 1.34,
+      "results": [
+        {
+          "rank": 1,
+          "url": "https://www.youreverydayai.com/ep-716-chatgpts-new-deep-research-update-5-ways-you-can-use-it-today/",
+          "title": "Ep 716: ChatGPT's new Deep Research Update",
+          "content": "you know, tool to a complete research platform is the ability to choose which websites it does go to, which is big. And then the most obvious update, but probably the biggest one there is the updated model. So now this is running GPT 5.2. So this is OpenAI's, technically their latest series of models available in chat GPT.",
+          "score": 0.9997428,
+          "favicon": "https://www.youreverydayai.com/favicon.ico"
+        },
+        {
+          "rank": 2,
+          "url": "https://en.wikipedia.org/wiki/ChatGPT_Deep_Research",
+          "title": "ChatGPT Deep Research - Wikipedia",
+          "content": "OpenAI introduced \"Deep Research\" in February 2025. In April 2025, OpenAI announced a lightweight version based on o4-mini. In February 2026, OpenAI announced updates to Deep Research with a new GPT-5.2-based model.",
+          "score": 0.99945146,
+          "favicon": "https://en.wikipedia.org/static/apple-touch/wikipedia.png"
+        },
+        {
+          "rank": 3,
+          "url": "https://openai.com/index/introducing-deep-research/",
+          "title": "Introducing deep research",
+          "content": "Today we’re launching deep research in ChatGPT. Powered by a version of the upcoming OpenAI o3 model that’s optimized for web browsing and data analysis. July 17, 2025 update: deep research can now go even deeper and broader with access to a visual browser as part of ChatGPT agent.",
+          "score": 0.99940693,
+          "favicon": "https://openai.com/favicon.svg"
+        },
+        {
+          "rank": 4,
+          "url": "https://feedfreq.com/trending/a-i/openai-deep-research-massive-update/",
+          "title": "OpenAI Deep Research Update (Quick 101 Guide) - FeedFreq",
+          "content": "Deep Research is now open to all ChatGPT users, including the free tier. Alongside PDF export, ChatGPT now offers three external connectors that dramatically expand research power.",
+          "score": 0.9993068,
+          "favicon": "https://feedfreq.com/wp-content/uploads/2023/07/android-chrome-512x512-1-150x150.png"
+        },
+        {
+          "rank": 5,
+          "url": "https://medium.com/@kunals1115/the-history-evolution-of-chatgpt-and-its-underlying-gpt-models-4a1c7f559057",
+          "title": "The history / evolution of ChatGPT (and its underlying GPT models)",
+          "content": "A timeline article that mixes ChatGPT milestones and underlying GPT model updates such as GPT-5.1, GPT-5.2, o3, and o4-mini.",
+          "score": 0.99899954,
+          "favicon": "https://miro.medium.com/v2/resize:fill:152:152/10fd5c419ac61637245384e7099e131627900034828f4f386bdaa47a74eae156"
+        }
+      ]
+    },
+    {
+      "query": "ChatGPT Deep Research 2025 11 2026 01 model update",
+      "source_file": "temp/search_result2.json",
+      "request_id": "5eb66b54-a605-40d3-bc29-c04dc17a8df3",
+      "response_time": 1.83,
+      "results": [
+        {
+          "rank": 1,
+          "url": "https://openai.com/index/introducing-deep-research/",
+          "title": "Introducing deep research - OpenAI",
+          "content": "February 10, 2026 update: you can now connect deep research to any MCP or app and restrict web searches to trusted sites. You can also track progress in real-time and interrupt to refine with follow-up prompts.",
+          "score": 0.999566,
+          "favicon": "https://openai.com/favicon.svg"
+        },
+        {
+          "rank": 2,
+          "url": "https://help.openai.com/en/articles/6825453-chatgpt-release-notes",
+          "title": "ChatGPT — Release Notes - OpenAI Help Center",
+          "content": "February 10, 2026: Updates to deep research. November 5, 2025: Interrupt ChatGPT, allowing long-running queries such as deep research or GPT-5 Pro to be refined mid-run.",
+          "score": 0.9979966,
+          "favicon": "https://help.openai.com/apple-touch-icon.png"
+        },
+        {
+          "rank": 3,
+          "url": "https://www.slashgear.com/2092786/big-chatgpt-changes-coming-in-2026/",
+          "title": "4 Big Changes Coming To ChatGPT In 2026 - SlashGear",
+          "content": "The article covers GPT-5.2 becoming the default for ChatGPT users and references a January 30, 2026 announcement about more visual, easy-to-scan answers.",
+          "score": 0.997783,
+          "favicon": "https://www.slashgear.com/img/slash-gear-favicon-448x448.png"
+        },
+        {
+          "rank": 4,
+          "url": "https://help.openai.com/en/articles/6825453-chatgpt-release-notes?ref=blog.secondbrush.co.kr",
+          "title": "ChatGPT — Release Notes | OpenAI Help Center",
+          "content": "A duplicate release-notes URL variant that includes the same February 10, 2026 deep research update and GPT-5.2 notes.",
+          "score": 0.9977482,
+          "favicon": "https://help.openai.com/apple-touch-icon.png"
+        },
+        {
+          "rank": 5,
+          "url": "https://feedfreq.com/trending/a-i/openai-deep-research-massive-update/",
+          "title": "OpenAI Deep Research Update (Quick 101 Guide) - FeedFreq",
+          "content": "A quick guide describing Deep Research availability, free-tier access, and new features.",
+          "score": 0.99648935,
+          "favicon": "https://feedfreq.com/wp-content/uploads/2023/07/android-chrome-512x512-1-150x150.png"
+        }
+      ]
+    },
+    {
+      "query": "OpenAI Deep Research update model",
+      "source_file": "temp/search_result3.json",
+      "request_id": "dc3a49db-cf74-4a92-8038-e9611c5d3c2a",
+      "response_time": 1.48,
+      "results": [
+        {
+          "rank": 1,
+          "url": "https://openai.com/index/introducing-deep-research/",
+          "title": "Introducing deep research - OpenAI",
+          "content": "Humanity's Last Exam results are cited for the model powering deep research. April 24, 2025 update: a lightweight version powered by a version of o4-mini. July 17, 2025 update: visual browser access as part of agent mode.",
+          "score": 0.99988675,
+          "favicon": "https://openai.com/favicon.svg"
+        },
+        {
+          "rank": 2,
+          "url": "https://dev.ua/en/news/openai-onovyla-funktsiiu-chatgpt-deep-research-1770820775",
+          "title": "OpenAI updates ChatGPT Deep Research feature - Dev.ua",
+          "content": "A media article claiming Deep Research is now powered by the latest GPT-5.2 model and adds source selection, report viewing in chat, and real-time process editing.",
+          "score": 0.99988675,
+          "favicon": "https://dev.ua/assets/favicons/apple-touch-icon-180x180-c5ce585d8366ab7febcea20387dc139777b1c36c0cd7f62ba4f18d38f92d3509.png"
+        },
+        {
+          "rank": 3,
+          "url": "https://help.openai.com/en/articles/9624314-model-release-notes",
+          "title": "Model Release Notes | OpenAI Help Center",
+          "content": "A broad OpenAI model timeline that includes GPT-5, GPT-5-codex, o3-pro, o4-mini, GPT-4.5, and earlier updates, but is not specific to Deep Research.",
+          "score": 0.99943846,
+          "favicon": "https://help.openai.com/apple-touch-icon.png"
+        },
+        {
+          "rank": 4,
+          "url": "https://help.openai.com/en/articles/10500283-deep-research-in-chatgpt",
+          "title": "Deep research in ChatGPT - OpenAI Help Center",
+          "content": "The help article says users can edit the research plan, view progress in real time, interrupt the research, choose sources, and that deep research is powered by the latest model by default with optional legacy models.",
+          "score": 0.99847525,
+          "favicon": "https://help.openai.com/apple-touch-icon.png"
+        },
+        {
+          "rank": 5,
+          "url": "https://openai.com/research/",
+          "title": "Research - OpenAI",
+          "content": "A research index page listing GPT-5.1, GPT-5.2, GPT-5, o3 and o4-mini posts, but not a Deep Research-specific change log.",
+          "score": 0.99271095,
+          "favicon": "https://openai.com/favicon.svg"
+        }
+      ]
+    },
+    {
+      "query": "Deep Research model update",
+      "source_file": "temp/search_result4.json",
+      "request_id": "6a5d2c66-8895-4d0d-b289-c1ca5ccdb3da",
+      "response_time": 1.66,
+      "results": [
+        {
+          "rank": 1,
+          "url": "https://openai.com/index/introducing-deep-research/",
+          "title": "Introducing deep research",
+          "content": "The product post describes the model powering deep research and later update blocks for lightweight mode and agent-mode browser access.",
+          "score": 0.999956,
+          "favicon": "https://openai.com/favicon.svg"
+        },
+        {
+          "rank": 2,
+          "url": "https://cdn.openai.com/deep-research-system-card.pdf",
+          "title": "Deep Research System Card",
+          "content": "The system card says deep research is powered by an early version of OpenAI o3 optimized for web browsing and details safety evaluations against GPT-4o, o1-mini, and o1.",
+          "score": 0.99984276,
+          "favicon": null
+        },
+        {
+          "rank": 3,
+          "url": "https://help.openai.com/en/articles/10500283-deep-research-in-chatgpt",
+          "title": "Deep research in ChatGPT",
+          "content": "The help article says deep research is powered by the latest models for fast, accurate results, with an option to choose a legacy model.",
+          "score": 0.9976586,
+          "favicon": "https://help.openai.com/apple-touch-icon.png"
+        },
+        {
+          "rank": 4,
+          "url": "https://developers.openai.com/api/docs/models/o4-mini-deep-research",
+          "title": "o4-mini-deep-research Model | OpenAI API",
+          "content": "An API model page for o4-mini-deep-research describing it as a faster, more affordable deep research model with web and MCP connector support.",
+          "score": 0.9951703,
+          "favicon": "https://developers.openai.com/favicon.png"
+        },
+        {
+          "rank": 5,
+          "url": "https://developers.openai.com/api/docs/models/o3-deep-research",
+          "title": "o3-deep-research Model | OpenAI API",
+          "content": "An API model page for o3-deep-research describing it as the most advanced deep research model.",
+          "score": 0.9921233,
+          "favicon": "https://developers.openai.com/favicon.png"
+        }
+      ]
+    },
+    {
+      "query": "ChatGPT Deep Research",
+      "source_file": "temp/search_result5.json",
+      "request_id": "056bce28-9c2c-4f40-9b90-77c1b11700af",
+      "response_time": 1.75,
+      "results": [
+        {
+          "rank": 1,
+          "url": "https://openai.com/index/introducing-deep-research/",
+          "title": "Introducing deep research",
+          "content": "The launch article says Deep Research is powered by a version of the upcoming OpenAI o3 model optimized for web browsing and data analysis.",
+          "score": 0.93425745,
+          "favicon": "https://openai.com/favicon.svg"
+        },
+        {
+          "rank": 2,
+          "url": "https://help.openai.com/en/articles/10500283-deep-research-in-chatgpt",
+          "title": "Deep research in ChatGPT",
+          "content": "The help article says Deep Research can search the public web or specific sites, use connected apps, create a proposed research plan, and is powered by the latest models by default.",
+          "score": 0.91901255,
+          "favicon": "https://help.openai.com/apple-touch-icon.png"
+        },
+        {
+          "rank": 3,
+          "url": "https://help.openai.com/en/articles/9260256-chatgpt-capabilities-overview",
+          "title": "ChatGPT Capabilities Overview",
+          "content": "A general capabilities page that describes Deep Research as a built-in mode for multi-step research tasks and separate from Search (Web Browsing).",
+          "score": 0.90849644,
+          "favicon": "https://help.openai.com/apple-touch-icon.png"
+        },
+        {
+          "rank": 4,
+          "url": "https://forum.openai.com/public/videos/deep-research-in-the-openai-forum-2025",
+          "title": "Deep Research in the OpenAI Forum - Video",
+          "content": "A forum video summary describing Deep Research as powered by a fine-tuned version of the o3 model with agentic browsing, reasoning, data processing, and synthesis.",
+          "score": 0.8886914,
+          "favicon": "https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/openai/small-square-logo-on-dark-background-80758a52-cfe8-4676-b9b5-a3cdd8c7d230-1693350163347.png?fit=scale-down&width=180"
+        },
+        {
+          "rank": 5,
+          "url": "https://community.openai.com/t/chatgtp-is-way-way-off-in-estimating-when-project-will-be-done/1133942",
+          "title": "ChatGTP Is Way, Way Off in Estimating When Project Will ...",
+          "content": "A community post contrasting ChatGPT with DeepResearch for in-depth, source-backed research and describing DeepResearch as a specialist tool.",
+          "score": 0.84918517,
+          "favicon": "https://us1.discourse-cdn.com/openai1/optimized/4X/e/5/d/e5d0db747b8673d263cea6db3e4736ae59f34731_2_180x180.png"
+        }
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "url": "https://www.youreverydayai.com/ep-716-chatgpts-new-deep-research-update-5-ways-you-can-use-it-today/",
+      "title": "Ep 716: ChatGPT's new Deep Research Update",
+      "source_type": "media",
+      "published_at": "2026-02-18",
+      "fetch_status": "ok",
+      "notes": "Secondary article; explicitly claims Deep Research now runs on GPT-5.2 while also describing UI and workflow additions.",
+      "text": "This article describes a Deep Research update that adds site selection, live steering, interruption mid-run, and a fullscreen report viewer. It also states that the updated Deep Research now runs on GPT-5.2 rather than the older o3/o4 setup. The piece treats model replacement and product feature additions as part of the same platform update."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/ChatGPT_Deep_Research",
+      "title": "ChatGPT Deep Research - Wikipedia",
+      "source_type": "wikipedia",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "Wikipedia summary; last edited 2026-04-03. Useful timeline overview but not a primary source.",
+      "text": "Wikipedia summarizes Deep Research as initially launched in February 2025 on a specialized o3-based model, with a lightweight o4-mini version added in April 2025. It further says that in February 2026 OpenAI updated Deep Research with a GPT-5.2-based model plus better steering, selected-site restrictions, MCP connectivity, and improved report UI. The page groups model change and feature additions in the same update block."
+    },
+    {
+      "url": "https://openai.com/index/introducing-deep-research/",
+      "title": "Introducing deep research",
+      "source_type": "official_blog",
+      "published_at": "2025-02-02",
+      "fetch_status": "ok",
+      "notes": "Primary source. Page also carries update blocks dated 2025-04-24, 2025-07-17, and 2026-02-10.",
+      "text": "At launch, OpenAI says Deep Research is powered by a version of the upcoming o3 model optimized for web browsing and data analysis. A later April 2025 update adds a lightweight version powered by o4-mini and expands usage limits. The February 10, 2026 update emphasizes new capabilities such as MCP/app connections, restricting searches to trusted sites, real-time tracking, interruption, and improved review UI, but does not itself explicitly name GPT-5.2."
+    },
+    {
+      "url": "https://feedfreq.com/trending/a-i/openai-deep-research-massive-update/",
+      "title": "OpenAI Deep Research Update (Quick 101 Guide) - FeedFreq",
+      "source_type": "media",
+      "published_at": "2025-05-15",
+      "fetch_status": "ok",
+      "notes": "Mostly about PDF export and connectors; only indirectly relevant to task08.",
+      "text": "This guide presents Deep Research as a built-in ChatGPT feature that returns source-based reports with tables, charts, linked citations, and visual analysis. It says free users get up to 5 tasks on o4-mini, while paid tiers receive larger quotas. The article focuses on PDF export and external connectors like GitHub and SharePoint, so it is more about product capability expansion than later GPT-5.2-era changes."
+    },
+    {
+      "url": "https://medium.com/@kunals1115/the-history-evolution-of-chatgpt-and-its-underlying-gpt-models-4a1c7f559057",
+      "title": "The history / evolution of ChatGPT (and its underlying GPT models)",
+      "source_type": "other",
+      "published_at": "2025-10-04",
+      "fetch_status": "ok",
+      "notes": "Broad timeline article, not Deep Research-specific.",
+      "text": "This Medium post gives a broad timeline of ChatGPT and GPT model generations from GPT-1 through GPT-5. It is useful as background on ChatGPT-wide model turnover, but it does not provide primary evidence about Deep Research-specific internal model changes. For task08, it mainly helps separate general ChatGPT model evolution from Deep Research product updates."
+    },
+    {
+      "url": "https://help.openai.com/en/articles/6825453-chatgpt-release-notes",
+      "title": "ChatGPT — Release Notes - OpenAI Help Center",
+      "source_type": "official_help",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "Primary source. Relevant entries: 2025-11-05, 2025-12-11, 2026-02-10.",
+      "text": "On November 5, 2025, OpenAI added the ability to interrupt long-running queries such as Deep Research and refine them mid-run. On December 11, 2025, OpenAI introduced GPT-5.2 across ChatGPT as the next upgrade to the GPT-5 series. On February 10, 2026, the release notes describe Deep Research improvements—trusted sites, larger app source collection, editable research plans, mid-run direction changes, and UI updates—but that Deep Research entry does not directly name GPT-5.2."
+    },
+    {
+      "url": "https://www.slashgear.com/2092786/big-chatgpt-changes-coming-in-2026/",
+      "title": "4 Big Changes Coming To ChatGPT In 2026 - SlashGear",
+      "source_type": "media",
+      "published_at": "2026-02-03",
+      "fetch_status": "ok",
+      "notes": "Secondary article. Useful because it separates global model changes from UI/product changes.",
+      "text": "SlashGear says GPT-5.2 is becoming the default ChatGPT model as older models are retired. In a separate section, it describes January 30, 2026 'more visual responses' as a product experience change. This helps distinguish a platform-wide model update from a non-model feature/UI update."
+    },
+    {
+      "url": "https://help.openai.com/en/articles/6825453-chatgpt-release-notes?ref=blog.secondbrush.co.kr",
+      "title": "ChatGPT — Release Notes | OpenAI Help Center",
+      "source_type": "official_help",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "Duplicate URL variant of the canonical release-notes page.",
+      "text": "This URL variant contains the same relevant entries as the canonical release-notes page: November 5, 2025 interruption of long-running Deep Research tasks, December 11, 2025 GPT-5.2 rollout in ChatGPT, and February 10, 2026 Deep Research capability improvements. The Deep Research entry is feature-centric and does not directly state the internal model name."
+    },
+    {
+      "url": "https://dev.ua/en/news/openai-onovyla-funktsiiu-chatgpt-deep-research-1770820775",
+      "title": "OpenAI updates ChatGPT Deep Research feature - Dev.ua",
+      "source_type": "media",
+      "published_at": "2026-02-11",
+      "fetch_status": "ok",
+      "notes": "Secondary article but highly on-point for task08.",
+      "text": "Dev.ua says Deep Research originally launched on o3, later got a budget version on o4-mini, and is now powered by the latest GPT-5.2 model. It also reports new controls to limit research to chosen sites, connect apps and MCP sources, watch progress live, and pause to refine the job. The article therefore treats model replacement and product improvements as simultaneous parts of the same update."
+    },
+    {
+      "url": "https://help.openai.com/en/articles/9624314-model-release-notes",
+      "title": "Model Release Notes | OpenAI Help Center",
+      "source_type": "official_help",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "Primary but not Deep Research-specific; useful to distinguish global model updates from product-specific updates.",
+      "text": "This page lists model-level changes across ChatGPT and the API, including GPT-5.2 Instant and GPT-5.2 Thinking adjustments in early February 2026. It documents ChatGPT-wide model evolution, not Deep Research-specific behavior or change logs. For task08, it is evidence that a general GPT-5.2 update happened, but not proof by itself that Deep Research internally switched during the target window."
+    },
+    {
+      "url": "https://help.openai.com/en/articles/10500283-deep-research-in-chatgpt",
+      "title": "Deep research in ChatGPT - OpenAI Help Center",
+      "source_type": "official_help",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "Primary source; page says updated 10 days ago when fetched.",
+      "text": "The help article explains that Deep Research can use uploaded files, specific sites, and connected apps, and that users can review a proposed research plan before it starts. It says users can follow progress in real time, interrupt the run, and adjust which sources are allowed. Crucially, it states that Deep Research is powered by the latest models by default, while legacy models can still be chosen, implying a model-layer distinction separate from the visible feature set."
+    },
+    {
+      "url": "https://openai.com/research/",
+      "title": "Research - OpenAI",
+      "source_type": "official_blog",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "General research index; not a direct Deep Research change log.",
+      "text": "The OpenAI research index lists posts for GPT-5.2, GPT-5.1, GPT-5, o3, and o4-mini among other model releases. It shows the broader surrounding model ecosystem but does not directly document whether ChatGPT Deep Research changed models during November 2025 to January 2026. It is best used as background context only."
+    },
+    {
+      "url": "https://cdn.openai.com/deep-research-system-card.pdf",
+      "title": "Deep Research System Card",
+      "source_type": "official_pdf",
+      "published_at": null,
+      "fetch_status": "partial",
+      "notes": "PDF retrieved but body extraction failed in this environment. Search snippet and adjacent primary sources indicate this is an early o3-era Deep Research document.",
+      "text": "The PDF itself could not be reliably text-extracted here. However, surrounding OpenAI materials and search metadata strongly suggest the system card documents the initial Deep Research release as powered by an early or specialized o3-based model optimized for browsing. That makes it useful as partial support that the original Deep Research stack was not GPT-5.2."
+    },
+    {
+      "url": "https://developers.openai.com/api/docs/models/o4-mini-deep-research",
+      "title": "o4-mini-deep-research Model | OpenAI API",
+      "source_type": "official_api_docs",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "API documentation; not direct evidence of ChatGPT UI internals.",
+      "text": "The API docs describe o4-mini-deep-research as a faster, more affordable Deep Research model for complex multi-step tasks. It can search and synthesize information from the internet and from MCP-connected data. This shows that Deep Research exists as a named model family, which helps separate 'the Deep Research feature' from any single ChatGPT-wide default model."
+    },
+    {
+      "url": "https://developers.openai.com/api/docs/models/o3-deep-research",
+      "title": "o3-deep-research Model | OpenAI API",
+      "source_type": "official_api_docs",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "API documentation; indicates an explicit o3 Deep Research model family existed.",
+      "text": "The API docs describe o3-deep-research as OpenAI's most powerful Deep Research model, intended for complex, multi-step research tasks over web and MCP-connected sources. This is strong evidence that Deep Research had an explicit o3-branded model line. For task08, that supports distinguishing specialized Deep Research models from later ChatGPT-wide GPT-5.2 updates."
+    },
+    {
+      "url": "https://help.openai.com/en/articles/9260256-chatgpt-capabilities-overview",
+      "title": "ChatGPT Capabilities Overview",
+      "source_type": "official_help",
+      "published_at": null,
+      "fetch_status": "ok",
+      "notes": "General capabilities page; useful for functional distinction, not timeline proof.",
+      "text": "This help page defines Deep Research as a mode for multi-step research tasks that reads across multiple sources and produces cited, structured outputs. It explicitly contrasts Deep Research with Search, which is for quick facts and short summaries. That functional distinction is helpful for task08 because it shows a feature category can exist independently from any specific model update."
+    },
+    {
+      "url": "https://forum.openai.com/public/videos/deep-research-in-the-openai-forum-2025",
+      "title": "Deep Research in the OpenAI Forum - Video",
+      "source_type": "official_video",
+      "published_at": "2025-03-28",
+      "fetch_status": "ok",
+      "notes": "High-value primary-adjacent source for the 2025 initial model basis.",
+      "text": "In this OpenAI Forum presentation, Isa Fulford and Edward Sun describe Deep Research as an agent in ChatGPT powered by a fine-tuned version of the o3 model. They explain that it was trained for browsing, reasoning, data processing, and synthesis over long-horizon tasks. This is one of the clearest sources showing that, at least in early 2025, Deep Research was explicitly an o3-based system."
+    },
+    {
+      "url": "https://community.openai.com/t/chatgtp-is-way-way-off-in-estimating-when-project-will-be-done/1133942",
+      "title": "ChatGTP Is Way, Way Off in Estimating When Project Will ...",
+      "source_type": "community",
+      "published_at": "2025-03-03",
+      "fetch_status": "ok",
+      "notes": "User thread; non-authoritative but useful as workflow contrast between normal ChatGPT and Deep Research.",
+      "text": "A user reports that ordinary ChatGPT kept claiming it was still working on a long document update, even though no persistent background work was actually happening. A reply explains that standard ChatGPT does not continue tasks behind the scenes and suggests using Deep Research instead for source-backed research. This is useful for distinguishing product behavior, but it is not evidence of internal model updates."
+    }
+  ]
+}

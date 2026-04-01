@@ -13,6 +13,7 @@ import type {
     Model,
     Task,
     EvaluationRun,
+    StrictModePreset,
     TaskResult,
     JudgeEvaluation,
     AxisScore,
@@ -45,12 +46,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 // ---------------------------------------------------------------------------
 
 export async function fetchTasks(): Promise<Task[]> {
-    // server.py returns: { id, type, prompt }[] — already camelCase-compatible
-    const raw = await apiFetch<Array<{ id: string; type: string; prompt: string }>>('/tasks');
+    const raw = await apiFetch<Array<{ id: string; type: string; prompt_preview: string }>>('/tasks');
     return raw.map((t) => ({
         id: t.id,
         type: t.type as TaskType,
-        prompt: t.prompt,
+        promptPreview: t.prompt_preview,
     }));
 }
 
@@ -84,6 +84,51 @@ export async function deleteKey(provider: Provider): Promise<void> {
         method: 'DELETE',
         body: JSON.stringify({ [provider]: true }),
     });
+}
+
+export interface OpenRouterAdminStatus {
+    configured: boolean;
+}
+
+export interface OpenRouterCredits {
+    configured: boolean;
+    totalCredits?: number | null;
+    totalUsage?: number | null;
+    remainingCredits?: number | null;
+}
+
+export async function fetchOpenRouterAdminStatus(): Promise<OpenRouterAdminStatus> {
+    return apiFetch<OpenRouterAdminStatus>('/openrouter/admin/status');
+}
+
+export async function saveOpenRouterAdminKey(key: string): Promise<void> {
+    await apiFetch<{ status: string }>('/openrouter/admin/key', {
+        method: 'POST',
+        body: JSON.stringify({ key }),
+    });
+}
+
+export async function deleteOpenRouterAdminKey(): Promise<void> {
+    await apiFetch<{ status: string }>('/openrouter/admin/key', {
+        method: 'DELETE',
+    });
+}
+
+interface RawOpenRouterCredits {
+    configured: boolean;
+    total_credits?: number | null;
+    total_usage?: number | null;
+    remaining_credits?: number | null;
+}
+
+export async function fetchOpenRouterCredits(): Promise<OpenRouterCredits> {
+    const raw = await apiFetch<RawOpenRouterCredits>('/openrouter/credits');
+    return {
+        configured: raw.configured,
+        totalCredits: raw.total_credits,
+        totalUsage: raw.total_usage,
+        remainingCredits: raw.remaining_credits,
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +175,41 @@ export async function fetchModels(force = false): Promise<ModelsResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Strict Mode
+// ---------------------------------------------------------------------------
+
+interface RawStrictModePreset {
+    id: string;
+    label: string;
+    description: string;
+    subject_model_policy: 'variable';
+    judge_models: Array<{
+        id: string;
+        label: string;
+        provider: Provider;
+    }>;
+    task_ids: string[];
+    judge_runs: number;
+    subject_temperature: number;
+    judge_temperature: number;
+}
+
+export async function fetchStrictModePreset(): Promise<StrictModePreset> {
+    const raw = await apiFetch<RawStrictModePreset>('/strict-mode/preset');
+    return {
+        id: raw.id,
+        label: raw.label,
+        description: raw.description,
+        subjectModelPolicy: raw.subject_model_policy,
+        judgeModels: raw.judge_models,
+        taskIds: raw.task_ids,
+        judgeRuns: raw.judge_runs,
+        subjectTemperature: raw.subject_temperature,
+        judgeTemperature: raw.judge_temperature,
+    };
+}
+
+// ---------------------------------------------------------------------------
 // Results — list summaries
 // ---------------------------------------------------------------------------
 
@@ -138,6 +218,19 @@ interface RawResultSummary {
     filepath: string;
     target_model: string;
     executed_at: string;
+    execution_duration_ms?: number;
+    estimated_cost_usd?: number;
+    cost_estimate_status?: 'available' | 'partial' | 'unavailable';
+    subject_total_tokens?: number;
+    subject_estimated_cost_usd?: number;
+    subject_cost_per_1m_tokens_usd?: number;
+    strict_mode_requested?: boolean;
+    strict_mode_enforced?: boolean;
+    strict_mode_eligible?: boolean;
+    strict_mode_preset_id?: string | null;
+    strict_mode_preset_label?: string | null;
+    strict_mode_profile_id?: string | null;
+    strict_mode_profile_label?: string | null;
     task_count: number;
     judge_count: number;
     avg_score: number;
@@ -150,6 +243,19 @@ export interface ResultSummary {
     filename: string;
     targetModel: string;
     executedAt: string;
+    executionDurationMs?: number;
+    estimatedCostUsd?: number;
+    costEstimateStatus?: 'available' | 'partial' | 'unavailable';
+    subjectTotalTokens?: number;
+    subjectEstimatedCostUsd?: number;
+    subjectCostPer1mTokensUsd?: number;
+    strictModeRequested?: boolean;
+    strictModeEnforced?: boolean;
+    strictModeEligible?: boolean;
+    strictModePresetId?: string | null;
+    strictModePresetLabel?: string | null;
+    strictModeProfileId?: string | null;
+    strictModeProfileLabel?: string | null;
     taskCount: number;
     judgeCount: number;
     avgScore: number;
@@ -164,6 +270,19 @@ export async function fetchResultSummaries(): Promise<ResultSummary[]> {
         filename: r.filename,
         targetModel: r.target_model,
         executedAt: r.executed_at,
+        executionDurationMs: r.execution_duration_ms,
+        estimatedCostUsd: r.estimated_cost_usd,
+        costEstimateStatus: r.cost_estimate_status,
+        subjectTotalTokens: r.subject_total_tokens,
+        subjectEstimatedCostUsd: r.subject_estimated_cost_usd,
+        subjectCostPer1mTokensUsd: r.subject_cost_per_1m_tokens_usd,
+        strictModeRequested: r.strict_mode_requested,
+        strictModeEnforced: r.strict_mode_enforced,
+        strictModeEligible: r.strict_mode_eligible,
+        strictModePresetId: r.strict_mode_preset_id,
+        strictModePresetLabel: r.strict_mode_preset_label,
+        strictModeProfileId: r.strict_mode_profile_id,
+        strictModeProfileLabel: r.strict_mode_profile_label,
         taskCount: r.task_count,
         judgeCount: r.judge_count,
         avgScore: r.avg_score,
@@ -196,6 +315,26 @@ interface RawBenchmarkResult {
     judge_models: string[];
     judge_runs: number;
     executed_at: string;
+    execution_duration_ms?: number;
+    estimated_cost_usd?: number;
+    cost_estimate_status?: 'available' | 'partial' | 'unavailable';
+    strict_mode?: {
+        version?: string;
+        requested?: boolean;
+        enforced?: boolean;
+        eligible?: boolean;
+        preset_id?: string | null;
+        preset_label?: string | null;
+        profile_id?: string | null;
+        profile_label?: string | null;
+        reasons?: string[];
+    };
+    usage_summary?: {
+        totals?: {
+            total_tokens?: number;
+            estimated_cost_usd?: number;
+        };
+    };
     tasks: RawTaskData[];
     cancelled: boolean;
     completed_tasks: number;
@@ -209,6 +348,14 @@ interface RawTaskData {
     task_type: string;
     input_prompt: string;
     response: string;
+    subject_usage?: {
+        model?: string;
+        provider?: string;
+        total_tokens?: number;
+        input_tokens?: number;
+        output_tokens?: number;
+        estimated_cost_usd?: number;
+    };
     judge_results: Record<string, RawJudgeResult>;
 }
 
@@ -217,7 +364,7 @@ interface RawJudgeRun {
     total_score: number;
     confidence: string;
     critical_fail: boolean;
-    reasoning: string;
+    reasoning: unknown;
 }
 
 interface RawAggregated {
@@ -242,6 +389,19 @@ function toAxisScore(mean: number, std: number): AxisScore {
     return { mean: Math.round(mean * 10) / 10, sd: Math.round(std * 10) / 10 };
 }
 
+function normalizeReasoning(reasoning: unknown): string | null {
+    if (typeof reasoning === 'string') {
+        return reasoning;
+    }
+    if (reasoning && typeof reasoning === 'object') {
+        const entries = Object.entries(reasoning as Record<string, unknown>)
+            .filter(([, value]) => typeof value === 'string' && value)
+            .map(([key, value]) => `${key}: ${value as string}`);
+        return entries.length > 0 ? entries.join('\n\n') : JSON.stringify(reasoning, null, 2);
+    }
+    return null;
+}
+
 function convertJudgeResult(judgeModel: string, raw: RawJudgeResult): JudgeEvaluation {
     const agg = raw.aggregated;
     return {
@@ -256,7 +416,9 @@ function convertJudgeResult(judgeModel: string, raw: RawJudgeResult): JudgeEvalu
             detected: agg.critical_fail ?? false,
             reason: '',  // server.py にはない → 空文字フォールバック
         },
-        reasoningSamples: (raw.runs || []).map((r) => r.reasoning).filter(Boolean),
+        reasoningSamples: (raw.runs || [])
+            .map((r) => normalizeReasoning(r.reasoning))
+            .filter((value): value is string => Boolean(value)),
     };
 }
 
@@ -274,12 +436,41 @@ function convertTask(raw: RawTaskData): TaskResult {
 }
 
 export function convertBenchmarkResult(raw: RawBenchmarkResult): EvaluationRun {
+    const subjectTotalTokens = (raw.tasks || []).reduce(
+        (sum, task) => sum + Number(task.subject_usage?.total_tokens || 0),
+        0,
+    );
+    const subjectEstimatedCostUsd = (raw.tasks || []).reduce(
+        (sum, task) => sum + Number(task.subject_usage?.estimated_cost_usd || 0),
+        0,
+    );
+    const subjectCostPer1mTokensUsd = subjectTotalTokens > 0 && subjectEstimatedCostUsd > 0
+        ? Number(((subjectEstimatedCostUsd / subjectTotalTokens) * 1_000_000).toFixed(6))
+        : undefined;
+
     return {
         id: raw.run_id,
         subjectModelId: raw.target_model,
         subjectModelName: raw.target_model,
         judgeModels: (raw.judge_models || []).map((m) => ({ id: m, name: m })),
         timestamp: raw.executed_at,
+        executionDurationMs: raw.execution_duration_ms,
+        estimatedCostUsd: raw.estimated_cost_usd,
+        costEstimateStatus: raw.cost_estimate_status,
+        subjectTotalTokens,
+        subjectEstimatedCostUsd: subjectEstimatedCostUsd > 0 ? subjectEstimatedCostUsd : undefined,
+        subjectCostPer1mTokensUsd,
+        strictMode: raw.strict_mode ? {
+            version: raw.strict_mode.version,
+            requested: Boolean(raw.strict_mode.requested),
+            enforced: Boolean(raw.strict_mode.enforced),
+            eligible: Boolean(raw.strict_mode.eligible),
+            presetId: raw.strict_mode.preset_id,
+            presetLabel: raw.strict_mode.preset_label,
+            profileId: raw.strict_mode.profile_id,
+            profileLabel: raw.strict_mode.profile_label,
+            reasons: raw.strict_mode.reasons ?? [],
+        } : undefined,
         taskResults: (raw.tasks || []).map(convertTask),
         averageScore: raw.average_score ?? 0,
         bestScore: raw.best_score ?? 0,
@@ -292,6 +483,12 @@ export async function fetchResultDetail(filename: string): Promise<EvaluationRun
     return convertBenchmarkResult(raw);
 }
 
+export async function deleteResult(filename: string): Promise<{ status: string; filename: string; run_id: string }> {
+    return apiFetch<{ status: string; filename: string; run_id: string }>(`/results/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Run — start benchmark (returns SSE URL info for sse.ts)
 // ---------------------------------------------------------------------------
@@ -302,6 +499,8 @@ export interface RunParams {
     selectedTaskIds: string[];
     judgeRuns: number;
     subjectTemp: number;
+    strictMode: boolean;
+    strictPresetId?: string | null;
 }
 
 export function buildRunRequestBody(params: RunParams): string {
@@ -311,6 +510,8 @@ export function buildRunRequestBody(params: RunParams): string {
         selected_task_ids: params.selectedTaskIds,
         judge_runs: params.judgeRuns,
         subject_temp: params.subjectTemp,
+        strict_mode: params.strictMode,
+        strict_preset_id: params.strictPresetId ?? null,
     });
 }
 

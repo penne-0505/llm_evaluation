@@ -18,6 +18,12 @@
 - React / Vite
 - openai / anthropic / google-genai / python-dotenv
 
+## UIフォント
+
+- フロントエンド UI には `UDEV Gothic 35NFLG` をローカル同梱で使用しています。
+- フォントファイルは `frontend/public/fonts/` に配置され、Google Fonts などの外部配信には依存しません。
+- 同梱フォントのライセンスは [UDEVGothic-LICENSE.txt](/home/penne/dev/active/llm_evaluation/frontend/public/fonts/UDEVGothic-LICENSE.txt) を参照してください。
+
 ## セットアップ
 
 1. 依存関係のインストール
@@ -113,6 +119,7 @@ PowerShell から以下を実行すると、frontend build と PyInstaller bundl
 
 - `.env` は任意です。UI から保存した API キーだけでも動作します。
 - UI から保存した API キーはユーザーごとの app data 配下に永続化されます。
+- OpenRouter の残高確認用 `OPENROUTER_MANAGEMENT_KEY` は、推論用 `OPENROUTER_API_KEY` と分離して設定できます。
 - `.env` を使う場合は `.env.example` をコピーして設定してください。
 - 旧来の `.streamlit/secrets.toml` がある場合は読み込みを継続しますが、新規保存先は app data 側です。
 
@@ -123,9 +130,12 @@ cp .env.example .env
 ### 保存先
 
 - API キー: app data / config 配下の `secrets.toml`
+- OpenRouter Management Key: app data / config 配下の `secrets.toml` 内 `OPENROUTER_MANAGEMENT_KEY`
 - モデルキャッシュ: app data 配下の `models/models.json`
 - 前回のモデル/タスク選択: app data 配下の `models/last_selection.json`
 - 実行結果: app data 配下の `results/`
+- grounding corpus: app data 配下の `grounding_corpus/`
+- アプリログ: app data 配下の `logs/app.log`
 - user override: app data 配下の `overrides/`
 
 Windows では通常 `%LOCALAPPDATA%\Prism\prism-llm-eval\` 以下に保存されます。
@@ -175,13 +185,47 @@ user override の配置先:
 ## 結果ファイル
 
 実行結果は app data 配下の `results/YYYYMMDD_HHMMSS_<model_name>.json` として保存されます。
+結果JSONには `execution_duration_ms` が含まれ、評価パイプライン全体の実行時間をミリ秒で記録します。
+各 task には `subject_usage`、各 judge run には `usage` が保存されます。さらに結果全体には `usage_summary`、`estimated_cost_usd`、`cost_estimate_status` が追加され、usage が取れた呼び出しと価格が分かるモデルについて推定コストを保存します。
+推定コストは現状 OpenRouter モデルで優先的に対応しており、価格不明なモデルは `cost_estimate_status: partial` または `unavailable` になります。
+結果JSONには `strict_mode` も保存されます。正式な Strict Mode は Settings で `Strict` を選んだうえで official preset を満たした run だけが `requested: true` / `enforced: true` になり、Dashboard の Strict Mode leaderboard 集計対象になります。
+official preset は `task_ids=01..11`、`judge_models=[openrouter/anthropic/claude-sonnet-4.6, openrouter/openai/gpt-5.4, openrouter/google/gemini-3.1-pro-preview]`、`judge_runs=3`、`subject_temperature=0.6`、bundled prompt / rubric / judge_system_prompt 固定です。
+実行時のアプリログは app data 配下の `logs/app.log` にローテーション付きで保存されます。
+保存済み結果は UI から削除でき、削除時は対応する JSON と `index.json` のサマリーが同時に更新されます。
+
+## Grounding Corpus
+
+grounding corpus は検索結果 JSON と採用 document 本文を紐付けて app data 配下の `grounding_corpus/*.json` に保存されます。
+
+- `GET /api/grounding-corpus`: 保存済みレコード一覧
+- `GET /api/grounding-corpus/{record_id}`: 個別レコード取得
+- `POST /api/grounding-corpus`: 検索結果と documents を保存
+
+1 レコードには `query`, `search_results`, `documents`, `captured_at`, `notes` が含まれます。`documents` は `url`, `title`, `text`, `source_type` などの provenance を保持します。
+
+## Local Search Tool-Use
+
+一部 task では、モデルプロバイダ固有の web 検索機能に依存せずに tool-use を評価するため、bundled のローカル検索 runtime を使います。
+
+- task ごとの設定は `task_configs/<task_id>.json` に置きます。
+- 検索用 fixture は `task_fixtures/<task_id>.json` に置き、`query_snapshots` と `documents` を保持します。
+- `query_snapshots` は `temp/search_result*.json` のような検索レスポンス単位の保存領域です。各 snapshot は `query`, `source_file`, `results[]` を持ちます。
+- `documents` は URL 単位の本文ストアです。各 document は `url`, `title`, `source_type`, `fetch_status`, `text` を持ち、`open-document(url)` がこの本文を返します。
+- 現在は `task08` が `web-search` / `open-document` を使う対象です。
+- `/api/tasks` の各 task には `has_subject_tools` が含まれ、subject 側の tool runtime が有効かどうかを確認できます。
+- 実行結果 JSON の各 task には `tool_trace` が保存され、被験モデルがどのツールを呼んだかを後から確認できます。
 
 ## 注意事項
 
 - APIキーが設定されていないプロバイダはモデル一覧取得時にスキップされます。
 - モデル一覧は起動時にTTL内ならキャッシュを使用し、TTL超過時に再取得します。
 - 設定画面の「モデル一覧を再取得」はTTLを無視して強制更新します。
+- モデル一覧の再取得時は、APIキーが設定された provider を並列に問い合わせます。
 - モデル一覧が空の場合は手動入力欄が表示されます。
+- 設定画面のタスク一覧は prompt 全文ではなくプレビューを表示します。
+- 設定画面の `OpenRouter Admin` セクションから `OPENROUTER_MANAGEMENT_KEY` を保存すると、`GET /api/openrouter/credits` で残高を確認できます。
+- 実行画面の右上には、OpenRouter Management Key が設定されている場合のみ、残り credits の簡易表示が出ます。
+- 履歴データは Results / Dashboard 画面表示時に遅延ロードされます。
 - 配布向け起動では `frontend/dist` が必要です。開発環境では `npm run build --prefix frontend` を実行してください。
 - portable ZIP では `frontend/dist` や bundled resource が欠けていると launcher が起動前チェックで停止します。
 - APIキーをUIから保存すると app data 配下に保存されます。共有環境ではユーザーごとの OS アカウントを利用してください。

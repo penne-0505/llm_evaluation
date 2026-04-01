@@ -5,11 +5,13 @@ from typing import Optional
 
 from anthropic import Anthropic, AnthropicError
 
-from .base import LLMAdapter, LLMError
+from .base import CompletionResult, LLMAdapter, LLMError, UsageMetrics
 
 
 class AnthropicAdapter(LLMAdapter):
     """Anthropic API用アダプタ"""
+
+    PROVIDER = "anthropic"
 
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -65,6 +67,22 @@ class AnthropicAdapter(LLMAdapter):
         temperature: float = 0.0,
         max_tokens: int = 1024,
     ) -> str:
+        return self.complete_with_model_result(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ).text
+
+    def complete_with_model_result(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+    ) -> CompletionResult:
         if not self.is_available():
             raise LLMError("Anthropic APIキーが設定されていません")
 
@@ -81,9 +99,38 @@ class AnthropicAdapter(LLMAdapter):
             )
 
             content = response.content
+            usage = getattr(response, "usage", None)
+            text = ""
             if content and len(content) > 0:
-                return str(content[0])
-            return ""
+                text = getattr(content[0], "text", None) or str(content[0])
+
+            cache_creation = getattr(usage, "cache_creation_input_tokens", None)
+            cache_read = getattr(usage, "cache_read_input_tokens", None)
+            input_tokens = getattr(usage, "input_tokens", None)
+            output_tokens = getattr(usage, "output_tokens", None)
+            total_tokens = None
+            numeric_values = [
+                value
+                for value in [input_tokens, output_tokens, cache_creation, cache_read]
+                if isinstance(value, int)
+            ]
+            if numeric_values:
+                total_tokens = sum(numeric_values)
+
+            return CompletionResult(
+                text=text,
+                usage=UsageMetrics(
+                    provider=self.PROVIDER,
+                    model=model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    cache_creation_input_tokens=cache_creation,
+                    cache_read_input_tokens=cache_read,
+                )
+                if usage is not None
+                else None,
+            )
 
         except AnthropicError as e:
             raise LLMError(f"Anthropic APIエラー: {str(e)}") from e

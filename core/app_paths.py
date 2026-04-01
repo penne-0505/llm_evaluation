@@ -50,8 +50,20 @@ class AppPaths:
         return cls.data_dir() / "results"
 
     @classmethod
+    def logs_dir(cls) -> Path:
+        return cls.data_dir() / "logs"
+
+    @classmethod
+    def log_file(cls) -> Path:
+        return cls.logs_dir() / "app.log"
+
+    @classmethod
     def models_dir(cls) -> Path:
         return cls.data_dir() / "models"
+
+    @classmethod
+    def grounding_corpus_dir(cls) -> Path:
+        return cls.data_dir() / "grounding_corpus"
 
     @classmethod
     def selection_file(cls) -> Path:
@@ -92,6 +104,14 @@ class AppPaths:
     @classmethod
     def bundled_judge_system_prompt_file(cls) -> Path:
         return cls.bundled_path("judge_system_prompt.md")
+
+    @classmethod
+    def bundled_task_configs_dir(cls) -> Path:
+        return cls.bundled_path("task_configs")
+
+    @classmethod
+    def bundled_task_fixtures_dir(cls) -> Path:
+        return cls.bundled_path("task_fixtures")
 
     @classmethod
     def frontend_dist_dir(cls) -> Path:

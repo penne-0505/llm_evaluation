@@ -14,6 +14,8 @@ datas = [
     (str(project_root / "frontend" / "dist"), "frontend/dist"),
     (str(project_root / "rubrics"), "rubrics"),
     (str(project_root / "prompts"), "prompts"),
+    (str(project_root / "task_configs"), "task_configs"),
+    (str(project_root / "task_fixtures"), "task_fixtures"),
     (str(project_root / "judge_system_prompt.md"), "."),
 ]
 

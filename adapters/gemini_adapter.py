@@ -5,11 +5,13 @@ from typing import Any, Optional
 
 import importlib
 
-from .base import LLMAdapter, LLMError
+from .base import CompletionResult, LLMAdapter, LLMError, UsageMetrics
 
 
 class GeminiAdapter(LLMAdapter):
     """Google Gemini API用アダプタ"""
+
+    PROVIDER = "gemini"
 
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -67,6 +69,22 @@ class GeminiAdapter(LLMAdapter):
         temperature: float = 0.0,
         max_tokens: int = 1024,
     ) -> str:
+        return self.complete_with_model_result(
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ).text
+
+    def complete_with_model_result(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 1024,
+    ) -> CompletionResult:
         if not self.is_available():
             raise LLMError("Gemini APIキーが設定されていません")
 
@@ -85,7 +103,21 @@ class GeminiAdapter(LLMAdapter):
                 },
             )
 
-            return getattr(response, "text", "") or ""
+            usage = getattr(response, "usage_metadata", None) or getattr(
+                response, "usage", None
+            )
+            return CompletionResult(
+                text=getattr(response, "text", "") or "",
+                usage=UsageMetrics(
+                    provider=self.PROVIDER,
+                    model=model,
+                    input_tokens=getattr(usage, "prompt_token_count", None),
+                    output_tokens=getattr(usage, "candidates_token_count", None),
+                    total_tokens=getattr(usage, "total_token_count", None),
+                )
+                if usage is not None
+                else None,
+            )
 
         except Exception as e:
             if self._is_genai_api_error(e):

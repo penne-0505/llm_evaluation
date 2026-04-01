@@ -28,7 +28,7 @@ export type TaskType = 'fact' | 'creative' | 'speculative';
 export interface Task {
     id: string;
     type: TaskType;
-    prompt: string;
+    promptPreview: string;
 }
 
 // === Evaluation Parameters ===
@@ -36,6 +36,24 @@ export interface EvalParams {
     judgeRunCount: number; // 1-5
     subjectTemperature: number; // 0.0-1.0
     judgeTemperature: number; // fixed 0.0
+}
+
+export type EvaluationMode = 'standard' | 'strict';
+
+export interface StrictModePreset {
+    id: string;
+    label: string;
+    description: string;
+    subjectModelPolicy: 'variable';
+    judgeModels: Array<{
+        id: string;
+        label: string;
+        provider: Provider;
+    }>;
+    taskIds: string[];
+    judgeRuns: number;
+    subjectTemperature: number;
+    judgeTemperature: number;
 }
 
 // === Scores ===
@@ -71,12 +89,31 @@ export interface TaskResult {
     judgeEvaluations: JudgeEvaluation[];
 }
 
+export interface StrictModeInfo {
+    version?: string;
+    requested?: boolean;
+    enforced?: boolean;
+    eligible: boolean;
+    presetId?: string | null;
+    presetLabel?: string | null;
+    profileId?: string | null;
+    profileLabel?: string | null;
+    reasons?: string[];
+}
+
 export interface EvaluationRun {
     id: string;
     subjectModelId: string;
     subjectModelName: string;
     judgeModels: { id: string; name: string }[];
     timestamp: string;
+    executionDurationMs?: number;
+    estimatedCostUsd?: number;
+    costEstimateStatus?: 'available' | 'partial' | 'unavailable';
+    subjectTotalTokens?: number;
+    subjectEstimatedCostUsd?: number;
+    subjectCostPer1mTokensUsd?: number;
+    strictMode?: StrictModeInfo;
     taskResults: TaskResult[];
     averageScore: number;
     bestScore: number;
@@ -88,13 +125,36 @@ export interface EvaluationRun {
 // === Run State ===
 export type RunStatus = 'idle' | 'running' | 'completed' | 'cancelled' | 'error';
 
+export type RunTaskPhase = 'queued' | 'running_subject' | 'running_judges' | 'completed' | 'failed';
+export type RunJudgePhase = 'pending' | 'running' | 'completed' | 'error';
+
+export interface ActiveRunTask {
+    taskId: string;
+    taskIndex: number;
+    phase: RunTaskPhase;
+    message: string;
+    subjectDone: boolean;
+    judgeStates: Record<string, RunJudgePhase>;
+    judgeCompletedCount: number;
+    judgeErrorCount: number;
+    judgeTotalCount: number;
+    activeJudges: string[];
+}
+
 export interface RunProgress {
+    startedAtMs?: number;
     currentStep: number;
     totalSteps: number;
     currentTaskIndex: number;
     currentTaskId: string;
     currentJudgeModel: string;
     elapsedMs: number;
+    completedTaskCount: number;
+    activeTaskCount: number;
+    queuedTaskCount: number;
+    completedTasks: ActiveRunTask[];
+    activeTasks: ActiveRunTask[];
+    queuedTasks: ActiveRunTask[];
 }
 
 // === Cross-task summary ===

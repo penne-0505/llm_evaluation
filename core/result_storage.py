@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.app_paths import AppPaths
+from core.cost_estimator import summarize_usage_records
 
 
 class ResultStorage:
@@ -174,6 +175,23 @@ class ResultStorage:
         cls, benchmark_result: Dict[str, Any], filepath: Path
     ) -> Dict[str, Any]:
         tasks = benchmark_result.get("tasks", [])
+        subject_usage_records = [
+            task.get("subject_usage")
+            for task in tasks
+            if isinstance(task.get("subject_usage"), dict)
+        ]
+        subject_usage_summary = summarize_usage_records(subject_usage_records)
+        subject_total_tokens = subject_usage_summary["totals"].get("total_tokens", 0)
+        subject_estimated_cost_usd = subject_usage_summary["totals"].get(
+            "estimated_cost_usd"
+        )
+        subject_cost_per_1m_tokens_usd = None
+        if subject_total_tokens and subject_estimated_cost_usd is not None:
+            subject_cost_per_1m_tokens_usd = round(
+                (float(subject_estimated_cost_usd) / subject_total_tokens) * 1_000_000,
+                6,
+            )
+
         total_scores = []
         for task in tasks:
             judge_results = task.get("judge_results", {})
@@ -193,8 +211,36 @@ class ResultStorage:
         return {
             "filename": filepath.name,
             "filepath": str(filepath),
+            "run_id": benchmark_result.get("run_id", filepath.stem),
             "target_model": benchmark_result.get("target_model", "unknown"),
             "executed_at": executed_at,
+            "execution_duration_ms": benchmark_result.get("execution_duration_ms"),
+            "estimated_cost_usd": benchmark_result.get("estimated_cost_usd"),
+            "cost_estimate_status": benchmark_result.get("cost_estimate_status"),
+            "subject_total_tokens": subject_total_tokens,
+            "subject_estimated_cost_usd": subject_estimated_cost_usd,
+            "subject_cost_per_1m_tokens_usd": subject_cost_per_1m_tokens_usd,
+            "strict_mode_requested": benchmark_result.get("strict_mode", {}).get(
+                "requested", False
+            ),
+            "strict_mode_enforced": benchmark_result.get("strict_mode", {}).get(
+                "enforced", False
+            ),
+            "strict_mode_eligible": benchmark_result.get("strict_mode", {}).get(
+                "eligible", False
+            ),
+            "strict_mode_preset_id": benchmark_result.get("strict_mode", {}).get(
+                "preset_id"
+            ),
+            "strict_mode_preset_label": benchmark_result.get("strict_mode", {}).get(
+                "preset_label"
+            ),
+            "strict_mode_profile_id": benchmark_result.get("strict_mode", {}).get(
+                "profile_id"
+            ),
+            "strict_mode_profile_label": benchmark_result.get("strict_mode", {}).get(
+                "profile_label"
+            ),
             "task_count": len(tasks),
             "judge_count": len(benchmark_result.get("judge_models", [])),
             "avg_score": avg_score,
