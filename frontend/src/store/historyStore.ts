@@ -70,6 +70,7 @@ export const useHistoryStore = create<HistoryState>()((set, get) => ({
                     reasons: [],
                 },
                 taskResults: [],  // 詳細ロード時に埋まる
+                holisticTaskResults: [],  // 詳細ロード時に埋まる
                 averageScore: Math.round((s.avgScore ?? 0) * 10) / 10,
                 bestScore: Math.round((s.maxScore ?? 0) * 10) / 10,
                 taskCount: s.taskCount,

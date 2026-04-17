@@ -3,7 +3,7 @@ title: Run Progress Kanban UI
 status: active
 draft_status: n/a
 created_at: 2026-04-04
-updated_at: 2026-04-04
+updated_at: 2026-04-19
 references: []
 related_issues: []
 related_prs: []
@@ -32,10 +32,12 @@ related_prs: []
   - 各 kanban 列は一定高さを維持し、タスク過多時は列内部のみスクロールすること。
   - Run 画面以外でも、進行中であることを示す簡易 progress を表示すること。
   - モバイルでは列を縦積みし、狭い画面でも内容が読めること。
+  - judge の最終集計が一部 `aggregated: null` でも、Run 画面は `complete` イベント処理で停止せず完了状態へ遷移できること。
 - **Non-Functional**:
   - 並列実行数が 3 前後のときに、現在位置と残タスク量が一目で分かること。
   - SSE payload 追加は既存の進捗イベント構造を大きく壊さないこと。
   - 経過時間表示は SSE 更新間隔に依存せず、ユーザーからリアルタイムに見えること。
+  - SSE イベント処理で例外が出た場合は黙って握りつぶさず、UI で失敗が観測できること。
 
 ## Tasks
 - `server.py` の progress snapshot に `completed_tasks` を追加する。
@@ -46,6 +48,7 @@ related_prs: []
 
 ## Test Plan
 - 実行中の progress snapshot に completed task が含まれることを unit test で確認する。
+- `aggregated: null` を含む結果でもフロント変換が落ちないことを Node テストで確認する。
 - `npm run build` で型崩れや UI コンパイルエラーがないことを確認する。
 - 実行時に queued / running / completed の 3 列へタスクが遷移することを目視確認する。
 

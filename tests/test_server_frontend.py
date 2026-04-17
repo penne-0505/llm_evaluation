@@ -408,6 +408,108 @@ class TestOpenRouterAdminApi(unittest.TestCase):
         self.assertEqual(response.json()["detail"], "credit fetch failed")
 
 
+class TestLMStudioConfigApi(unittest.TestCase):
+    def test_lmstudio_config_status_reflects_saved_values(self):
+        client = TestClient(server.app)
+
+        with (
+            patch.object(
+                server.ProviderConfigStore,
+                "load_provider",
+                return_value={"base_url": "http://127.0.0.1:1234/v1"},
+            ),
+            patch.object(
+                server.SecretsStore,
+                "load_existing",
+                return_value={"lmstudio": "token"},
+            ),
+        ):
+            response = client.get("/api/lmstudio/config")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "configured": True,
+                "base_url": "http://127.0.0.1:1234/v1",
+                "api_token_configured": True,
+            },
+        )
+
+    def test_save_lmstudio_config_trims_values_and_saves_optional_token(self):
+        client = TestClient(server.app)
+
+        with (
+            patch.object(server.ProviderConfigStore, "save_provider") as save_provider_mock,
+            patch.object(server.SecretsStore, "save") as save_secret_mock,
+            patch.object(
+                server.ProviderConfigStore,
+                "load_provider",
+                return_value={"base_url": "http://127.0.0.1:1234/v1"},
+            ),
+            patch.object(
+                server.SecretsStore,
+                "load_existing",
+                return_value={"lmstudio": "token"},
+            ),
+        ):
+            response = client.post(
+                "/api/lmstudio/config",
+                json={
+                    "base_url": " http://127.0.0.1:1234/v1 ",
+                    "api_token": " secret-token ",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        save_provider_mock.assert_called_once_with(
+            "lmstudio", {"base_url": "http://127.0.0.1:1234/v1"}
+        )
+        save_secret_mock.assert_called_once_with({"lmstudio": "secret-token"})
+
+    def test_save_lmstudio_config_can_clear_optional_token(self):
+        client = TestClient(server.app)
+
+        with (
+            patch.object(server.ProviderConfigStore, "save_provider") as save_provider_mock,
+            patch.object(
+                server.SecretsStore, "clear_provider_secret"
+            ) as clear_secret_mock,
+            patch.object(
+                server.ProviderConfigStore,
+                "load_provider",
+                return_value={"base_url": "http://127.0.0.1:1234/v1"},
+            ),
+            patch.object(server.SecretsStore, "load_existing", return_value={}),
+        ):
+            response = client.post(
+                "/api/lmstudio/config",
+                json={
+                    "base_url": "http://127.0.0.1:1234/v1",
+                    "api_token": "   ",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        save_provider_mock.assert_called_once()
+        clear_secret_mock.assert_called_once_with("lmstudio")
+
+    def test_delete_lmstudio_config_clears_store_and_secret(self):
+        client = TestClient(server.app)
+
+        with (
+            patch.object(server.ProviderConfigStore, "clear_provider") as clear_provider_mock,
+            patch.object(
+                server.SecretsStore, "clear_provider_secret"
+            ) as clear_secret_mock,
+        ):
+            response = client.delete("/api/lmstudio/config")
+
+        self.assertEqual(response.status_code, 200)
+        clear_provider_mock.assert_called_once_with("lmstudio")
+        clear_secret_mock.assert_called_once_with("lmstudio")
+
+
 class TestResultDeletionApi(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp_dir = tempfile.TemporaryDirectory()

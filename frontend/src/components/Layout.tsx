@@ -15,22 +15,29 @@ export default function Layout() {
     const status = useRunStore((state) => state.status);
     const progress = useRunStore((state) => state.progress);
     const runId = useRunStore((state) => state.runId);
-    const [, setTick] = useState(0);
+    const [liveElapsedMs, setLiveElapsedMs] = useState(progress?.elapsedMs ?? 0);
     const isRunning = status === 'running' && !!progress;
     const showRunIndicator = isRunning && location.pathname !== '/run';
     const startedAtMs = progress?.startedAtMs ?? 0;
-    const elapsedMs = isRunning && startedAtMs ? (Date.now() - startedAtMs) : progress?.elapsedMs ?? 0;
+    const elapsedMs = isRunning ? liveElapsedMs : progress?.elapsedMs ?? 0;
     const totalTaskCount = (progress?.completedTaskCount ?? 0) + (progress?.activeTaskCount ?? 0) + (progress?.queuedTaskCount ?? 0);
 
     useEffect(() => {
         if (!isRunning) {
             return;
         }
+        const syncElapsed = () => {
+            setLiveElapsedMs(Math.max(0, Date.now() - startedAtMs));
+        };
+        const frame = window.requestAnimationFrame(syncElapsed);
         const timer = window.setInterval(() => {
-            setTick((value) => value + 1);
+            syncElapsed();
         }, 500);
-        return () => window.clearInterval(timer);
-    }, [isRunning]);
+        return () => {
+            window.cancelAnimationFrame(frame);
+            window.clearInterval(timer);
+        };
+    }, [isRunning, startedAtMs]);
 
     return (
         <div className="flex h-screen overflow-hidden">

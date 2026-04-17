@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 
 TOOL_CALL_PATTERN = re.compile(
@@ -21,12 +21,16 @@ class ToolCall:
     arguments: Dict[str, Any]
 
 
+_VALID_TOOL_MODES = ("native", "text", "auto")
+
+
 @dataclass
 class ToolRuntimeConfig:
     enabled_tools: List[str]
     fixture_path: Path
     max_steps: int = 4
     max_result_chars: int = 6000
+    tool_mode: Literal["native", "text", "auto"] = "text"
 
     @classmethod
     def from_dict(cls, data: Optional[Dict[str, Any]]) -> Optional["ToolRuntimeConfig"]:
@@ -40,11 +44,17 @@ class ToolRuntimeConfig:
         if not isinstance(fixture_path, str) or not fixture_path.strip():
             return None
 
+        raw_mode = str(data.get("tool_mode") or "text")
+        tool_mode: Literal["native", "text", "auto"] = (
+            raw_mode if raw_mode in _VALID_TOOL_MODES else "text"  # type: ignore[assignment]
+        )
+
         return cls(
             enabled_tools=[str(item) for item in enabled_tools],
             fixture_path=Path(fixture_path),
             max_steps=max(1, int(data.get("max_steps") or 4)),
             max_result_chars=max(500, int(data.get("max_result_chars") or 6000)),
+            tool_mode=tool_mode,
         )
 
 
@@ -71,10 +81,49 @@ def parse_tool_call(text: str) -> Optional[ToolCall]:
     return ToolCall(name=name.strip(), arguments=arguments)
 
 
+_OPENAI_TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "web-search": {
+        "type": "function",
+        "function": {
+            "name": "web-search",
+            "description": "ウェブ検索を実行し、関連する結果スニペットを返す",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "検索クエリ"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    "open-document": {
+        "type": "function",
+        "function": {
+            "name": "open-document",
+            "description": "指定したURLの文書を取得して全文を返す",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "取得する文書のURL"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+}
+
+
 class LocalToolRuntime:
     def __init__(self, config: ToolRuntimeConfig):
         self.config = config
         self._fixture: Optional[Dict[str, Any]] = None
+
+    def build_openai_tools_schema(self) -> List[Dict[str, Any]]:
+        return [
+            _OPENAI_TOOL_SCHEMAS[name]
+            for name in self.config.enabled_tools
+            if name in _OPENAI_TOOL_SCHEMAS
+        ]
 
     def render_tool_instruction(self) -> str:
         tools = ", ".join(f"`{name}`" for name in self.config.enabled_tools)

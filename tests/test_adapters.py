@@ -14,6 +14,7 @@ from adapters import (
     AnthropicAdapter,
     GeminiAdapter,
     OpenRouterAdapter,
+    LMStudioAdapter,
     LLMError,
 )
 
@@ -30,6 +31,7 @@ def test_adapter_factory():
         ("gemini-1.5-pro", GeminiAdapter),
         ("openrouter/openai/gpt-4o", OpenRouterAdapter),
         ("or/anthropic/claude-3-opus", OpenRouterAdapter),
+        ("lmstudio/openai/gpt-oss-20b", LMStudioAdapter),
         ("unknown-model", None),
     ]
 
@@ -149,6 +151,19 @@ def test_get_all_available_adapters():
     print("全アダプタ取得テスト完了")
 
 
+def test_lmstudio_adapter_availability_with_base_url():
+    """LM Studio は base_url があれば利用可能"""
+    print("\n=== LM Studio 可用性テスト ===")
+
+    with patch(
+        "adapters.lmstudio_adapter.ProviderConfigStore.load_provider",
+        return_value={"base_url": "http://127.0.0.1:1234/v1"},
+    ):
+        adapter = LMStudioAdapter()
+        assert adapter.is_available(), "LM Studio: base_url 設定でTrue"
+        print("✓ LM Studio: available (with base_url)")
+
+
 def run_all_tests():
     """全テストを実行"""
     print("=" * 50)
@@ -161,6 +176,7 @@ def run_all_tests():
         test_adapter_availability_with_keys()
         test_error_handling()
         test_get_all_available_adapters()
+        test_lmstudio_adapter_availability_with_base_url()
 
         print("\n" + "=" * 50)
         print("✅ 全テスト完了")

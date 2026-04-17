@@ -6,6 +6,7 @@ import { deleteResult } from '../api/client';
 import ResultDetail from '../components/ResultDetail';
 import { ArrowLeft, AlertCircle, Trash2 } from 'lucide-react';
 import { decodeResultRouteParam } from '../lib/resultRoutes';
+import Button from '../components/Button';
 
 export default function ResultDetailPage() {
     const { runId: routeRunId } = useParams<{ runId: string }>();
@@ -51,12 +52,12 @@ export default function ResultDetailPage() {
     if (!run) {
         return (
             <div className="space-y-6 animate-fade-up">
-                <button
+                <Button
                     onClick={() => navigate(-1)}
                     className="flex items-center gap-1.5 text-[12px] text-text-secondary hover:text-amber transition-colors"
                 >
                     <ArrowLeft size={14} /> 戻る
-                </button>
+                </Button>
                 <div className="card p-12 text-center space-y-3">
                     <AlertCircle size={28} className="text-score-low mx-auto" />
                     <h2 className="text-[14px] font-display font-semibold text-text-secondary">結果が見つかりません</h2>
@@ -93,20 +94,20 @@ export default function ResultDetailPage() {
     return (
         <div className="space-y-6 animate-fade-up">
             <div className="flex items-center justify-between gap-3">
-                <button
+                <Button
                     onClick={() => navigate(-1)}
                     className="flex items-center gap-1.5 text-[12px] text-text-secondary hover:text-amber transition-colors"
                 >
                     <ArrowLeft size={14} /> ダッシュボードへ戻る
-                </button>
-                <button
+                </Button>
+                <Button
                     onClick={() => void handleDelete()}
                     disabled={isDeleting}
                     className="inline-flex items-center gap-1.5 rounded border border-score-low/20 px-3 py-1.5 text-[12px] text-score-low transition-colors hover:border-score-low/40 hover:bg-score-low/8 disabled:opacity-40"
                 >
                     <Trash2 size={13} />
                     {isDeleting ? '削除中...' : 'この結果を削除'}
-                </button>
+                </Button>
             </div>
             <ResultDetail run={run} />
         </div>

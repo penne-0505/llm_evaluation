@@ -1,15 +1,17 @@
 """LLMベンチマーク実行エンジン"""
 
 import asyncio
+import json
 import random
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from adapters import CompletionResult, LLMAdapter, LLMError
+from adapters.base import NativeToolCall, NativeToolsNotSupportedError
 from core.json_parser import JudgeResponseParser, ParseError
 from core.result_aggregator import ResultAggregator
-from core.tool_runtime import LocalToolRuntime, ToolRuntimeConfig, parse_tool_call
+from core.tool_runtime import LocalToolRuntime, ToolCall, ToolRuntimeConfig, parse_tool_call
 
 
 @dataclass
@@ -258,16 +260,6 @@ class BenchmarkEngine:
         cancel_checker: Optional[Callable[[], None]] = None,
         subject_tools: Optional[Dict[str, Any]] = None,
     ) -> SubjectRunResult:
-        """
-        被験LLMを呼び出し
-
-        Args:
-            input_prompt: 入力プロンプト
-            temperature: 温度パラメータ
-
-        Returns:
-            LLMの回答と tool trace
-        """
         config = ToolRuntimeConfig.from_dict(subject_tools)
         if config is None:
             response = await self._complete_subject_once(
@@ -278,6 +270,122 @@ class BenchmarkEngine:
             return SubjectRunResult(result=response, tool_trace=[])
 
         runtime = LocalToolRuntime(config)
+
+        if config.tool_mode == "native":
+            return await self._call_subject_llm_native(
+                input_prompt, runtime, temperature, progress_callback, cancel_checker
+            )
+
+        if config.tool_mode == "auto" and self.subject_adapter.supports_native_tools():
+            try:
+                return await self._call_subject_llm_native(
+                    input_prompt, runtime, temperature, progress_callback, cancel_checker
+                )
+            except NativeToolsNotSupportedError:
+                pass  # fall through to text mode
+
+        return await self._call_subject_llm_text(
+            input_prompt, runtime, temperature, progress_callback, cancel_checker
+        )
+
+    async def _call_subject_llm_native(
+        self,
+        input_prompt: str,
+        runtime: LocalToolRuntime,
+        temperature: float,
+        progress_callback: Optional[Callable[[str], None]],
+        cancel_checker: Optional[Callable[[], None]],
+    ) -> SubjectRunResult:
+        config = runtime.config
+        tools_schema = runtime.build_openai_tools_schema()
+        messages: List[Dict[str, Any]] = [{"role": "user", "content": input_prompt}]
+        tool_trace: List[Dict[str, Any]] = []
+        usage_records: List[CompletionResult] = []
+
+        for step_index in range(config.max_steps + 1):
+            if cancel_checker:
+                cancel_checker()
+
+            native_result = await asyncio.to_thread(
+                self.subject_adapter.complete_with_model_native_tools,
+                self.subject_model,
+                messages,
+                tools_schema,
+                temperature,
+                4096,
+            )
+            usage_records.append(
+                CompletionResult(text=native_result.content or "", usage=native_result.usage)
+            )
+
+            if not native_result.has_tool_calls:
+                final_text = native_result.content or ""
+                return SubjectRunResult(
+                    result=self._merge_subject_usage(final_text, usage_records),
+                    tool_trace=tool_trace,
+                )
+
+            if step_index >= config.max_steps:
+                return SubjectRunResult(
+                    result=self._merge_subject_usage(
+                        "[ERROR] tool step limit exceeded before final answer", usage_records
+                    ),
+                    tool_trace=tool_trace,
+                )
+
+            # assistant メッセージをそのままmessages配列へ追加
+            messages.append({
+                "role": "assistant",
+                "content": native_result.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                        },
+                    }
+                    for tc in native_result.tool_calls
+                ],
+            })
+
+            for tc in native_result.tool_calls:
+                if progress_callback:
+                    progress_callback(
+                        f"タスク検索: {tc.name} step {step_index + 1}/{config.max_steps}"
+                    )
+                tool_call = ToolCall(name=tc.name, arguments=tc.arguments)
+                tool_result = runtime.execute(tool_call)
+                tool_trace.append({
+                    "step_index": step_index + 1,
+                    "tool_name": tc.name,
+                    "arguments": tc.arguments,
+                    "result_summary": runtime.summarize_result(tool_result),
+                    "ok": bool(tool_result.get("ok")),
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": runtime.render_tool_result(tool_result),
+                })
+
+        return SubjectRunResult(
+            result=self._merge_subject_usage(
+                "[ERROR] tool loop terminated without final answer", usage_records
+            ),
+            tool_trace=tool_trace,
+        )
+
+    async def _call_subject_llm_text(
+        self,
+        input_prompt: str,
+        runtime: LocalToolRuntime,
+        temperature: float,
+        progress_callback: Optional[Callable[[str], None]],
+        cancel_checker: Optional[Callable[[], None]],
+    ) -> SubjectRunResult:
+        config = runtime.config
         tool_trace: List[Dict[str, Any]] = []
         history: List[Tuple[str, str]] = []
         usage_records: List[CompletionResult] = []
@@ -320,15 +428,13 @@ class BenchmarkEngine:
                 )
 
             tool_result = runtime.execute(tool_call)
-            tool_trace.append(
-                {
-                    "step_index": step_index + 1,
-                    "tool_name": tool_call.name,
-                    "arguments": tool_call.arguments,
-                    "result_summary": runtime.summarize_result(tool_result),
-                    "ok": bool(tool_result.get("ok")),
-                }
-            )
+            tool_trace.append({
+                "step_index": step_index + 1,
+                "tool_name": tool_call.name,
+                "arguments": tool_call.arguments,
+                "result_summary": runtime.summarize_result(tool_result),
+                "ok": bool(tool_result.get("ok")),
+            })
             history.append(("assistant", response.text))
             history.append(("tool", runtime.render_tool_result(tool_result)))
 
@@ -647,6 +753,109 @@ class BenchmarkEngine:
                     await asyncio.sleep(2**attempt)
 
         raise last_error or LLMError("judge呼び出しに失敗しました")
+
+    async def run_holistic_task(
+        self,
+        task_name: str,
+        eval_prompt: str,
+        rubric_content: str,
+        bundled_responses: List[Dict[str, Any]],
+        system_prompt: str,
+        progress_callback: Optional[Callable[[str], None]] = None,
+        cancel_checker: Optional[Callable[[], None]] = None,
+    ) -> "TaskResult":
+        """
+        包括評価タスクを実行する。
+
+        被験LLMは呼び出さず、bundled_responses（通常タスクの全出力）を
+        まとめて judge に渡して文体・言語運用などを横断的に評価する。
+
+        Args:
+            task_name: タスク名（ファイルのstem）
+            eval_prompt: prompts/holistic/ のファイル内容（評価観点の説明）
+            rubric_content: rubrics/holistic/ のルーブリック内容
+            bundled_responses: 対象タスクの出力一覧
+                [{"task_name": str, "task_type": str, "input_prompt": str, "response": str}, ...]
+            system_prompt: judge のシステムプロンプト
+            progress_callback: 進捗コールバック
+            cancel_checker: キャンセルチェック関数
+        """
+        if cancel_checker:
+            cancel_checker()
+
+        bundled_subject_response = self._build_bundled_responses(bundled_responses)
+
+        judge_results: Dict[str, Any] = {}
+        semaphore = asyncio.Semaphore(self.max_parallel_judges)
+
+        async def _evaluate_judge(model_name: str, adapter: LLMAdapter):
+            if not adapter.is_available():
+                return model_name, None
+            if cancel_checker:
+                cancel_checker()
+            async with semaphore:
+                if progress_callback:
+                    progress_callback(
+                        f"タスク '{task_name}': judge {model_name} 評価1/{self.judge_runs}開始"
+                    )
+                try:
+                    result = await self._run_judge_evaluation(
+                        adapter=adapter,
+                        model_name=model_name,
+                        subject_response=bundled_subject_response,
+                        input_prompt=eval_prompt,
+                        rubric_content=rubric_content,
+                        system_prompt=system_prompt,
+                        progress_callback=progress_callback,
+                        cancel_checker=cancel_checker,
+                    )
+                    if progress_callback:
+                        progress_callback(
+                            f"タスク '{task_name}': judge {model_name} 評価確認"
+                        )
+                    return model_name, result
+                except Exception as e:
+                    if progress_callback:
+                        progress_callback(
+                            f"タスク '{task_name}': judge {model_name} エラー - {e}"
+                        )
+                    return model_name, {"runs": [], "aggregated": None, "error": str(e)}
+
+        tasks = [
+            _evaluate_judge(model_name, adapter)
+            for model_name, adapter in self.judge_adapters.items()
+        ]
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            for model_name, result in results:
+                if result is not None:
+                    judge_results[model_name] = result
+
+        return TaskResult(
+            task_name=task_name,
+            task_type="holistic",
+            input_prompt=eval_prompt,
+            response="",
+            judge_results=judge_results,
+            subject_usage=None,
+            tool_trace=[],
+        )
+
+    @staticmethod
+    def _build_bundled_responses(responses: List[Dict[str, Any]]) -> str:
+        """包括評価用に複数タスクの出力を1つのテキストへまとめる。"""
+        parts = []
+        for item in responses:
+            task_id = item.get("task_name", "")
+            task_type = item.get("task_type", "")
+            input_prompt = item.get("input_prompt", "")
+            response = item.get("response", "")
+            parts.append(
+                f"### タスク: {task_id}（{task_type}）\n\n"
+                f"#### 入力プロンプト\n{input_prompt}\n\n"
+                f"#### 被験LLMの回答\n{response}"
+            )
+        return "\n\n---\n\n".join(parts)
 
     def _build_judge_user_prompt(
         self, input_prompt: str, subject_response: str, rubric_content: str

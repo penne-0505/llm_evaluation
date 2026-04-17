@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { buildResultDetailPath } from '../lib/resultRoutes';
 import { mean, stddev } from '../lib/stats';
+import Button from '../components/Button';
 
 const PAGE_SIZE = 4;
 
@@ -406,7 +407,7 @@ function RecentRuns({ runs }: { runs: EvaluationRun[] }) {
             <h2 className="section-label">最近の実行</h2>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                 {runs.slice(0, 5).map((run, index) => (
-                    <button
+                    <Button
                         key={run.id}
                         onClick={() => navigate(buildResultDetailPath(run.id))}
                         className={`card p-3 text-left group transition-all duration-150 hover:border-amber/20 ${scoreGlow(run.averageScore)}`}
@@ -429,7 +430,7 @@ function RecentRuns({ runs }: { runs: EvaluationRun[] }) {
                             <span>{formatRelativeTime(run.timestamp)}</span>
                             <span>{run.taskCount}タスク · {run.judgeModels.length || run.judgeCount || 0}評価</span>
                         </div>
-                    </button>
+                    </Button>
                 ))}
             </div>
         </section>
@@ -447,7 +448,7 @@ function EvaluationHistory({ runs }: { runs: EvaluationRun[] }) {
             <h2 className="section-label">履歴</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {pageRuns.map((run) => (
-                    <button
+                    <Button
                         key={run.id}
                         onClick={() => navigate(buildResultDetailPath(run.id))}
                         className="card p-4 text-left group transition-all duration-150 hover:border-amber/20 accent-bar-ice"
@@ -468,20 +469,20 @@ function EvaluationHistory({ runs }: { runs: EvaluationRun[] }) {
                             <span>·</span>
                             <span>{run.judgeModels.length || run.judgeCount || 0} 評価モデル</span>
                         </div>
-                    </button>
+                    </Button>
                 ))}
             </div>
             {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-3">
-                    <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                    <Button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
                         className="flex items-center gap-1 px-2.5 py-1 border border-border rounded text-[11px] text-text-secondary disabled:opacity-30 hover:border-amber/30 hover:text-amber transition-colors">
                         <ChevronLeft size={12} /> 前へ
-                    </button>
+                    </Button>
                     <span className="text-[11px] text-text-tertiary data-display">{page + 1} / {totalPages}</span>
-                    <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page === totalPages - 1}
+                    <Button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page === totalPages - 1}
                         className="flex items-center gap-1 px-2.5 py-1 border border-border rounded text-[11px] text-text-secondary disabled:opacity-30 hover:border-amber/30 hover:text-amber transition-colors">
                         次へ <ChevronRight size={12} />
-                    </button>
+                    </Button>
                 </div>
             )}
         </section>
@@ -510,10 +511,10 @@ function SideBySideComparison({ runs }: { runs: EvaluationRun[] }) {
                     </div>
                 ))}
             </div>
-            <button onClick={() => setShow(!show)}
+            <Button onClick={() => setShow(!show)}
                 className="px-3 py-1.5 bg-amber text-bg rounded text-[11px] font-display font-semibold hover:bg-amber-hover transition-all duration-200 hover:shadow-[0_0_16px_rgba(226,168,75,0.12)]">
                 {show ? '非表示' : '比較する'}
-            </button>
+            </Button>
             {show && leftRun && rightRun && (
                 <div className="space-y-3 animate-fade-in">
                     <div className="grid grid-cols-2 gap-2">
@@ -634,9 +635,9 @@ function FirstUseGuide() {
                     まず設定画面で API キーとモデルを設定し、最初の評価を実行してください。
                 </p>
                 <div className="flex items-center justify-center gap-3">
-                    <button onClick={() => navigate('/settings')} className="px-4 py-2 bg-amber text-bg rounded text-[12px] font-display font-semibold hover:bg-amber-hover transition-all duration-200 hover:shadow-[0_0_16px_rgba(226,168,75,0.12)] flex items-center gap-1.5">
+                    <Button onClick={() => navigate('/settings')} className="px-4 py-2 bg-amber text-bg rounded text-[12px] font-display font-semibold hover:bg-amber-hover transition-all duration-200 hover:shadow-[0_0_16px_rgba(226,168,75,0.12)] flex items-center gap-1.5">
                         設定を始める <ArrowRight size={13} />
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

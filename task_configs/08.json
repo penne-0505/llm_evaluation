@@ -6,6 +6,7 @@
     ],
     "fixture_path": "task_fixtures/08.json",
     "max_steps": 4,
-    "max_result_chars": 5000
+    "max_result_chars": 5000,
+    "tool_mode": "auto"
   }
 }

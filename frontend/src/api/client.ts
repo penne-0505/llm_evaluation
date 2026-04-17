@@ -18,6 +18,7 @@ import type {
     JudgeEvaluation,
     AxisScore,
     TaskType,
+    ToolMode,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -46,11 +47,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 // ---------------------------------------------------------------------------
 
 export async function fetchTasks(): Promise<Task[]> {
-    const raw = await apiFetch<Array<{ id: string; type: string; prompt_preview: string }>>('/tasks');
+    const raw = await apiFetch<Array<{ id: string; type: string; prompt_preview: string; tool_mode?: string }>>('/tasks');
     return raw.map((t) => ({
         id: t.id,
         type: t.type as TaskType,
         promptPreview: t.prompt_preview,
+        ...(t.tool_mode ? { toolMode: t.tool_mode as ToolMode } : {}),
     }));
 }
 
@@ -86,14 +88,54 @@ export async function deleteKey(provider: Provider): Promise<void> {
     });
 }
 
+export interface LMStudioConfig {
+    configured: boolean;
+    baseUrl: string;
+    apiTokenConfigured: boolean;
+}
+
+interface RawLMStudioConfig {
+    configured: boolean;
+    base_url: string;
+    api_token_configured: boolean;
+}
+
+export async function fetchLMStudioConfig(): Promise<LMStudioConfig> {
+    const raw = await apiFetch<RawLMStudioConfig>('/lmstudio/config');
+    return {
+        configured: raw.configured,
+        baseUrl: raw.base_url ?? '',
+        apiTokenConfigured: raw.api_token_configured,
+    };
+}
+
+export async function saveLMStudioConfig(baseUrl: string, apiToken?: string): Promise<LMStudioConfig> {
+    const raw = await apiFetch<RawLMStudioConfig>('/lmstudio/config', {
+        method: 'POST',
+        body: JSON.stringify({
+            base_url: baseUrl,
+            ...(apiToken !== undefined ? { api_token: apiToken } : {}),
+        }),
+    });
+    return {
+        configured: raw.configured,
+        baseUrl: raw.base_url ?? '',
+        apiTokenConfigured: raw.api_token_configured,
+    };
+}
+
+export async function deleteLMStudioConfig(): Promise<void> {
+    await apiFetch<{ status: string }>('/lmstudio/config', {
+        method: 'DELETE',
+    });
+}
+
 export interface OpenRouterAdminStatus {
     configured: boolean;
 }
 
 export interface OpenRouterCredits {
     configured: boolean;
-    totalCredits?: number | null;
-    totalUsage?: number | null;
     remainingCredits?: number | null;
 }
 
@@ -125,8 +167,6 @@ export async function fetchOpenRouterCredits(): Promise<OpenRouterCredits> {
     const raw = await apiFetch<RawOpenRouterCredits>('/openrouter/credits');
     return {
         configured: raw.configured,
-        totalCredits: raw.total_credits,
-        totalUsage: raw.total_usage,
         remainingCredits: raw.remaining_credits,
     };
 }
@@ -154,7 +194,15 @@ const PROVIDER_MAP: Record<string, Provider> = {
     anthropic: 'anthropic',
     gemini: 'gemini',
     openrouter: 'openrouter',
+    lmstudio: 'lmstudio',
 };
+
+function getModelDisplayName(provider: Provider, id: string): string {
+    if (provider === 'lmstudio' && id.startsWith('lmstudio/')) {
+        return id.slice('lmstudio/'.length);
+    }
+    return id;
+}
 
 export async function fetchModels(force = false): Promise<ModelsResult> {
     const raw = await apiFetch<RawModelsResponse>(`/models${force ? '?force=true' : ''}`);
@@ -162,8 +210,8 @@ export async function fetchModels(force = false): Promise<ModelsResult> {
     for (const [providerKey, data] of Object.entries(raw.providers || {})) {
         const provider = PROVIDER_MAP[providerKey];
         if (!provider) continue;
-        for (const name of data.models || []) {
-            models.push({ id: name, name, provider });
+        for (const id of data.models || []) {
+            models.push({ id, name: getModelDisplayName(provider, id), provider });
         }
     }
     return {
@@ -336,6 +384,7 @@ interface RawBenchmarkResult {
         };
     };
     tasks: RawTaskData[];
+    holistic_tasks?: RawTaskData[];
     cancelled: boolean;
     completed_tasks: number;
     total_tasks: number;
@@ -382,7 +431,8 @@ interface RawAggregated {
 
 interface RawJudgeResult {
     runs: RawJudgeRun[];
-    aggregated: RawAggregated;
+    aggregated: RawAggregated | null;
+    error?: string;
 }
 
 function toAxisScore(mean: number, std: number): AxisScore {
@@ -402,8 +452,11 @@ function normalizeReasoning(reasoning: unknown): string | null {
     return null;
 }
 
-function convertJudgeResult(judgeModel: string, raw: RawJudgeResult): JudgeEvaluation {
+function convertJudgeResult(judgeModel: string, raw: RawJudgeResult): JudgeEvaluation | null {
     const agg = raw.aggregated;
+    if (!agg) {
+        return null;
+    }
     return {
         judgeModelId: judgeModel,
         judgeModelName: judgeModel,
@@ -425,7 +478,10 @@ function convertJudgeResult(judgeModel: string, raw: RawJudgeResult): JudgeEvalu
 function convertTask(raw: RawTaskData): TaskResult {
     const evaluations: JudgeEvaluation[] = [];
     for (const [judgeModel, judgeResult] of Object.entries(raw.judge_results || {})) {
-        evaluations.push(convertJudgeResult(judgeModel, judgeResult));
+        const converted = convertJudgeResult(judgeModel, judgeResult);
+        if (converted) {
+            evaluations.push(converted);
+        }
     }
     return {
         taskId: raw.task_name,
@@ -472,6 +528,7 @@ export function convertBenchmarkResult(raw: RawBenchmarkResult): EvaluationRun {
             reasons: raw.strict_mode.reasons ?? [],
         } : undefined,
         taskResults: (raw.tasks || []).map(convertTask),
+        holisticTaskResults: (raw.holistic_tasks || []).map(convertTask),
         averageScore: raw.average_score ?? 0,
         bestScore: raw.best_score ?? 0,
         taskCount: raw.completed_tasks ?? raw.tasks?.length ?? 0,
@@ -501,6 +558,8 @@ export interface RunParams {
     subjectTemp: number;
     strictMode: boolean;
     strictPresetId?: string | null;
+    taskToolModeOverrides?: Record<string, string>;
+    runHolistic?: boolean;
 }
 
 export function buildRunRequestBody(params: RunParams): string {
@@ -512,6 +571,8 @@ export function buildRunRequestBody(params: RunParams): string {
         subject_temp: params.subjectTemp,
         strict_mode: params.strictMode,
         strict_preset_id: params.strictPresetId ?? null,
+        task_tool_mode_overrides: params.taskToolModeOverrides ?? {},
+        run_holistic: params.runHolistic ?? true,
     });
 }
 

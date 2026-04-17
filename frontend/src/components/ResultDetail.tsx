@@ -9,6 +9,7 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import { TASK_TYPE_LABELS, TASK_TYPE_STYLE } from '../lib/taskTypeStyles';
 import { CONFIDENCE_META } from '../lib/confidence';
+import Button from './Button';
 
 function scoreColor(score: number): string {
     if (score >= 80) return 'text-score-high';
@@ -32,6 +33,7 @@ const TASK_TYPE_AXIS_MAX: Record<TaskType, { logicAndFact: number; constraintAdh
     fact: { logicAndFact: 60, constraintAdherence: 30, helpfulness: 10 },
     creative: { logicAndFact: 30, constraintAdherence: 30, helpfulness: 40 },
     speculative: { logicAndFact: 40, constraintAdherence: 20, helpfulness: 40 },
+    holistic: { logicAndFact: 100, constraintAdherence: 100, helpfulness: 100 },
 };
 
 function normalizeScore(score: number, maxScore: number): number {
@@ -49,6 +51,7 @@ function normalizedScoreBg(score: number, maxScore: number): string {
 
 function computeJudgeSummaries(run: EvaluationRun): JudgeSummary[] {
     const map = new Map<string, { scores: number[]; name: string }>();
+    // holistic タスクは別セクションで表示するためサマリーから除外
     run.taskResults.forEach((tr) => {
         tr.judgeEvaluations.forEach((je) => {
             const existing = map.get(je.judgeModelId) || { scores: [], name: je.judgeModelName };
@@ -155,6 +158,19 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
                 ))}
             </section>
 
+            {/* Holistic Evaluation Results */}
+            {run.holisticTaskResults.length > 0 && (
+                <section className="space-y-2">
+                    <div className="flex items-center gap-2">
+                        <h2 className="section-label">包括評価</h2>
+                        <span className="text-[10px] text-text-tertiary">全出力を横断した文体・言語運用評価</span>
+                    </div>
+                    {run.holisticTaskResults.map((tr, i) => (
+                        <TaskResultCard key={tr.taskId} tr={tr} delay={i * 30} />
+                    ))}
+                </section>
+            )}
+
             {/* Cross-Task Summary */}
             <section className="space-y-3">
                 <h2 className="section-label">横断サマリー</h2>
@@ -252,7 +268,7 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
             className="card overflow-hidden animate-fade-up"
             style={{ animationDelay: `${delay}ms` }}
         >
-            <button
+            <Button
                 onClick={() => setExpanded(!expanded)}
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-hover transition-colors duration-150 group"
             >
@@ -275,7 +291,7 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                     )}
                     {expanded ? <ChevronUp size={14} className="text-text-tertiary" /> : <ChevronDown size={14} className="text-text-tertiary" />}
                 </div>
-            </button>
+            </Button>
 
             {expanded && (
                 <div className="px-4 pb-4 space-y-4 border-t border-border animate-fade-in">
@@ -339,13 +355,13 @@ function JudgeEvaluationCard({ je, taskType }: { je: JudgeEvaluation; taskType: 
 
             {je.reasoningSamples.length > 0 && (
                 <div>
-                    <button
+                    <Button
                         onClick={() => setShowReasoning(!showReasoning)}
                         className="text-[11px] text-ice hover:text-amber transition-colors flex items-center gap-1"
                     >
                         {showReasoning ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
                         {showReasoning ? '理由を隠す' : '理由を表示'} ({je.reasoningSamples.length})
-                    </button>
+                    </Button>
                     {showReasoning && (
                         <div className="mt-2 space-y-1 animate-fade-in">
                             {je.reasoningSamples.map((r, i) => (

@@ -1,12 +1,18 @@
 """LLMアダプタの基底クラスと例外定義"""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 
 class LLMError(Exception):
     """LLM呼び出しエラー"""
+
+    pass
+
+
+class NativeToolsNotSupportedError(LLMError):
+    """モデルまたはアダプタがネイティブtool callingに非対応"""
 
     pass
 
@@ -37,6 +43,24 @@ class UsageMetrics:
 class CompletionResult:
     text: str
     usage: UsageMetrics | None = None
+
+
+@dataclass
+class NativeToolCall:
+    id: str
+    name: str
+    arguments: Dict[str, Any]
+
+
+@dataclass
+class NativeCompletionResult:
+    content: Optional[str]
+    tool_calls: List[NativeToolCall] = field(default_factory=list)
+    usage: Optional[UsageMetrics] = None
+
+    @property
+    def has_tool_calls(self) -> bool:
+        return bool(self.tool_calls)
 
 
 class LLMAdapter(ABC):
@@ -124,4 +148,19 @@ class LLMAdapter(ABC):
             text=self.complete_with_model(
                 model, system_prompt, user_prompt, temperature, max_tokens
             )
+        )
+
+    def supports_native_tools(self) -> bool:
+        return False
+
+    def complete_with_model_native_tools(
+        self,
+        model: str,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+    ) -> NativeCompletionResult:
+        raise NativeToolsNotSupportedError(
+            f"{self.__class__.__name__} does not support native tool calling"
         )

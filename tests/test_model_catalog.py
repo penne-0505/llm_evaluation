@@ -206,6 +206,45 @@ class TestModelCatalogTTL(unittest.TestCase):
         fetch_openai_mock.assert_not_called()
         self.assertEqual(catalog["providers"]["openai"]["models"], ["gpt-cache"])
 
+    def test_lmstudio_models_are_prefixed_and_do_not_require_token(self):
+        old_time = datetime.now(timezone.utc) - timedelta(hours=2)
+        self._write_cache(
+            {
+                "updated_at": _iso(old_time),
+                "providers": {
+                    "openai": {"models": []},
+                    "anthropic": {"models": []},
+                    "gemini": {"models": []},
+                    "openrouter": {"models": []},
+                    "lmstudio": {"models": []},
+                },
+                "errors": {},
+                "missing_keys": [],
+            }
+        )
+
+        with (
+            patch.object(ModelCatalog, "CACHE_PATH", self.cache_path),
+            patch("core.model_catalog.SecretsStore.load_existing", return_value={}),
+            patch(
+                "core.model_catalog.ProviderConfigStore.load_provider",
+                return_value={"base_url": "http://127.0.0.1:1234/v1"},
+            ),
+            patch.object(
+                ModelCatalog,
+                "_fetch_lmstudio_models",
+                return_value=[{"id": "lmstudio/openai/gpt-oss-20b"}],
+            ) as fetch_lmstudio_mock,
+        ):
+            catalog = ModelCatalog.update(force=True, ttl_seconds=30)
+
+        fetch_lmstudio_mock.assert_called_once()
+        self.assertEqual(
+            catalog["providers"]["lmstudio"]["models"],
+            ["lmstudio/openai/gpt-oss-20b"],
+        )
+        self.assertNotIn("LMSTUDIO_API_TOKEN", catalog["missing_keys"])
+
 
 if __name__ == "__main__":
     unittest.main()

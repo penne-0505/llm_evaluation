@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
+import Button from './Button';
 
 interface Props {
     children: ReactNode;
@@ -63,12 +64,12 @@ export default class AppErrorBoundary extends Component<Props, State> {
                         画面描画中にフロントエンド例外が発生しました。詳細は `app.log` に送信済みです。
                     </p>
                     <p className="text-[12px] text-text-tertiary break-all">{this.state.message}</p>
-                    <button
+                    <Button
                         onClick={() => window.location.reload()}
                         className="px-4 py-2 rounded-md bg-amber text-bg text-[12px] font-display font-semibold hover:bg-amber-hover transition-colors"
                     >
                         再読み込み
-                    </button>
+                    </Button>
                 </div>
             </div>
         );

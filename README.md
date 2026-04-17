@@ -1,6 +1,6 @@
 # LLM Benchmark App
 
-タスク固有ルーブリックに基づき、被験LLMを複数judge（OpenAI/Anthropic/Gemini/OpenRouter）で評価する Web アプリです。
+タスク固有ルーブリックに基づき、被験LLMを複数judge（OpenAI/Anthropic/Gemini/OpenRouter/LM Studio）で評価する Web アプリです。
 
 ## 特徴
 
@@ -9,6 +9,14 @@
 - JSON結果の保存・読み込み
 - 起動時にモデル一覧を取得し、UIから被験/ judgeモデルを選択（取得できない場合は手動入力）
 - 11タスクのルーブリック/プロンプトを同梱
+
+## LM Studio 対応
+
+- LM Studio は OpenAI-compatible API (`/v1/models`, `/v1/chat/completions`) 経由で利用します。
+- Settings の `LM Studio` セクションに server URL を保存すると、モデル一覧再取得時に LM Studio の `/v1/models` を問い合わせます。
+- 既定 URL は `http://127.0.0.1:1234/v1` です。
+- LM Studio 側で認証を有効にしていない場合、API Token は未設定のままで利用できます。
+- 手動入力で LM Studio モデルを指定する場合は `lmstudio/<model-id>` 形式を使ってください。
 
 ## 依存関係
 
@@ -119,6 +127,8 @@ PowerShell から以下を実行すると、frontend build と PyInstaller bundl
 
 - `.env` は任意です。UI から保存した API キーだけでも動作します。
 - UI から保存した API キーはユーザーごとの app data 配下に永続化されます。
+- LM Studio の server URL は app data / config 配下の `provider_config.json` に保存されます。
+- LM Studio の API Token を使う場合は app data / config 配下の `secrets.toml` に保存されます。
 - OpenRouter の残高確認用 `OPENROUTER_MANAGEMENT_KEY` は、推論用 `OPENROUTER_API_KEY` と分離して設定できます。
 - `.env` を使う場合は `.env.example` をコピーして設定してください。
 - 旧来の `.streamlit/secrets.toml` がある場合は読み込みを継続しますが、新規保存先は app data 側です。
@@ -130,6 +140,7 @@ cp .env.example .env
 ### 保存先
 
 - API キー: app data / config 配下の `secrets.toml`
+- Provider 設定: app data / config 配下の `provider_config.json`
 - OpenRouter Management Key: app data / config 配下の `secrets.toml` 内 `OPENROUTER_MANAGEMENT_KEY`
 - モデルキャッシュ: app data 配下の `models/models.json`
 - 前回のモデル/タスク選択: app data 配下の `models/last_selection.json`
@@ -190,6 +201,7 @@ user override の配置先:
 推定コストは現状 OpenRouter モデルで優先的に対応しており、価格不明なモデルは `cost_estimate_status: partial` または `unavailable` になります。
 結果JSONには `strict_mode` も保存されます。正式な Strict Mode は Settings で `Strict` を選んだうえで official preset を満たした run だけが `requested: true` / `enforced: true` になり、Dashboard の Strict Mode leaderboard 集計対象になります。
 official preset は `task_ids=01..11`、`judge_models=[openrouter/anthropic/claude-sonnet-4.6, openrouter/openai/gpt-5.4, openrouter/google/gemini-3.1-pro-preview]`、`judge_runs=3`、`subject_temperature=0.6`、bundled prompt / rubric / judge_system_prompt 固定です。
+Strict Mode の judge 3モデルはすべて OpenRouter 経由で呼び出され、OpenAI / Anthropic / Gemini の native provider へ自動で切り替えることはしません。
 実行時のアプリログは app data 配下の `logs/app.log` にローテーション付きで保存されます。
 保存済み結果は UI から削除でき、削除時は対応する JSON と `index.json` のサマリーが同時に更新されます。
 
@@ -217,13 +229,15 @@ grounding corpus は検索結果 JSON と採用 document 本文を紐付けて a
 
 ## 注意事項
 
-- APIキーが設定されていないプロバイダはモデル一覧取得時にスキップされます。
+- APIキーが設定されていないクラウドプロバイダはモデル一覧取得時にスキップされます。
+- LM Studio は Settings で URL が設定されている場合のみモデル一覧取得の対象になります。
+- LM Studio は OpenAI-compatible endpoint を前提としており、native REST API (`/api/v1/*`) の model load / unload は現状このアプリでは管理しません。
 - モデル一覧は起動時にTTL内ならキャッシュを使用し、TTL超過時に再取得します。
 - 設定画面の「モデル一覧を再取得」はTTLを無視して強制更新します。
-- モデル一覧の再取得時は、APIキーが設定された provider を並列に問い合わせます。
+- モデル一覧の再取得時は、設定済み provider を並列に問い合わせます。
 - モデル一覧が空の場合は手動入力欄が表示されます。
 - 設定画面のタスク一覧は prompt 全文ではなくプレビューを表示します。
-- 設定画面の `OpenRouter Admin` セクションから `OPENROUTER_MANAGEMENT_KEY` を保存すると、`GET /api/openrouter/credits` で残高を確認できます。
+- 設定画面の `OpenRouter Admin` セクションから `OPENROUTER_MANAGEMENT_KEY` を保存すると、`GET /api/openrouter/credits` で現在残高を確認できます。
 - 実行画面の右上には、OpenRouter Management Key が設定されている場合のみ、残り credits の簡易表示が出ます。
 - 履歴データは Results / Dashboard 画面表示時に遅延ロードされます。
 - 配布向け起動では `frontend/dist` が必要です。開発環境では `npm run build --prefix frontend` を実行してください。

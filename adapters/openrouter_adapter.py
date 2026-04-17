@@ -1,11 +1,20 @@
 """OpenRouter APIアダプタ（OpenAI互換）"""
 
+import json
 import os
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from openai import OpenAI, OpenAIError
 
-from .base import CompletionResult, LLMAdapter, LLMError, UsageMetrics
+from .base import (
+    CompletionResult,
+    LLMAdapter,
+    LLMError,
+    NativeCompletionResult,
+    NativeToolCall,
+    NativeToolsNotSupportedError,
+    UsageMetrics,
+)
 
 
 class OpenRouterAdapter(LLMAdapter):
@@ -124,6 +133,61 @@ class OpenRouterAdapter(LLMAdapter):
 
         except OpenAIError as e:
             raise LLMError(f"OpenRouter APIエラー: {str(e)}") from e
+        except Exception as e:
+            raise LLMError(f"予期しないエラー: {str(e)}") from e
+
+    def supports_native_tools(self) -> bool:
+        return True
+
+    def complete_with_model_native_tools(
+        self,
+        model: str,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        temperature: float = 0.0,
+        max_tokens: int = 4096,
+    ) -> NativeCompletionResult:
+        if not self.is_available() or self._client is None:
+            raise LLMError("OpenRouter APIキーが設定されていません")
+
+        normalized_model = self._normalize_model_name(model)
+
+        try:
+            response = self._client.chat.completions.create(
+                model=normalized_model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            message = response.choices[0].message
+            tool_calls = []
+            for tc in message.tool_calls or []:
+                try:
+                    args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    args = {}
+                tool_calls.append(NativeToolCall(id=tc.id, name=tc.function.name, arguments=args))
+
+            usage = getattr(response, "usage", None)
+            return NativeCompletionResult(
+                content=message.content,
+                tool_calls=tool_calls,
+                usage=UsageMetrics(
+                    provider=self.PROVIDER,
+                    model=model,
+                    input_tokens=getattr(usage, "prompt_tokens", None),
+                    output_tokens=getattr(usage, "completion_tokens", None),
+                    total_tokens=getattr(usage, "total_tokens", None),
+                ) if usage is not None else None,
+            )
+
+        except OpenAIError as e:
+            err = str(e)
+            if "tool" in err.lower() or "function" in err.lower():
+                raise NativeToolsNotSupportedError(f"OpenRouter tool calling非対応: {err}") from e
+            raise LLMError(f"OpenRouter APIエラー: {err}") from e
         except Exception as e:
             raise LLMError(f"予期しないエラー: {str(e)}") from e
 

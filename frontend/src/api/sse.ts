@@ -68,8 +68,19 @@ export function startBenchmarkSSE(params: RunParams): SSEConnection {
                     if (!jsonStr) continue;
 
                     try {
-                        const event = JSON.parse(jsonStr);
-                        handleSSEEvent(event, startTime);
+                        const event = JSON.parse(jsonStr) as Record<string, unknown>;
+                        try {
+                            handleSSEEvent(event, startTime);
+                        } catch (eventError) {
+                            console.error('SSE event handling failed', eventError, event);
+                            useRunStore.getState().setError(
+                                eventError instanceof Error
+                                    ? `SSE イベント処理に失敗しました: ${eventError.message}`
+                                    : 'SSE イベント処理に失敗しました',
+                            );
+                            controller.abort();
+                            return;
+                        }
                     } catch {
                         // JSON パースエラーはスキップ
                     }

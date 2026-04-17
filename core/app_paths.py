@@ -78,6 +78,10 @@ class AppPaths:
         return cls.config_dir() / "secrets.toml"
 
     @classmethod
+    def provider_config_file(cls) -> Path:
+        return cls.config_dir() / "provider_config.json"
+
+    @classmethod
     def overrides_dir(cls) -> Path:
         return cls.data_dir() / "overrides"
 
@@ -104,6 +108,22 @@ class AppPaths:
     @classmethod
     def bundled_judge_system_prompt_file(cls) -> Path:
         return cls.bundled_path("judge_system_prompt.md")
+
+    @classmethod
+    def bundled_holistic_rubrics_dir(cls) -> Path:
+        return cls.bundled_path("rubrics", "holistic")
+
+    @classmethod
+    def bundled_holistic_prompts_dir(cls) -> Path:
+        return cls.bundled_path("prompts", "holistic")
+
+    @classmethod
+    def holistic_rubrics_override_dir(cls) -> Path:
+        return cls.overrides_dir() / "rubrics" / "holistic"
+
+    @classmethod
+    def holistic_prompts_override_dir(cls) -> Path:
+        return cls.overrides_dir() / "prompts" / "holistic"
 
     @classmethod
     def bundled_task_configs_dir(cls) -> Path:

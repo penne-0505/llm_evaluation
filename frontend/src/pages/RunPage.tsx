@@ -17,6 +17,7 @@ import {
     Loader2,
     AlertCircle,
 } from 'lucide-react';
+import Button from '../components/Button';
 
 function formatTime(ms: number): string {
     const s = Math.floor(ms / 1000);
@@ -42,7 +43,8 @@ export default function RunPage() {
     const {
         evaluationMode, strictPreset,
         availableModels, subjectModelId, judgeModelIds, freeTextSubject,
-        freeTextJudges, selectedTaskIds, tasks, evalParams,
+        freeTextJudges, selectedTaskIds, tasks, evalParams, taskToolModeOverrides,
+        runHolistic, setRunHolistic,
     } = useSettingsStore();
     const {
         status, progress, result, resultFilePath, cancelRequested, errorMessage, runId,
@@ -140,6 +142,8 @@ export default function RunPage() {
             subjectTemp: evalParams.subjectTemperature,
             strictMode: isStrict,
             strictPresetId: strictPreset?.id ?? null,
+            taskToolModeOverrides,
+            runHolistic: runHolistic,
         });
     };
 
@@ -221,6 +225,22 @@ export default function RunPage() {
                         </div>
                     </div>
 
+                    {/* Holistic */}
+                    <button
+                        onClick={() => setRunHolistic(!runHolistic)}
+                        className="card p-5 w-full text-left cursor-pointer hover:border-border-focus transition-colors duration-150"
+                    >
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <p className="section-label mb-1">包括評価</p>
+                                <p className="text-[12px] text-text-secondary">全タスク完了後、文体・言語運用を横断的に評価します（creativeタスクを除く）</p>
+                            </div>
+                            <div className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${runHolistic ? 'bg-amber' : 'bg-border'}`}>
+                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${runHolistic ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                            </div>
+                        </div>
+                    </button>
+
                     {/* Stats */}
                     <div className="card p-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -240,14 +260,14 @@ export default function RunPage() {
                         </div>
                     )}
 
-                    <button
+                    <Button
                         onClick={handleStart}
                         disabled={!canStart}
                         className="w-full py-3.5 bg-amber text-bg rounded-md text-[13px] font-display font-bold flex items-center justify-center gap-2 hover:bg-amber-hover disabled:bg-surface disabled:text-text-tertiary disabled:border disabled:border-border disabled:cursor-not-allowed transition-all duration-200 hover:shadow-[0_0_24px_rgba(226,168,75,0.15)]"
                     >
                         <Play size={16} />
                         評価を開始
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -258,16 +278,16 @@ export default function RunPage() {
                         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                             <span className="section-label text-[9px]">進行ボード</span>
                             <div className="flex items-center gap-3">
-                                <button
+                                <Button
                                     onClick={handleCancel}
                                     disabled={cancelRequested}
                                     className="inline-flex items-center gap-1.5 rounded border border-score-low/30 bg-score-low/10 px-3 py-1.5 text-[12px] text-score-low transition-colors duration-150 hover:border-score-low/50 hover:bg-score-low/15 disabled:opacity-40"
                                 >
                                     <Square size={13} />
                                     {cancelRequested ? 'キャンセル中...' : 'キャンセル'}
-                                </button>
+                                </Button>
                                 <span className="text-[11px] text-text-tertiary">
-                                    {progress.completedTaskCount} / {selectedTasks.length} タスク完了
+                                    {progress.completedTaskCount} / {selectedTasks.length}{runHolistic ? '+' : ''} タスク完了
                                 </span>
                             </div>
                         </div>
@@ -332,20 +352,20 @@ export default function RunPage() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <button
+                        <Button
                             onClick={() => { setResult(result); navigate('/results'); }}
                             className="flex-1 py-2.5 bg-amber text-bg rounded-md text-[13px] font-display font-semibold flex items-center justify-center gap-2 hover:bg-amber-hover transition-all duration-200 hover:shadow-[0_0_24px_rgba(226,168,75,0.15)]"
                         >
                             <ArrowRight size={14} />
                             結果を見る
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={handleReset}
                             className="py-2.5 px-4 rounded-md border border-amber/30 bg-amber-dim/40 text-[13px] font-medium text-text-primary flex items-center justify-center gap-2 hover:border-amber/45 hover:bg-amber-dim/60 transition-colors duration-150"
                         >
                             <Play size={14} />
                             新しく実行
-                        </button>
+                        </Button>
                     </div>
                 </div>
             )}
@@ -360,12 +380,12 @@ export default function RunPage() {
                             {progress?.currentStep || 0} / {progress?.totalSteps || totalSteps} ステップ完了
                         </p>
                     </div>
-                    <button
+                    <Button
                         onClick={handleReset}
                         className="w-full py-2.5 border border-border rounded-md text-[12px] text-text-secondary hover:text-text-primary hover:border-border-focus flex items-center justify-center gap-2 transition-colors duration-150"
                     >
                         <Play size={13} /> 最初からやり直す
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -377,12 +397,12 @@ export default function RunPage() {
                         <h2 className="text-[15px] font-display font-bold text-text-primary">評価に失敗しました</h2>
                         <p className="text-[12px] text-text-secondary">{errorMessage}</p>
                     </div>
-                    <button
+                    <Button
                         onClick={handleReset}
                         className="w-full py-2.5 border border-border rounded-md text-[12px] text-text-secondary hover:text-text-primary hover:border-border-focus flex items-center justify-center gap-2 transition-colors duration-150"
                     >
                         <Play size={13} /> 最初からやり直す
-                    </button>
+                    </Button>
                 </div>
             )}
         </div>

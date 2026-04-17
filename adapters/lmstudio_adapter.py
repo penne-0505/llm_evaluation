@@ -1,10 +1,12 @@
-"""OpenAI APIアダプタ"""
+"""LM Studio OpenAI-compatible API アダプタ"""
 
 import json
 import os
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI, OpenAIError
+
+from core.provider_config_store import ProviderConfigStore
 
 from .base import (
     CompletionResult,
@@ -17,25 +19,53 @@ from .base import (
 )
 
 
-class OpenAIAdapter(LLMAdapter):
-    """OpenAI API用アダプタ"""
+class LMStudioAdapter(LLMAdapter):
+    """LM Studio OpenAI-compatible endpoint 用アダプタ"""
 
-    PROVIDER = "openai"
+    PROVIDER = "lmstudio"
+    DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
+    PLACEHOLDER_API_KEY = "lm-studio"
 
-    def __init__(self, api_key: Optional[str] = None):
-        """
-        Args:
-            api_key: OpenAI APIキー（Noneの場合は環境変数から取得）
-        """
-        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ):
+        self._api_key = api_key
+        self._base_url = self._normalize_base_url(base_url or self._load_base_url())
         self._client: Optional[OpenAI] = None
 
-        if self._api_key:
-            self._client = OpenAI(api_key=self._api_key)
+        if self._base_url:
+            self._client = OpenAI(
+                api_key=self._api_key or self.PLACEHOLDER_API_KEY,
+                base_url=self._base_url,
+            )
+
+    def _load_base_url(self) -> Optional[str]:
+        config = ProviderConfigStore.load_provider(self.PROVIDER)
+        return str(config.get("base_url") or "").strip() or os.getenv(
+            "LMSTUDIO_BASE_URL"
+        )
+
+    @classmethod
+    def _normalize_base_url(cls, base_url: Optional[str]) -> Optional[str]:
+        if base_url is None:
+            return None
+        normalized = str(base_url).strip().rstrip("/")
+        if not normalized:
+            return None
+        if normalized.endswith("/v1"):
+            return normalized
+        return f"{normalized}/v1"
+
+    @staticmethod
+    def _normalize_model_name(model: str) -> str:
+        if model.startswith("lmstudio/"):
+            return model.split("/", 1)[1]
+        return model
 
     def is_available(self) -> bool:
-        """APIキーが設定されているか確認"""
-        return self._api_key is not None and self._api_key.startswith("sk-")
+        return self._client is not None and bool(self._base_url)
 
     def complete(
         self,
@@ -44,22 +74,7 @@ class OpenAIAdapter(LLMAdapter):
         temperature: float = 0.0,
         max_tokens: int = 1024,
     ) -> str:
-        """
-        OpenAI APIを使用してテキスト生成を実行
-
-        Args:
-            system_prompt: システムプロンプト
-            user_prompt: ユーザープロンプト
-            temperature: 温度パラメータ
-            max_tokens: 最大トークン数
-
-        Returns:
-            生成されたテキスト
-
-        Raises:
-            LLMError: API呼び出し失敗時
-        """
-        model = os.getenv("JUDGE_OPENAI_MODEL", "gpt-4o")
+        model = os.getenv("JUDGE_LMSTUDIO_MODEL", "lmstudio/local-model")
         return self.complete_with_model(
             model=model,
             system_prompt=system_prompt,
@@ -92,15 +107,14 @@ class OpenAIAdapter(LLMAdapter):
         temperature: float = 0.0,
         max_tokens: int = 1024,
     ) -> CompletionResult:
-        if not self.is_available():
-            raise LLMError("OpenAI APIキーが設定されていません")
+        if not self.is_available() or self._client is None:
+            raise LLMError("LM Studio の base URL が設定されていません")
 
-        if self._client is None:
-            raise LLMError("OpenAIクライアントが初期化されていません")
+        normalized_model = self._normalize_model_name(model)
 
         try:
             response = self._client.chat.completions.create(
-                model=model,
+                model=normalized_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -122,9 +136,8 @@ class OpenAIAdapter(LLMAdapter):
                 if usage is not None
                 else None,
             )
-
         except OpenAIError as e:
-            raise LLMError(f"OpenAI APIエラー: {str(e)}") from e
+            raise LLMError(f"LM Studio APIエラー: {str(e)}") from e
         except Exception as e:
             raise LLMError(f"予期しないエラー: {str(e)}") from e
 
@@ -140,11 +153,13 @@ class OpenAIAdapter(LLMAdapter):
         max_tokens: int = 4096,
     ) -> NativeCompletionResult:
         if not self.is_available() or self._client is None:
-            raise LLMError("OpenAI APIキーが設定されていません")
+            raise LLMError("LM Studio の base URL が設定されていません")
+
+        normalized_model = self._normalize_model_name(model)
 
         try:
             response = self._client.chat.completions.create(
-                model=model,
+                model=normalized_model,
                 messages=messages,
                 tools=tools,
                 tool_choice="auto",
@@ -158,7 +173,13 @@ class OpenAIAdapter(LLMAdapter):
                     args = json.loads(tc.function.arguments)
                 except json.JSONDecodeError:
                     args = {}
-                tool_calls.append(NativeToolCall(id=tc.id, name=tc.function.name, arguments=args))
+                tool_calls.append(
+                    NativeToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=args,
+                    )
+                )
 
             usage = getattr(response, "usage", None)
             return NativeCompletionResult(
@@ -170,13 +191,16 @@ class OpenAIAdapter(LLMAdapter):
                     input_tokens=getattr(usage, "prompt_tokens", None),
                     output_tokens=getattr(usage, "completion_tokens", None),
                     total_tokens=getattr(usage, "total_tokens", None),
-                ) if usage is not None else None,
+                )
+                if usage is not None
+                else None,
             )
-
         except OpenAIError as e:
             err = str(e)
             if "tool" in err.lower() or "function" in err.lower():
-                raise NativeToolsNotSupportedError(f"OpenAI tool calling非対応: {err}") from e
-            raise LLMError(f"OpenAI APIエラー: {err}") from e
+                raise NativeToolsNotSupportedError(
+                    f"LM Studio tool calling非対応: {err}"
+                ) from e
+            raise LLMError(f"LM Studio APIエラー: {err}") from e
         except Exception as e:
             raise LLMError(f"予期しないエラー: {str(e)}") from e

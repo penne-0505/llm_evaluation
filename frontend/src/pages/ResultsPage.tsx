@@ -4,6 +4,7 @@ import { useHistoryStore } from '../store/historyStore';
 import { deleteResult } from '../api/client';
 import ResultDetail from '../components/ResultDetail';
 import { BarChart3, Trash2 } from 'lucide-react';
+import Button from '../components/Button';
 
 export default function ResultsPage() {
     const runResult = useRunStore((s) => s.result);
@@ -104,14 +105,14 @@ export default function ResultsPage() {
                         <h1 className="text-2xl font-display font-bold text-text-primary tracking-tight">結果</h1>
                         <p className="text-text-secondary mt-1 text-[13px]">最新の評価結果を表示します</p>
                     </div>
-                    <button
+                    <Button
                         onClick={() => void handleDelete()}
                         disabled={isDeleting}
                         className="inline-flex items-center gap-1.5 rounded border border-score-low/20 px-3 py-1.5 text-[12px] text-score-low transition-colors hover:border-score-low/40 hover:bg-score-low/8 disabled:opacity-40"
                     >
                         <Trash2 size={13} />
                         {isDeleting ? '削除中...' : 'この結果を削除'}
-                    </button>
+                    </Button>
                 </div>
             </div>
             <ResultDetail run={result} />

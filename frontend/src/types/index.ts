@@ -1,11 +1,12 @@
 // === Providers ===
-export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter';
+export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'lmstudio';
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
     openai: 'OpenAI',
     anthropic: 'Anthropic',
     gemini: 'Gemini',
     openrouter: 'OpenRouter',
+    lmstudio: 'LM Studio',
 };
 
 export interface ApiKeyEntry {
@@ -23,12 +24,15 @@ export interface Model {
 }
 
 // === Tasks ===
-export type TaskType = 'fact' | 'creative' | 'speculative';
+export type TaskType = 'fact' | 'creative' | 'speculative' | 'holistic';
+
+export type ToolMode = 'native' | 'text' | 'auto';
 
 export interface Task {
     id: string;
     type: TaskType;
     promptPreview: string;
+    toolMode?: ToolMode;
 }
 
 // === Evaluation Parameters ===
@@ -115,6 +119,7 @@ export interface EvaluationRun {
     subjectCostPer1mTokensUsd?: number;
     strictMode?: StrictModeInfo;
     taskResults: TaskResult[];
+    holisticTaskResults: TaskResult[];
     averageScore: number;
     bestScore: number;
     taskCount: number;

@@ -11,6 +11,7 @@ from .openai_adapter import OpenAIAdapter
 from .anthropic_adapter import AnthropicAdapter
 from .gemini_adapter import GeminiAdapter
 from .openrouter_adapter import OpenRouterAdapter
+from .lmstudio_adapter import LMStudioAdapter
 
 __all__ = [
     "LLMAdapter",
@@ -21,6 +22,7 @@ __all__ = [
     "AnthropicAdapter",
     "GeminiAdapter",
     "OpenRouterAdapter",
+    "LMStudioAdapter",
     "get_adapter_for_model",
     "get_all_available_adapters",
     "get_available_judge_adapters",
@@ -38,6 +40,7 @@ def get_adapter_for_model(
     - claude-* → AnthropicAdapter
     - gemini-* → GeminiAdapter
     - openrouter/*, or/* → OpenRouterAdapter
+    - lmstudio/* → LMStudioAdapter
 
     Args:
         model_name: LLMモデル名
@@ -55,6 +58,8 @@ def get_adapter_for_model(
         return GeminiAdapter(api_key=api_key)
     elif any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
         return OpenRouterAdapter(api_key=api_key)
+    elif model_lower.startswith("lmstudio/"):
+        return LMStudioAdapter(api_key=api_key)
 
     return None
 
@@ -84,6 +89,10 @@ def get_all_available_adapters() -> Dict[str, LLMAdapter]:
     openrouter = OpenRouterAdapter()
     if openrouter.is_available():
         adapters["openrouter"] = openrouter
+
+    lmstudio = LMStudioAdapter()
+    if lmstudio.is_available():
+        adapters["lmstudio"] = lmstudio
 
     return adapters
 
@@ -121,4 +130,6 @@ def _resolve_api_key(model_name: str, api_keys: Dict[str, str]) -> Optional[str]
         return api_keys.get("gemini")
     if any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
         return api_keys.get("openrouter")
+    if model_lower.startswith("lmstudio/"):
+        return api_keys.get("lmstudio")
     return None

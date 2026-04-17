@@ -29,6 +29,7 @@ from core.cost_estimator import summarize_benchmark_usage
 from core.logging_utils import configure_logging
 from core.model_catalog import ModelCatalog
 from core.openrouter_admin import OpenRouterAdminError, fetch_credits
+from core.provider_config_store import ProviderConfigStore
 from core.secrets_store import SecretsStore
 from core.selection_store import SelectionStore
 from core.strict_mode import (
@@ -146,6 +147,22 @@ def _prompts_candidates() -> List[ResourceCandidate]:
         env_name=PROMPTS_DIR_ENV,
         user_dir=AppPaths.prompts_override_dir(),
         bundled_dir=AppPaths.bundled_prompts_dir(),
+    )
+
+
+def _holistic_rubrics_candidates() -> List[ResourceCandidate]:
+    return _directory_candidates(
+        env_name="LLM_BENCHMARK_HOLISTIC_RUBRICS_DIR",
+        user_dir=AppPaths.holistic_rubrics_override_dir(),
+        bundled_dir=AppPaths.bundled_holistic_rubrics_dir(),
+    )
+
+
+def _holistic_prompts_candidates() -> List[ResourceCandidate]:
+    return _directory_candidates(
+        env_name="LLM_BENCHMARK_HOLISTIC_PROMPTS_DIR",
+        user_dir=AppPaths.holistic_prompts_override_dir(),
+        bundled_dir=AppPaths.bundled_holistic_prompts_dir(),
     )
 
 
@@ -333,6 +350,38 @@ def _load_tasks() -> List[Dict[str, Any]]:
     return tasks
 
 
+def _load_holistic_tasks() -> List[Dict[str, Any]]:
+    """rubrics/holistic/ と prompts/holistic/ から包括評価タスクを読み込む。"""
+    tasks: List[Dict[str, Any]] = []
+
+    task_ids: set = set()
+    for candidate in _holistic_rubrics_candidates():
+        if candidate.path.is_dir():
+            task_ids.update(path.stem for path in candidate.path.glob("*.md"))
+    for candidate in _holistic_prompts_candidates():
+        if candidate.path.is_dir():
+            task_ids.update(path.stem for path in candidate.path.glob("*.md"))
+
+    for task_id in sorted(task_ids):
+        rubric_resource = _resolve_candidate_file(
+            _holistic_rubrics_candidates(), f"{task_id}.md"
+        )
+        prompt_resource = _resolve_candidate_file(
+            _holistic_prompts_candidates(), f"{task_id}.md"
+        )
+        if not rubric_resource.path.is_file() or not prompt_resource.path.is_file():
+            continue
+        tasks.append(
+            {
+                "id": task_id,
+                "rubric_file": str(rubric_resource.path),
+                "prompt_file": str(prompt_resource.path),
+            }
+        )
+
+    return tasks
+
+
 def _resolve_subject_key(model_name: str, api_keys: Dict[str, str]) -> Optional[str]:
     model_lower = model_name.lower()
     if any(model_lower.startswith(p) for p in ["gpt-", "o1", "o3", "o4"]):
@@ -343,7 +392,20 @@ def _resolve_subject_key(model_name: str, api_keys: Dict[str, str]) -> Optional[
         return api_keys.get("gemini")
     if any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
         return api_keys.get("openrouter")
+    if model_lower.startswith("lmstudio/"):
+        return api_keys.get("lmstudio")
     return None
+
+
+def _lmstudio_config_response() -> Dict[str, Any]:
+    config = ProviderConfigStore.load_provider("lmstudio")
+    base_url = str(config.get("base_url") or "").strip()
+    token = SecretsStore.load_existing().get("lmstudio")
+    return {
+        "configured": bool(base_url),
+        "base_url": base_url,
+        "api_token_configured": bool(token),
+    }
 
 
 def _sse_event(data: Any) -> str:
@@ -528,6 +590,8 @@ class RunRequest(BaseModel):
     subject_temp: float = 0.6
     strict_mode: bool = False
     strict_preset_id: Optional[str] = None
+    task_tool_mode_overrides: Dict[str, str] = {}
+    run_holistic: bool = True
 
 
 class ClientErrorRequest(BaseModel):
@@ -557,6 +621,11 @@ class OpenRouterManagementKeyRequest(BaseModel):
     key: str
 
 
+class LMStudioConfigRequest(BaseModel):
+    base_url: str
+    api_token: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # エンドポイント: タスク
 # ---------------------------------------------------------------------------
@@ -575,6 +644,7 @@ def get_tasks() -> List[Dict[str, Any]]:
             prompt_preview = normalized[:140]
         except Exception:
             pass
+        subject_tools_cfg = t.get("config", {}).get("subject_tools") or {}
         result.append(
             {
                 "id": t["id"],
@@ -582,7 +652,8 @@ def get_tasks() -> List[Dict[str, Any]]:
                 "prompt_preview": prompt_preview,
                 "prompt_source": t["prompt_source"],
                 "rubric_source": t["rubric_source"],
-                "has_subject_tools": bool(t.get("config", {}).get("subject_tools")),
+                "has_subject_tools": bool(subject_tools_cfg),
+                "tool_mode": subject_tools_cfg.get("tool_mode") if subject_tools_cfg else None,
             }
         )
     return result
@@ -659,6 +730,38 @@ def save_keys(req: ApiKeySaveRequest) -> Dict[str, str]:
     if not any(values.values()):
         raise HTTPException(status_code=400, detail="APIキーが入力されていません")
     SecretsStore.save(values)
+    load_dotenv(override=True)
+    return {"status": "ok"}
+
+
+@app.get("/api/lmstudio/config")
+def get_lmstudio_config() -> Dict[str, Any]:
+    return _lmstudio_config_response()
+
+
+@app.post("/api/lmstudio/config")
+def save_lmstudio_config(req: LMStudioConfigRequest) -> Dict[str, Any]:
+    base_url = req.base_url.strip()
+    if not base_url:
+        raise HTTPException(status_code=400, detail="LM Studio の URL を入力してください")
+
+    ProviderConfigStore.save_provider("lmstudio", {"base_url": base_url})
+
+    if req.api_token is not None:
+        token = req.api_token.strip()
+        if token:
+            SecretsStore.save({"lmstudio": token})
+        else:
+            SecretsStore.clear_provider_secret("lmstudio")
+
+    load_dotenv(override=True)
+    return _lmstudio_config_response()
+
+
+@app.delete("/api/lmstudio/config")
+def clear_lmstudio_config() -> Dict[str, str]:
+    ProviderConfigStore.clear_provider("lmstudio")
+    SecretsStore.clear_provider_secret("lmstudio")
     load_dotenv(override=True)
     return {"status": "ok"}
 
@@ -748,6 +851,16 @@ def save_selection(req: SelectionSaveRequest) -> Dict[str, str]:
     """現在の選択状態を保存する"""
     SelectionStore.save(req.model_dump())
     return {"status": "ok"}
+
+
+def _apply_tool_mode_override(
+    subject_tools: Optional[Dict[str, Any]],
+    mode_override: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    _VALID = {"native", "text", "auto"}
+    if subject_tools is None or mode_override not in _VALID:
+        return subject_tools
+    return {**subject_tools, "tool_mode": mode_override}
 
 
 # ---------------------------------------------------------------------------
@@ -911,7 +1024,10 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
             )
 
             total_tasks = len(selected)
-            total_steps = total_tasks * (1 + len(judge_adapters) * (req.judge_runs + 2))
+            holistic_tasks_meta = _load_holistic_tasks()
+            holistic_task_count = len(holistic_tasks_meta)
+            steps_per_task = 1 + len(judge_adapters) * (req.judge_runs + 2)
+            total_steps = (total_tasks + holistic_task_count) * steps_per_task
             progress_current = 0
             task_states = [
                 _initial_task_progress_state(
@@ -1013,8 +1129,9 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                                 )
                             ),
                             cancel_checker=cancel_checker,
-                            subject_tools=task_info.get("config", {}).get(
-                                "subject_tools"
+                            subject_tools=_apply_tool_mode_override(
+                                task_info.get("config", {}).get("subject_tools"),
+                                req.task_tool_mode_overrides.get(task_info["id"]),
                             ),
                         )
                         task_results[idx] = result.to_dict()
@@ -1102,6 +1219,100 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
 
             completed = [r for r in task_results if r is not None]
 
+            # --- 包括評価フェーズ ---
+            holistic_results: List[Dict[str, Any]] = []
+            if not cancelled and holistic_tasks_meta and req.run_holistic:
+                non_creative_responses = [
+                    {
+                        "task_name": r["task_name"],
+                        "task_type": r["task_type"],
+                        "input_prompt": r["input_prompt"],
+                        "response": r["response"],
+                    }
+                    for r in completed
+                    if r.get("task_type") != "creative"
+                ]
+
+                for h_idx, h_task in enumerate(holistic_tasks_meta):
+                    try:
+                        cancel_checker()
+                    except asyncio.CancelledError:
+                        cancelled = True
+                        cancel_reason = "ユーザーによってキャンセルされました"
+                        break
+
+                    h_state_index = total_tasks + h_idx
+                    h_state = _initial_task_progress_state(
+                        h_task["id"], h_state_index, list(judge_adapters.keys())
+                    )
+                    task_states.append(h_state)
+
+                    enqueue_progress_event(
+                        message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 実行開始",
+                        task_index=h_state_index,
+                        task_id=h_task["id"],
+                        increment_step=False,
+                    )
+
+                    rubric_content = Path(h_task["rubric_file"]).read_text(
+                        encoding="utf-8"
+                    )
+                    eval_prompt = Path(h_task["prompt_file"]).read_text(encoding="utf-8")
+
+                    try:
+                        h_result = await engine.run_holistic_task(
+                            task_name=h_task["id"],
+                            eval_prompt=eval_prompt,
+                            rubric_content=rubric_content,
+                            bundled_responses=non_creative_responses,
+                            system_prompt=system_prompt,
+                            progress_callback=lambda msg, _idx=h_state_index, _tid=h_task["id"]: (
+                                progress_callback(
+                                    f"包括評価: {msg}",
+                                    task_index=_idx,
+                                    task_id=_tid,
+                                    judge_model=_extract_judge_model(msg),
+                                )
+                            ),
+                            cancel_checker=cancel_checker,
+                        )
+                        holistic_results.append(h_result.to_dict())
+                        task_states[h_state_index]["phase"] = "completed"
+                        task_states[h_state_index]["subject_done"] = True
+                        task_states[h_state_index]["message"] = "Completed"
+                        enqueue_progress_event(
+                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 完了",
+                            task_index=h_state_index,
+                            task_id=h_task["id"],
+                            increment_step=False,
+                        )
+                    except asyncio.CancelledError:
+                        cancelled = True
+                        cancel_reason = "ユーザーによってキャンセルされました"
+                        break
+                    except Exception as h_exc:
+                        logger.exception(
+                            "holistic task failed run_id=%s task_id=%s",
+                            run_id,
+                            h_task["id"],
+                        )
+                        task_states[h_state_index]["phase"] = "failed"
+                        task_states[h_state_index]["message"] = f"Failed: {h_exc}"
+                        enqueue_progress_event(
+                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 失敗",
+                            task_index=h_state_index,
+                            task_id=h_task["id"],
+                            increment_step=False,
+                        )
+
+                # キューの残りをフラッシュ
+                while not progress_queue.empty():
+                    try:
+                        event = progress_queue.get_nowait()
+                        yield _sse_event(event)
+                    except asyncio.QueueEmpty:
+                        break
+
             if cancelled:
                 logger.info(
                     "run cancelled run_id=%s completed_tasks=%d total_tasks=%d reason=%s",
@@ -1132,6 +1343,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 ),
                 "strict_mode": strict_mode,
                 "tasks": completed,
+                "holistic_tasks": holistic_results,
                 "cancelled": False,
                 "completed_tasks": len(completed),
                 "total_tasks": total_tasks,

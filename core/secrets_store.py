@@ -35,6 +35,7 @@ class SecretsStore:
         "anthropic": "ANTHROPIC_API_KEY",
         "gemini": "GEMINI_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
+        "lmstudio": "LMSTUDIO_API_TOKEN",
     }
     OPENROUTER_MANAGEMENT_ENV_KEY = "OPENROUTER_MANAGEMENT_KEY"
 
@@ -112,6 +113,18 @@ class SecretsStore:
         data = cls._read_file()
         secrets = data.get("secrets", {})
         secrets.pop(cls.OPENROUTER_MANAGEMENT_ENV_KEY, None)
+        data["secrets"] = secrets
+        cls._write_file(data)
+
+    @classmethod
+    def clear_provider_secret(cls, provider: str) -> None:
+        env_key = cls.KEYS.get(provider)
+        if not env_key:
+            return
+
+        data = cls._read_file()
+        secrets = data.get("secrets", {})
+        secrets.pop(env_key, None)
         data["secrets"] = secrets
         cls._write_file(data)
 

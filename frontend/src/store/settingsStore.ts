@@ -8,6 +8,7 @@ import type {
     EvalParams,
     EvaluationMode,
     StrictModePreset,
+    ToolMode,
 } from '../types';
 import {
     fetchTasks,
@@ -56,11 +57,19 @@ interface SettingsState {
     tasks: Task[];
     tasksLoading: boolean;
     selectedTaskIds: string[];
+    taskToolModeOverrides: Record<string, ToolMode>;
     toggleTask: (id: string) => void;
     selectAllTasks: () => void;
     deselectAllTasks: () => void;
+    setTaskToolMode: (taskId: string, mode: ToolMode) => void;
     refreshTasks: () => Promise<void>;
+
+    // Holistic
+    runHolistic: boolean;
+    setRunHolistic: (v: boolean) => void;
 }
+
+type CloudProvider = Exclude<Provider, 'lmstudio'>;
 
 export const useSettingsStore = create<SettingsState>()(
     persist(
@@ -110,7 +119,7 @@ export const useSettingsStore = create<SettingsState>()(
             refreshKeyStatus: async () => {
                 try {
                     const status = await fetchKeyStatus();
-                    const providers: Provider[] = ['openai', 'anthropic', 'gemini', 'openrouter'];
+                    const providers: CloudProvider[] = ['openai', 'anthropic', 'gemini', 'openrouter'];
                     const newKeys: Partial<Record<Provider, ApiKeyEntry>> = {};
                     for (const p of providers) {
                         if (status[p]) {
@@ -237,6 +246,7 @@ export const useSettingsStore = create<SettingsState>()(
             tasks: [],
             tasksLoading: false,
             selectedTaskIds: [],
+            taskToolModeOverrides: {},
             toggleTask: (id) => {
                 if (get().evaluationMode === 'strict') return;
                 const ids = get().selectedTaskIds;
@@ -251,6 +261,9 @@ export const useSettingsStore = create<SettingsState>()(
                 set({ selectedTaskIds: [] });
             },
 
+            setTaskToolMode: (taskId, mode) =>
+                set((s) => ({ taskToolModeOverrides: { ...s.taskToolModeOverrides, [taskId]: mode } })),
+
             refreshTasks: async () => {
                 set({ tasksLoading: true });
                 try {
@@ -260,6 +273,10 @@ export const useSettingsStore = create<SettingsState>()(
                     set({ tasksLoading: false });
                 }
             },
+
+            // --- Holistic ---
+            runHolistic: true,
+            setRunHolistic: (v) => set({ runHolistic: v }),
         }),
         {
             name: 'llm-eval-settings',
@@ -272,6 +289,8 @@ export const useSettingsStore = create<SettingsState>()(
                 evaluationMode: state.evaluationMode,
                 evalParams: state.evalParams,
                 selectedTaskIds: state.selectedTaskIds,
+                taskToolModeOverrides: state.taskToolModeOverrides,
+                runHolistic: state.runHolistic,
             }),
         }
     )

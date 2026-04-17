@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
     deleteOpenRouterAdminKey,
+    deleteLMStudioConfig,
+    fetchLMStudioConfig,
     fetchOpenRouterAdminStatus,
     fetchOpenRouterCredits,
+    saveLMStudioConfig,
     saveOpenRouterAdminKey,
 } from '../api/client';
 import { useSettingsStore } from '../store/settingsStore';
-import type { Provider } from '../types';
+import type { Provider, ToolMode } from '../types';
 import { PROVIDER_LABELS } from '../types';
 import { getStrictModeIssues } from '../lib/strictMode';
 import { TASK_TYPE_LABELS, TASK_TYPE_STYLE } from '../lib/taskTypeStyles';
@@ -23,8 +26,9 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import Button from '../components/Button';
 
-const PROVIDERS: Provider[] = ['openai', 'anthropic', 'gemini', 'openrouter'];
+const CLOUD_PROVIDERS: Provider[] = ['openai', 'anthropic', 'gemini', 'openrouter'];
 
 type ModelPickerProps = {
     availableModels: ReturnType<typeof useSettingsStore.getState>['availableModels'];
@@ -49,6 +53,12 @@ function ModelPicker({
 }: ModelPickerProps) {
     const [query, setQuery] = useState('');
     const rootRef = useRef<HTMLDivElement | null>(null);
+    const setOpen = useCallback((nextOpen: boolean) => {
+        if (!nextOpen) {
+            setQuery('');
+        }
+        onOpenChange(nextOpen);
+    }, [onOpenChange]);
 
     const filteredModels = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
@@ -63,48 +73,42 @@ function ModelPicker({
     const displayValue = open ? query : selectedLabel;
 
     useEffect(() => {
-        if (!open) {
-            setQuery('');
-        }
-    }, [open]);
-
-    useEffect(() => {
         const handlePointerDown = (event: MouseEvent) => {
             if (!rootRef.current?.contains(event.target as Node)) {
-                onOpenChange(false);
+                setOpen(false);
             }
         };
 
         document.addEventListener('mousedown', handlePointerDown);
         return () => document.removeEventListener('mousedown', handlePointerDown);
-    }, [onOpenChange]);
+    }, [setOpen]);
 
     return (
         <div ref={rootRef} className="relative">
             <div className={`w-full flex items-center gap-2 bg-bg border rounded px-3 py-2 transition-colors duration-150 ${open ? 'border-amber/40' : 'border-border hover:border-border-focus'}`}>
                 <input
                     value={displayValue}
-                    onFocus={() => onOpenChange(true)}
+                    onFocus={() => setOpen(true)}
                     onChange={(e) => {
-                        if (!open) onOpenChange(true);
+                        if (!open) setOpen(true);
                         setQuery(e.target.value);
                     }}
                     onKeyDown={(e) => {
                         if (e.key === 'Escape') {
-                            onOpenChange(false);
+                            setOpen(false);
                         }
                     }}
                     placeholder={open ? 'モデルを検索...' : placeholder}
                     className="flex-1 bg-transparent text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none"
                 />
-                <button
+                <Button
                     type="button"
-                    onClick={() => onOpenChange(!open)}
+                    onClick={() => setOpen(!open)}
                     className="shrink-0 text-text-tertiary hover:text-text-primary transition-colors duration-150"
                     aria-label={open ? 'モデル一覧を閉じる' : 'モデル一覧を開く'}
                 >
                     <ChevronDown size={14} className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
-                </button>
+                </Button>
             </div>
             {open && (
                 <div className="absolute z-20 mt-1 w-full bg-surface border border-border rounded-md shadow-xl max-h-56 overflow-y-auto">
@@ -116,7 +120,7 @@ function ModelPicker({
                     {filteredModels.map((m) => {
                         const selected = isSelected(m.id);
                         return (
-                            <button
+                            <Button
                                 key={m.id}
                                 type="button"
                                 onMouseDown={(e) => e.preventDefault()}
@@ -130,7 +134,7 @@ function ModelPicker({
                                 ) : null}
                                 <span className="flex-1 min-w-0 truncate">{m.name}</span>
                                 <span className="shrink-0 text-[11px] text-text-tertiary">{PROVIDER_LABELS[m.provider]}</span>
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>
@@ -160,6 +164,7 @@ export default function SettingsPage() {
             <OpenRouterAdminSection />
             <ModelSelectionSection />
             <EvalParamsSection />
+            <HolisticSection />
             <TaskSelectionSection />
             <RunLinkSection />
         </div>
@@ -198,7 +203,7 @@ function EvaluationModeSection() {
             <div className="flex justify-center">
                 <div className="inline-flex rounded-lg border border-border/80 bg-bg/80 p-1" role="tablist" aria-label="Evaluation Mode">
                     <div className="grid grid-cols-2 gap-1 min-w-[280px]">
-                    <button
+                    <Button
                         type="button"
                         role="tab"
                         aria-selected={evaluationMode === 'standard'}
@@ -217,9 +222,9 @@ function EvaluationModeSection() {
                             </div>
                             {evaluationMode === 'standard' && <Check size={14} className="text-amber" />}
                         </div>
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
                         type="button"
                         role="tab"
                         aria-selected={evaluationMode === 'strict'}
@@ -238,7 +243,7 @@ function EvaluationModeSection() {
                             </div>
                             {evaluationMode === 'strict' && <Check size={14} className="text-score-high" />}
                         </div>
-                    </button>
+                    </Button>
                 </div>
                 </div>
             </div>
@@ -264,6 +269,9 @@ function EvaluationModeSection() {
                                     official preset に合わせて比較条件を固定する leaderboard 向けモードです。
                                 </p>
                                 <p className="text-[11px] leading-5 text-text-tertiary">{strictPreset.description}</p>
+                                <p className="text-[11px] leading-5 text-text-tertiary">
+                                    judge モデルはすべて OpenRouter 経由で呼び出されます。
+                                </p>
                             </div>
                             <div className="grid gap-2 md:grid-cols-4">
                                 <StrictSpec label="Task Set" value={`${strictPreset.taskIds.length} tasks`} />
@@ -338,12 +346,12 @@ function ApiKeySection() {
             <div className="flex items-center justify-between">
                 <h2 className="section-label">API Key</h2>
                 <span className="text-[11px] text-text-tertiary">
-                    {connectedCount}/{PROVIDERS.length} 接続済み
+                    {connectedCount}/{CLOUD_PROVIDERS.length} 接続済み
                 </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {PROVIDERS.map((provider, i) => {
+                {CLOUD_PROVIDERS.map((provider, i) => {
                     const entry = apiKeys[provider];
                     const draft = drafts[provider] || '';
                     const hasKey = !!entry;
@@ -392,34 +400,162 @@ function ApiKeySection() {
                                     placeholder={hasKey ? '••••••••' : 'API Key を入力'}
                                     className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
                                 />
-                                <button
+                                <Button
                                     onClick={() => handleSave(provider)}
                                     disabled={!draft.trim()}
                                     className="px-3 py-1.5 bg-amber text-bg rounded text-[12px] font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-amber-hover transition-colors duration-150"
                                 >
                                     保存
-                                </button>
+                                </Button>
                                 {hasKey && (
-                                    <button
+                                    <Button
                                         onClick={() => deleteApiKey(provider)}
-                                        className="px-2 py-1.5 border border-border rounded text-text-tertiary hover:text-score-low hover:border-score-low/30 transition-colors duration-150"
+                                        className="px-2 py-1.5 rounded border border-border bg-surface-hover/70 text-text-secondary hover:border-border-focus hover:bg-surface-hover hover:text-text-primary transition-colors duration-150"
                                     >
                                         <Trash2 size={14} />
-                                    </button>
+                                    </Button>
                                 )}
                             </div>
                         </div>
                     );
                 })}
+                <LMStudioCard className="md:col-span-2" />
             </div>
         </section>
+    );
+}
+
+function LMStudioCard({ className = '' }: { className?: string }) {
+    const refreshModels = useSettingsStore((s) => s.refreshModels);
+    const [baseUrlDraft, setBaseUrlDraft] = useState('http://127.0.0.1:1234/v1');
+    const [tokenDraft, setTokenDraft] = useState('');
+    const [configured, setConfigured] = useState(false);
+    const [tokenConfigured, setTokenConfigured] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const load = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const config = await fetchLMStudioConfig();
+            setConfigured(config.configured);
+            setTokenConfigured(config.apiTokenConfigured);
+            setBaseUrlDraft(config.baseUrl || 'http://127.0.0.1:1234/v1');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'LM Studio 設定の読み込みに失敗しました');
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    const handleSave = async () => {
+        if (!baseUrlDraft.trim()) return;
+        setIsSaving(true);
+        setError(null);
+        try {
+            const next = await saveLMStudioConfig(baseUrlDraft.trim(), tokenDraft);
+            setConfigured(next.configured);
+            setTokenConfigured(next.apiTokenConfigured);
+            setBaseUrlDraft(next.baseUrl || 'http://127.0.0.1:1234/v1');
+            setTokenDraft('');
+            await refreshModels(true);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'LM Studio 設定の保存に失敗しました');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        setIsDeleting(true);
+        setError(null);
+        try {
+            await deleteLMStudioConfig();
+            setConfigured(false);
+            setTokenConfigured(false);
+            setTokenDraft('');
+            setBaseUrlDraft('http://127.0.0.1:1234/v1');
+            await refreshModels(true);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'LM Studio 設定の削除に失敗しました');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    return (
+        <div className={`card p-4 space-y-4 transition-all duration-150 animate-fade-up accent-bar-ice ${className}`}>
+            <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px] font-medium text-text-primary">LM Studio</p>
+                <div className="flex items-center gap-3 text-[11px]">
+                    <span className={configured ? 'text-score-high' : 'text-text-tertiary'}>
+                        {configured ? 'URL 設定済み' : '未設定'}
+                    </span>
+                    <span className={tokenConfigured ? 'text-score-high' : 'text-text-tertiary'}>
+                        {tokenConfigured ? 'Token 設定済み' : 'Token 省略'}
+                    </span>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <label className="text-[11px] font-medium text-text-secondary">Server URL</label>
+                <input
+                    value={baseUrlDraft}
+                    onChange={(e) => setBaseUrlDraft(e.target.value)}
+                    placeholder="http://127.0.0.1:1234/v1"
+                    className="w-full bg-bg border border-border rounded px-3 py-2 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <label className="text-[11px] font-medium text-text-secondary">API Token (optional)</label>
+                <div className="flex gap-2">
+                    <input
+                        type="password"
+                        value={tokenDraft}
+                        onChange={(e) => setTokenDraft(e.target.value)}
+                        placeholder={tokenConfigured ? '••••••••' : '未設定でも利用できます'}
+                        className="flex-1 bg-bg border border-border rounded px-3 py-2 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
+                    />
+                    <Button
+                        onClick={() => void handleSave()}
+                        disabled={!baseUrlDraft.trim() || isSaving || isLoading}
+                        className="px-3 py-2 bg-amber text-bg rounded text-[12px] font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-amber-hover transition-colors duration-150"
+                    >
+                        {isSaving ? '保存中...' : '保存'}
+                    </Button>
+                    {configured && (
+                        <Button
+                            onClick={() => void handleDelete()}
+                            disabled={isDeleting}
+                            className="px-2 py-2 border border-border rounded text-text-tertiary hover:text-score-low hover:border-score-low/30 transition-colors duration-150 disabled:opacity-40"
+                        >
+                            <Trash2 size={14} />
+                        </Button>
+                    )}
+                </div>
+            </div>
+
+            {error && (
+                <div className="rounded-md border border-score-low/20 bg-score-low/8 p-3 text-[11px] text-score-low">
+                    {error}
+                </div>
+            )}
+        </div>
     );
 }
 
 function OpenRouterAdminSection() {
     const [draft, setDraft] = useState('');
     const [configured, setConfigured] = useState(false);
-    const [credits, setCredits] = useState<{ totalCredits?: number | null; totalUsage?: number | null; remainingCredits?: number | null } | null>(null);
+    const [remainingCredits, setRemainingCredits] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -433,13 +569,13 @@ function OpenRouterAdminSection() {
             setConfigured(status.configured);
             if (status.configured && withCredits) {
                 const creditState = await fetchOpenRouterCredits();
-                setCredits({
-                    totalCredits: creditState.totalCredits,
-                    totalUsage: creditState.totalUsage,
-                    remainingCredits: creditState.remainingCredits,
-                });
+                setRemainingCredits(
+                    typeof creditState.remainingCredits === 'number'
+                        ? creditState.remainingCredits
+                        : null
+                );
             } else {
-                setCredits(null);
+                setRemainingCredits(null);
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'OpenRouter credits の読み込みに失敗しました');
@@ -473,7 +609,7 @@ function OpenRouterAdminSection() {
         try {
             await deleteOpenRouterAdminKey();
             setConfigured(false);
-            setCredits(null);
+            setRemainingCredits(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Management Key の削除に失敗しました');
         } finally {
@@ -487,11 +623,11 @@ function OpenRouterAdminSection() {
         try {
             const creditState = await fetchOpenRouterCredits();
             setConfigured(creditState.configured);
-            setCredits({
-                totalCredits: creditState.totalCredits,
-                totalUsage: creditState.totalUsage,
-                remainingCredits: creditState.remainingCredits,
-            });
+            setRemainingCredits(
+                typeof creditState.remainingCredits === 'number'
+                    ? creditState.remainingCredits
+                    : null
+            );
         } catch (err) {
             setError(err instanceof Error ? err.message : 'OpenRouter credits の更新に失敗しました');
         } finally {
@@ -524,21 +660,21 @@ function OpenRouterAdminSection() {
                         placeholder={configured ? '••••••••' : 'Management Key を入力'}
                         className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
                     />
-                    <button
+                    <Button
                         onClick={() => void handleSave()}
                         disabled={!draft.trim() || isSaving}
                         className="px-3 py-1.5 bg-amber text-bg rounded text-[12px] font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-amber-hover transition-colors duration-150"
                     >
                         {isSaving ? '保存中...' : '保存'}
-                    </button>
+                    </Button>
                     {configured && (
-                        <button
+                        <Button
                             onClick={() => void handleDelete()}
                             disabled={isRefreshing}
                             className="px-2 py-1.5 border border-border rounded text-text-tertiary hover:text-score-low hover:border-score-low/30 transition-colors duration-150 disabled:opacity-40"
                         >
                             <Trash2 size={14} />
-                        </button>
+                        </Button>
                     )}
                 </div>
 
@@ -548,29 +684,22 @@ function OpenRouterAdminSection() {
                         <p className="mt-1 data-display text-[20px] text-text-primary">
                             {isLoading
                                 ? '...'
-                                : typeof credits?.remainingCredits === 'number'
-                                    ? credits.remainingCredits.toFixed(4)
+                                : typeof remainingCredits === 'number'
+                                    ? remainingCredits.toFixed(4)
                                     : configured
                                         ? '---'
                                         : '未設定'}
                         </p>
                     </div>
-                    <button
+                    <Button
                         onClick={() => void handleRefreshCredits()}
                         disabled={!configured || isRefreshing}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded text-[11px] text-text-secondary hover:text-amber hover:border-amber/30 transition-colors duration-150 disabled:opacity-40"
                     >
                         <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
                         更新
-                    </button>
+                    </Button>
                 </div>
-
-                {credits && (
-                    <div className="grid gap-2 md:grid-cols-2">
-                        <StrictSpec label="Total Credits" value={typeof credits.totalCredits === 'number' ? credits.totalCredits.toFixed(4) : '---'} />
-                        <StrictSpec label="Total Usage" value={typeof credits.totalUsage === 'number' ? credits.totalUsage.toFixed(4) : '---'} />
-                    </div>
-                )}
 
                 {error && (
                     <div className="rounded-md border border-score-low/20 bg-score-low/8 p-3 text-[11px] text-score-low">
@@ -585,7 +714,6 @@ function OpenRouterAdminSection() {
 /* ===================== MODEL SELECTION SECTION ===================== */
 function ModelSelectionSection() {
     const {
-        apiKeys,
         availableModels,
         modelsLastUpdated,
         evaluationMode,
@@ -603,7 +731,7 @@ function ModelSelectionSection() {
     } = useSettingsStore();
 
     const [judgeInput, setJudgeInput] = useState('');
-    const hasAnyKey = Object.keys(apiKeys).length > 0;
+    const hasCatalogModels = availableModels.length > 0;
     const [subjectOpen, setSubjectOpen] = useState(false);
     const [judgeOpen, setJudgeOpen] = useState(false);
     const isStrict = evaluationMode === 'strict';
@@ -628,13 +756,13 @@ function ModelSelectionSection() {
                             {formatDistanceToNow(new Date(modelsLastUpdated), { addSuffix: true, locale: ja })}に更新
                         </span>
                     )}
-                    <button
+                    <Button
                         onClick={() => refreshModels(true)}
                         className="flex items-center gap-1.5 px-2.5 py-1 border border-border rounded text-[11px] text-text-secondary hover:text-amber hover:border-amber/30 transition-colors duration-150"
                     >
                         <RefreshCw size={12} />
                         再取得
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -642,7 +770,7 @@ function ModelSelectionSection() {
                 {/* Subject Model */}
                 <div className="card p-4 space-y-2 accent-bar-amber">
                     <label className="section-label text-[9px]">被験モデル</label>
-                    {hasAnyKey ? (
+                    {hasCatalogModels ? (
                         <ModelPicker
                             availableModels={availableModels}
                             open={subjectOpen}
@@ -657,11 +785,11 @@ function ModelSelectionSection() {
                         />
                     ) : (
                         <div className="space-y-1.5">
-                            <p className="text-[11px] text-text-tertiary">API Key が未設定のため、手動で入力してください。</p>
+                            <p className="text-[11px] text-text-tertiary">利用可能なモデル一覧がないため、手動で入力してください。LM Studio は <code>lmstudio/&lt;model-id&gt;</code> 形式です。</p>
                             <input
                                 value={freeTextSubject}
                                 onChange={(e) => setFreeTextSubject(e.target.value)}
-                                placeholder="例: gpt-4o"
+                                placeholder="例: gpt-4o / lmstudio/openai/gpt-oss-20b"
                                 className="w-full bg-bg border border-border rounded px-3 py-2 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
                             />
                         </div>
@@ -695,6 +823,9 @@ function ModelSelectionSection() {
                             <div className="rounded-md border border-score-high/20 bg-score-high/8 px-3 py-2 text-[11px] text-score-high">
                                 official strict preset により固定されています
                             </div>
+                            <p className="text-[11px] leading-5 text-text-tertiary">
+                                Strict Mode の judge はすべて OpenRouter から実行されます。
+                            </p>
                             <div className="flex flex-wrap gap-1.5">
                                 {strictPreset.judgeModels.map((judge) => (
                                     <span key={judge.id} className="flex items-center gap-1 rounded bg-surface-hover px-2 py-1 text-[11px] text-text-secondary">
@@ -704,7 +835,7 @@ function ModelSelectionSection() {
                                 ))}
                             </div>
                         </div>
-                    ) : hasAnyKey ? (
+                    ) : hasCatalogModels ? (
                         <div className="space-y-2">
                             <ModelPicker
                                 availableModels={availableModels}
@@ -722,14 +853,14 @@ function ModelSelectionSection() {
                                         const model = availableModels.find((m) => m.id === id);
                                         const label = model?.name || id;
                                         return (
-                                            <button
+                                            <Button
                                                 key={id}
                                                 onClick={() => toggleJudgeModel(id)}
                                                 className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber hover:text-score-low transition-colors duration-150"
                                             >
                                                 <span>{label}</span>
                                                 <X size={10} />
-                                            </button>
+                                            </Button>
                                         );
                                     })}
                                 </div>
@@ -737,28 +868,28 @@ function ModelSelectionSection() {
                         </div>
                     ) : (
                         <div className="space-y-1.5">
-                            <p className="text-[11px] text-text-tertiary">API Key が未設定のため、手動で入力してください。</p>
+                            <p className="text-[11px] text-text-tertiary">利用可能なモデル一覧がないため、手動で入力してください。LM Studio は <code>lmstudio/&lt;model-id&gt;</code> 形式です。</p>
                             <div className="flex gap-2">
                                 <input
                                     value={judgeInput}
                                     onChange={(e) => setJudgeInput(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') { addFreeTextJudge(judgeInput); setJudgeInput(''); } }}
-                                placeholder="例: claude-3.5-sonnet"
+                                    placeholder="例: claude-3.5-sonnet / lmstudio/openai/gpt-oss-20b"
                                     className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
                                 />
-                                <button
+                                <Button
                                     onClick={() => { addFreeTextJudge(judgeInput); setJudgeInput(''); }}
                                     className="px-2.5 py-1.5 bg-amber text-bg rounded hover:bg-amber-hover transition-colors duration-150"
                                 >
                                     <Plus size={14} />
-                                </button>
+                                </Button>
                             </div>
                             {freeTextJudges.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mt-1">
                                     {freeTextJudges.map((j) => (
                                         <span key={j} className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber">
                                             {j}
-                                            <button onClick={() => removeFreeTextJudge(j)} className="hover:text-score-low"><X size={10} /></button>
+                                            <Button onClick={() => removeFreeTextJudge(j)} className="hover:text-score-low"><X size={10} /></Button>
                                         </span>
                                     ))}
                                 </div>
@@ -772,6 +903,30 @@ function ModelSelectionSection() {
 }
 
 /* ===================== EVAL PARAMS SECTION ===================== */
+function HolisticSection() {
+    const { runHolistic, setRunHolistic } = useSettingsStore();
+
+    return (
+        <section className="space-y-3 animate-fade-up stagger-5">
+            <h2 className="section-label">包括評価</h2>
+            <button
+                onClick={() => setRunHolistic(!runHolistic)}
+                className="card p-5 w-full text-left cursor-pointer hover:border-border-focus transition-colors duration-150"
+            >
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <p className="text-[12px] font-medium text-text-primary mb-0.5">文体・言語運用の横断評価</p>
+                        <p className="text-[12px] text-text-secondary">全タスク完了後、creativeタスクを除く出力をまとめてjudgeに渡し、文体・語の選択・読みやすさを評価します</p>
+                    </div>
+                    <div className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${runHolistic ? 'bg-amber' : 'bg-border'}`}>
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${runHolistic ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                    </div>
+                </div>
+            </button>
+        </section>
+    );
+}
+
 function EvalParamsSection() {
     const { evaluationMode, strictPreset, evalParams, setJudgeRunCount, setSubjectTemperature } = useSettingsStore();
     const isStrict = evaluationMode === 'strict' && !!strictPreset;
@@ -839,8 +994,14 @@ function EvalParamsSection() {
 }
 
 /* ===================== TASK SELECTION SECTION ===================== */
+const TOOL_MODE_OPTIONS: { value: ToolMode; label: string }[] = [
+    { value: 'auto', label: 'auto' },
+    { value: 'native', label: 'native' },
+    { value: 'text', label: 'text' },
+];
+
 function TaskSelectionSection() {
-    const { evaluationMode, strictPreset, tasks, tasksLoading, selectedTaskIds, toggleTask, selectAllTasks, deselectAllTasks } = useSettingsStore();
+    const { evaluationMode, strictPreset, tasks, tasksLoading, selectedTaskIds, taskToolModeOverrides, toggleTask, selectAllTasks, deselectAllTasks, setTaskToolMode } = useSettingsStore();
     const isStrict = evaluationMode === 'strict' && !!strictPreset;
 
     return (
@@ -853,20 +1014,20 @@ function TaskSelectionSection() {
                     </span>
                 </h2>
                 <div className="flex gap-1.5">
-                    <button
+                    <Button
                         onClick={selectAllTasks}
                         disabled={isStrict}
-                        className="px-2.5 py-1 rounded text-[11px] text-amber bg-amber-dim hover:bg-amber/15 transition-colors duration-150"
+                        className="px-2.5 py-1 rounded text-[11px] transition-colors duration-150 text-amber border border-amber/30 hover:bg-amber-dim"
                     >
                         すべて選択
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={deselectAllTasks}
                         disabled={isStrict}
-                        className="px-2.5 py-1 rounded text-[11px] text-text-secondary border border-border hover:border-border-focus transition-colors duration-150"
+                        className="px-2.5 py-1 rounded text-[11px] transition-colors duration-150 text-amber border border-amber/30 hover:bg-amber-dim"
                     >
                         すべて解除
-                    </button>
+                    </Button>
                 </div>
             </div>
             {isStrict && (
@@ -884,7 +1045,7 @@ function TaskSelectionSection() {
                     {tasks.map((task, i) => {
                         const isSelected = selectedTaskIds.includes(task.id);
                         return (
-                            <button
+                            <Button
                                 key={task.id}
                                 onClick={() => toggleTask(task.id)}
                                 disabled={isStrict}
@@ -903,10 +1064,33 @@ function TaskSelectionSection() {
                                         <span className={`px-1.5 py-0 rounded text-[10px] font-medium ${TASK_TYPE_STYLE[task.type] || 'bg-surface-hover text-text-secondary'}`}>
                                             {TASK_TYPE_LABELS[task.type] || task.type}
                                         </span>
+                                        {task.toolMode && (
+                                            <div
+                                                className={`ml-auto flex items-center gap-0.5 rounded-full border border-border bg-surface-hover p-0.5 transition-opacity duration-150 ${isSelected ? 'opacity-100' : 'opacity-40'}`}
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                {TOOL_MODE_OPTIONS.map((opt) => {
+                                                    const effective = taskToolModeOverrides[task.id] ?? task.toolMode;
+                                                    const active = effective === opt.value;
+                                                    return (
+                                                        <Button
+                                                            key={opt.value}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setTaskToolMode(task.id, opt.value);
+                                                            }}
+                                                            className={`px-2 py-0.5 rounded-full text-[10px] font-mono transition-colors duration-100 ${active ? 'bg-amber text-bg' : 'text-text-tertiary hover:text-text-secondary'}`}
+                                                        >
+                                                            {opt.label}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                     <p className="text-[12px] text-text-tertiary truncate">{task.promptPreview}</p>
                                 </div>
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>

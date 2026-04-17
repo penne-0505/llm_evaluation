@@ -14,6 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from core.app_paths import AppPaths
+from core.provider_config_store import ProviderConfigStore
 from core.secrets_store import SecretsStore
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class ModelCatalog:
     """Fetch and cache provider model lists."""
 
     CACHE_PATH: Path | None = None
-    PROVIDERS = ("openai", "anthropic", "gemini", "openrouter")
+    PROVIDERS = ("openai", "anthropic", "gemini", "openrouter", "lmstudio")
     DEFAULT_TTL_SECONDS = 21600
     TTL_ENV_NAME = "LLM_BENCHMARK_MODEL_CATALOG_TTL_SECONDS"
     FETCH_TIMEOUT_SECONDS = 20
@@ -89,6 +90,14 @@ class ModelCatalog:
                     catalog["missing_keys"].append("OPENROUTER_API_KEY")
                 else:
                     fetch_specs[provider] = (api_key, cls._fetch_openrouter_models)
+            elif provider == "lmstudio":
+                base_url = cls._lmstudio_base_url()
+                api_token = api_keys.get("lmstudio")
+                if base_url:
+                    fetch_specs[provider] = (
+                        {"base_url": base_url, "api_token": api_token},
+                        cls._fetch_lmstudio_models,
+                    )
 
         fetched_models: Dict[str, List[Dict[str, Any]]] = {}
         fetch_errors: Dict[str, str] = {}
@@ -150,8 +159,13 @@ class ModelCatalog:
         for provider in cls.PROVIDERS:
             api_key = api_keys.get(provider)
             models = cls._cached_provider_models(cached, provider)
-            if not api_key:
-                catalog["missing_keys"].append(cls._provider_env_key(provider))
+            has_access = bool(api_key)
+            if provider == "lmstudio":
+                has_access = bool(cls._lmstudio_base_url())
+
+            if not has_access:
+                if provider != "lmstudio":
+                    catalog["missing_keys"].append(cls._provider_env_key(provider))
                 models = []
 
             catalog["providers"][provider] = {
@@ -236,6 +250,26 @@ class ModelCatalog:
                     },
                 }
             )
+        return models
+
+    @classmethod
+    def _fetch_lmstudio_models(cls, settings: Dict[str, Any]) -> List[Dict[str, Any]]:
+        base_url = str(settings.get("base_url") or "").rstrip("/")
+        api_token = str(settings.get("api_token") or "").strip()
+        headers: Dict[str, str] = {}
+        if api_token:
+            headers["Authorization"] = f"Bearer {api_token}"
+        data = cls._fetch_json(url=f"{base_url}/models", headers=headers)
+
+        models = []
+        for item in data.get("data", []):
+            model_id = str(item.get("id") or "").strip()
+            if not model_id:
+                continue
+            prefixed_id = (
+                model_id if model_id.startswith("lmstudio/") else f"lmstudio/{model_id}"
+            )
+            models.append({"id": prefixed_id})
         return models
 
     @classmethod
@@ -378,8 +412,22 @@ class ModelCatalog:
             "anthropic": "ANTHROPIC_API_KEY",
             "gemini": "GEMINI_API_KEY",
             "openrouter": "OPENROUTER_API_KEY",
+            "lmstudio": "LMSTUDIO_API_TOKEN",
         }
         return mapping.get(provider, provider.upper())
+
+    @staticmethod
+    def _lmstudio_base_url() -> str | None:
+        config = ProviderConfigStore.load_provider("lmstudio")
+        base_url = str(config.get("base_url") or "").strip() or os.getenv(
+            "LMSTUDIO_BASE_URL"
+        )
+        if not base_url:
+            return None
+        normalized = base_url.rstrip("/")
+        if normalized.endswith("/v1"):
+            return normalized
+        return f"{normalized}/v1"
 
     @staticmethod
     def _unique_sorted(models: List[str]) -> List[str]:
