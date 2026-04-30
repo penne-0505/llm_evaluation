@@ -24,7 +24,7 @@ class ModelCatalog:
     """Fetch and cache provider model lists."""
 
     CACHE_PATH: Path | None = None
-    PROVIDERS = ("openai", "anthropic", "gemini", "openrouter", "lmstudio")
+    PROVIDERS = ("openrouter", "lmstudio")
     DEFAULT_TTL_SECONDS = 21600
     TTL_ENV_NAME = "LLM_BENCHMARK_MODEL_CATALOG_TTL_SECONDS"
     FETCH_TIMEOUT_SECONDS = 20
@@ -63,28 +63,7 @@ class ModelCatalog:
 
         fetch_specs: Dict[str, tuple[str, Any]] = {}
         for provider in cls.PROVIDERS:
-            if provider == "openai":
-                api_key = api_keys.get("openai")
-                if not api_key:
-                    catalog["missing_keys"].append("OPENAI_API_KEY")
-                else:
-                    fetch_specs[provider] = (api_key, cls._fetch_openai_models)
-
-            elif provider == "anthropic":
-                api_key = api_keys.get("anthropic")
-                if not api_key:
-                    catalog["missing_keys"].append("ANTHROPIC_API_KEY")
-                else:
-                    fetch_specs[provider] = (api_key, cls._fetch_anthropic_models)
-
-            elif provider == "gemini":
-                api_key = api_keys.get("gemini")
-                if not api_key:
-                    catalog["missing_keys"].append("GEMINI_API_KEY")
-                else:
-                    fetch_specs[provider] = (api_key, cls._fetch_gemini_models)
-
-            elif provider == "openrouter":
+            if provider == "openrouter":
                 api_key = api_keys.get("openrouter")
                 if not api_key:
                     catalog["missing_keys"].append("OPENROUTER_API_KEY")
@@ -408,9 +387,6 @@ class ModelCatalog:
     @staticmethod
     def _provider_env_key(provider: str) -> str:
         mapping = {
-            "openai": "OPENAI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "gemini": "GEMINI_API_KEY",
             "openrouter": "OPENROUTER_API_KEY",
             "lmstudio": "LMSTUDIO_API_TOKEN",
         }

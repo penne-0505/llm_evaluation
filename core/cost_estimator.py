@@ -25,6 +25,32 @@ def summarize_benchmark_usage(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     return summarize_usage_records(usage_records)
 
 
+def summarize_subject_usage(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """被検モデル（subject）のみの usage サマリーを構築する。"""
+    usage_records: List[Dict[str, Any]] = []
+
+    for task in tasks:
+        subject_usage = task.get("subject_usage")
+        if isinstance(subject_usage, dict):
+            usage_records.append(subject_usage)
+
+    return summarize_usage_records(usage_records)
+
+
+def summarize_judge_usage(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Judge モデルのみの usage サマリーを構築する。"""
+    usage_records: List[Dict[str, Any]] = []
+
+    for task in tasks:
+        for judge_result in task.get("judge_results", {}).values():
+            for run in judge_result.get("runs", []):
+                usage = run.get("usage")
+                if isinstance(usage, dict):
+                    usage_records.append(usage)
+
+    return summarize_usage_records(usage_records)
+
+
 def summarize_usage_records(usage_records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     """usage レコード群をモデル単位に集計し、価格が分かるものだけ推定コストを計算する。"""
     grouped: dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -50,6 +76,7 @@ def summarize_usage_records(usage_records: Iterable[Dict[str, Any]]) -> Dict[str
                 "priced_call_count": 0,
                 "unpriced_call_count": 0,
                 "pricing_source": None,
+                "duration_ms": 0,
             }
 
         group = grouped[key]
@@ -66,6 +93,10 @@ def summarize_usage_records(usage_records: Iterable[Dict[str, Any]]) -> Dict[str
             value = _coerce_int(usage.get(token_key))
             group[token_key] += value
             totals[token_key] += value
+
+        duration_ms = _coerce_int(usage.get("duration_ms"))
+        group["duration_ms"] += duration_ms
+        totals["total_duration_ms"] += duration_ms
 
         estimated_cost, pricing_source = estimate_usage_cost(usage)
         if estimated_cost is None:
@@ -124,23 +155,60 @@ def estimate_usage_cost(usage: Dict[str, Any]) -> Tuple[Optional[float], Optiona
     return estimated_cost, pricing_source
 
 
-def _lookup_pricing(
-    provider: str, model: str
-) -> Optional[Tuple[float, float, str]]:
-    if provider != "openrouter":
-        return None
-
-    entry = ModelCatalog.find_model_entry(provider, model)
+def _extract_pricing(entry: Optional[Dict[str, Any]]) -> Optional[Tuple[float, float, str]]:
     if not entry:
         return None
-
     pricing = entry.get("pricing", {})
     prompt_price = _coerce_float(pricing.get("prompt"))
     completion_price = _coerce_float(pricing.get("completion"))
     if prompt_price is None or completion_price is None:
         return None
-
     return prompt_price, completion_price, "openrouter_catalog"
+
+
+_PROVIDER_TO_VENDOR = {
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "gemini": "google",
+    "lmstudio": "lmstudio",
+}
+
+
+def _lookup_pricing(
+    provider: str, model: str
+) -> Optional[Tuple[float, float, str]]:
+    # 1. OpenRouter プロバイダの場合は直接検索
+    if provider == "openrouter":
+        pricing = _extract_pricing(ModelCatalog.find_model_entry(provider, model))
+        if pricing:
+            return pricing
+
+    # 2. その他のプロバイダ: OpenRouter カタログをフォールバックとして使用
+    # OpenRouter は通常 {vendor}/{model} 形式でモデルを登録している
+    candidates = []
+
+    # provider名がOpenRouter上のvendor名と一致する場合
+    if provider in ("openai", "anthropic", "google", "meta", "mistral", "microsoft", "deepseek", "x-ai"):
+        candidates.append(f"{provider}/{model}")
+
+    # provider → vendor マッピングを使った検索 (例: gemini → google)
+    vendor = _PROVIDER_TO_VENDOR.get(provider)
+    if vendor and vendor != provider:
+        candidates.append(f"{vendor}/{model}")
+
+    # モデル名が既に vendor/model 形式の場合 (例: openai/gpt-4o)
+    if "/" in model and not model.startswith(("openrouter/", "lmstudio/")):
+        candidates.append(model)
+
+    # provider名をプレフィックスに付けた場合（lmstudioなどの特殊ケース）
+    candidates.append(f"{provider}/{model}")
+
+    for candidate in candidates:
+        pricing = _extract_pricing(ModelCatalog.find_model_entry("openrouter", candidate))
+        if pricing:
+            return pricing
+
+    return None
 
 
 def _empty_usage_totals() -> Dict[str, Any]:
@@ -154,6 +222,7 @@ def _empty_usage_totals() -> Dict[str, Any]:
         "estimated_cost_usd": 0.0,
         "priced_call_count": 0,
         "unpriced_call_count": 0,
+        "total_duration_ms": 0,
     }
 
 

@@ -1,15 +1,11 @@
 """LLMアダプタモジュール
 
-このモジュールは複数のLLMプロバイダー（OpenAI, Anthropic, Gemini, OpenRouter）に対する
-統一的なインターフェースを提供します。
+このモジュールは OpenRouter と LM Studio に対する統一的なインターフェースを提供します。
 """
 
 from typing import Optional, Dict, Type, List
 
 from .base import CompletionResult, LLMAdapter, LLMError, UsageMetrics
-from .openai_adapter import OpenAIAdapter
-from .anthropic_adapter import AnthropicAdapter
-from .gemini_adapter import GeminiAdapter
 from .openrouter_adapter import OpenRouterAdapter
 from .lmstudio_adapter import LMStudioAdapter
 
@@ -18,9 +14,6 @@ __all__ = [
     "LLMError",
     "CompletionResult",
     "UsageMetrics",
-    "OpenAIAdapter",
-    "AnthropicAdapter",
-    "GeminiAdapter",
     "OpenRouterAdapter",
     "LMStudioAdapter",
     "get_adapter_for_model",
@@ -36,9 +29,6 @@ def get_adapter_for_model(
     モデル名から適切なアダプタを返す
 
     判定ルール:
-    - gpt-*, o1*, o3*, o4* → OpenAIAdapter
-    - claude-* → AnthropicAdapter
-    - gemini-* → GeminiAdapter
     - openrouter/*, or/* → OpenRouterAdapter
     - lmstudio/* → LMStudioAdapter
 
@@ -50,13 +40,7 @@ def get_adapter_for_model(
     """
     model_lower = model_name.lower()
 
-    if any(model_lower.startswith(p) for p in ["gpt-", "o1", "o3", "o4"]):
-        return OpenAIAdapter(api_key=api_key)
-    elif model_lower.startswith("claude-"):
-        return AnthropicAdapter(api_key=api_key)
-    elif model_lower.startswith("gemini-"):
-        return GeminiAdapter(api_key=api_key)
-    elif any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
+    if any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
         return OpenRouterAdapter(api_key=api_key)
     elif model_lower.startswith("lmstudio/"):
         return LMStudioAdapter(api_key=api_key)
@@ -70,21 +54,9 @@ def get_all_available_adapters() -> Dict[str, LLMAdapter]:
 
     Returns:
         ファミリー名をキーとするアダプタの辞書
-        例: {"openai": OpenAIAdapter(), "anthropic": AnthropicAdapter(), ...}
+        例: {"openrouter": OpenRouterAdapter(), "lmstudio": LMStudioAdapter()}
     """
     adapters = {}
-
-    openai = OpenAIAdapter()
-    if openai.is_available():
-        adapters["openai"] = openai
-
-    anthropic = AnthropicAdapter()
-    if anthropic.is_available():
-        adapters["anthropic"] = anthropic
-
-    gemini = GeminiAdapter()
-    if gemini.is_available():
-        adapters["gemini"] = gemini
 
     openrouter = OpenRouterAdapter()
     if openrouter.is_available():
@@ -122,12 +94,6 @@ def get_available_judge_adapters(
 
 def _resolve_api_key(model_name: str, api_keys: Dict[str, str]) -> Optional[str]:
     model_lower = model_name.lower()
-    if any(model_lower.startswith(p) for p in ["gpt-", "o1", "o3", "o4"]):
-        return api_keys.get("openai")
-    if model_lower.startswith("claude-"):
-        return api_keys.get("anthropic")
-    if model_lower.startswith("gemini-"):
-        return api_keys.get("gemini")
     if any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
         return api_keys.get("openrouter")
     if model_lower.startswith("lmstudio/"):

@@ -1,10 +1,7 @@
 // === Providers ===
-export type Provider = 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'lmstudio';
+export type Provider = 'openrouter' | 'lmstudio';
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
-    openai: 'OpenAI',
-    anthropic: 'Anthropic',
-    gemini: 'Gemini',
     openrouter: 'OpenRouter',
     lmstudio: 'LM Studio',
 };
@@ -85,12 +82,68 @@ export interface JudgeEvaluation {
     reasoningSamples: string[];
 }
 
+export interface ToolTraceStep {
+    stepIndex: number;
+    toolName: string;
+    arguments: Record<string, unknown>;
+    resultSummary: string;
+    resultDetail: string;
+    ok: boolean;
+}
+
+export interface UsageSummaryCall {
+    provider: string;
+    model: string;
+    callCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    cacheCreationInputTokens: number;
+    cacheReadInputTokens: number;
+    estimatedCostUsd: number | null;
+    pricedCallCount: number;
+    unpricedCallCount: number;
+    pricingSource: string | null;
+    durationMs: number;
+}
+
+export interface UsageSummary {
+    calls: UsageSummaryCall[];
+    totals: {
+        callCount: number;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        cacheCreationInputTokens: number;
+        cacheReadInputTokens: number;
+        estimatedCostUsd: number | null;
+        pricedCallCount: number;
+        unpricedCallCount: number;
+        pricingStatus: 'available' | 'partial' | 'unavailable';
+        unpricedModels: string[];
+        totalDurationMs: number;
+    };
+}
+
+export interface SubjectUsage {
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCostUsd?: number | null;
+}
+
 // === Results ===
 export interface TaskResult {
     taskId: string;
     taskType: TaskType;
+    inputPrompt: string;
+    subjectPrompt: string;
     subjectResponse: string;
+    subjectUsage: SubjectUsage | null;
     judgeEvaluations: JudgeEvaluation[];
+    toolTrace: ToolTraceStep[];
 }
 
 export interface StrictModeInfo {
@@ -123,6 +176,9 @@ export interface EvaluationRun {
     averageScore: number;
     bestScore: number;
     taskCount: number;
+    usageSummary?: UsageSummary;
+    usageSummarySubject?: UsageSummary;
+    usageSummaryJudge?: UsageSummary;
     /** サマリーから取得した judge 数（詳細ロード前は judgeModels が空のため） */
     judgeCount?: number;
 }

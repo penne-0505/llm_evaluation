@@ -72,6 +72,9 @@ export function startBenchmarkSSE(params: RunParams): SSEConnection {
                         try {
                             handleSSEEvent(event, startTime);
                         } catch (eventError) {
+                            // Intentionally kept: frontend runtime errors during SSE event handling
+                            // are logged to the browser console so developers can diagnose stream
+                            // parsing or state-update issues without depending on the backend logs.
                             console.error('SSE event handling failed', eventError, event);
                             useRunStore.getState().setError(
                                 eventError instanceof Error

@@ -5,6 +5,18 @@ import {
     AlertCircle,
     ChevronDown,
     ChevronUp,
+    FileText,
+    Wrench,
+    CheckCircle,
+    XCircle,
+    DollarSign,
+    Coins,
+    TrendingUp,
+    Clock,
+    Layers,
+    Cpu,
+    Gavel,
+    Timer,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { TASK_TYPE_LABELS, TASK_TYPE_STYLE } from '../lib/taskTypeStyles';
@@ -84,6 +96,20 @@ function computeReviewFlags(run: EvaluationRun): ReviewFlag[] {
 }
 
 export default function ResultDetail({ run }: { run: EvaluationRun }) {
+    // 詳細データが未ロードの場合（リロード後など）は案内を表示
+    if (run.taskResults.length === 0 && run.holisticTaskResults.length === 0) {
+        return (
+            <div className="card p-8 text-center space-y-3 animate-fade-up">
+                <p className="text-[14px] font-medium text-text-secondary">
+                    結果の詳細データが読み込まれていません
+                </p>
+                <p className="text-[12px] text-text-tertiary">
+                    ダッシュボード（結果一覧）から選択し直してください。
+                </p>
+            </div>
+        );
+    }
+
     const summaries = computeJudgeSummaries(run);
     const flags = computeReviewFlags(run);
 
@@ -149,6 +175,8 @@ export default function ResultDetail({ run }: { run: EvaluationRun }) {
             </div>
 
             <ConfidenceGuide />
+
+            <CostSection run={run} />
 
             {/* Per-Task Results */}
             <section className="space-y-2">
@@ -302,11 +330,151 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                         </div>
                     </div>
 
+                    <InputPromptSection inputPrompt={tr.inputPrompt} subjectPrompt={tr.subjectPrompt} />
+                    <ToolTraceSection toolTrace={tr.toolTrace} />
+
                     <div className="space-y-2">
                         {tr.judgeEvaluations.map((je) => (
                             <JudgeEvaluationCard key={je.judgeModelId} je={je} taskType={tr.taskType} />
                         ))}
                     </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ======= Input Prompt Section ======= */
+function InputPromptSection({ inputPrompt, subjectPrompt }: { inputPrompt: string; subjectPrompt: string }) {
+    const [show, setShow] = useState(false);
+    const [showOriginal, setShowOriginal] = useState(false);
+    const effectivePrompt = subjectPrompt || inputPrompt;
+    const hasBoth = subjectPrompt && subjectPrompt !== inputPrompt;
+
+    if (!effectivePrompt) return null;
+
+    return (
+        <div className="space-y-2">
+            <Button
+                onClick={() => setShow(!show)}
+                className="text-[11px] text-ice hover:text-amber transition-colors flex items-center gap-1.5"
+            >
+                {show ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                <FileText size={11} />
+                {show ? 'プロンプトを隠す' : 'プロンプトを表示'}
+            </Button>
+            {show && (
+                <div className="space-y-2 animate-fade-in">
+                    <div className="bg-bg rounded p-3 text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto border border-border">
+                        {effectivePrompt}
+                    </div>
+                    {hasBoth && (
+                        <div>
+                            <Button
+                                onClick={() => setShowOriginal(!showOriginal)}
+                                className="text-[10px] text-text-tertiary hover:text-text-secondary transition-colors flex items-center gap-1"
+                            >
+                                {showOriginal ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                                {showOriginal ? '元のプロンプトを隠す' : '元のプロンプトを表示'}
+                            </Button>
+                            {showOriginal && (
+                                <div className="mt-1 bg-bg rounded p-3 text-[11px] text-text-tertiary leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto border border-border animate-fade-in">
+                                    {inputPrompt}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ======= Tool Trace Section ======= */
+function ToolTraceSection({ toolTrace }: { toolTrace: import('../types').ToolTraceStep[] }) {
+    const [show, setShow] = useState(false);
+    if (toolTrace.length === 0) return null;
+
+    return (
+        <div className="space-y-2">
+            <Button
+                onClick={() => setShow(!show)}
+                className="text-[11px] text-ice hover:text-amber transition-colors flex items-center gap-1.5"
+            >
+                {show ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                <Wrench size={11} />
+                {show ? 'ツール呼び出しを隠す' : 'ツール呼び出しを表示'} ({toolTrace.length})
+            </Button>
+            {show && (
+                <div className="space-y-2 animate-fade-in">
+                    {toolTrace.map((step, i) => (
+                        <ToolTraceStepCard key={i} step={step} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ======= Tool Trace Step Card ======= */
+function ToolTraceStepCard({ step }: { step: import('../types').ToolTraceStep }) {
+    const [showDetail, setShowDetail] = useState(false);
+    const hasDetail = step.resultDetail && step.resultDetail.length > 0;
+    const detailJson = (() => {
+        if (!hasDetail) return null;
+        try {
+            const parsed = JSON.parse(step.resultDetail);
+            return JSON.stringify(parsed, null, 2);
+        } catch {
+            return step.resultDetail;
+        }
+    })();
+
+    return (
+        <div className="bg-bg border border-border rounded-md p-3 space-y-2">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="data-display text-[11px] text-text-primary">Step {step.stepIndex}</span>
+                    <span className="px-1.5 py-0 rounded text-[10px] font-medium bg-surface-hover text-text-secondary">
+                        {step.toolName}
+                    </span>
+                </div>
+                {step.ok ? (
+                    <span className="flex items-center gap-1 text-[10px] text-score-high">
+                        <CheckCircle size={10} /> 成功
+                    </span>
+                ) : (
+                    <span className="flex items-center gap-1 text-[10px] text-score-low">
+                        <XCircle size={10} /> 失敗
+                    </span>
+                )}
+            </div>
+            <div className="space-y-1">
+                <p className="text-[9px] text-text-tertiary uppercase tracking-wider">引数</p>
+                <pre className="bg-surface rounded p-2 text-[10px] text-text-secondary leading-relaxed whitespace-pre-wrap overflow-x-auto">
+                    {JSON.stringify(step.arguments, null, 2)}
+                </pre>
+            </div>
+            <div className="space-y-1">
+                <p className="text-[9px] text-text-tertiary uppercase tracking-wider">結果</p>
+                <div className="bg-surface rounded p-2 text-[10px] text-text-secondary leading-relaxed whitespace-pre-wrap">
+                    {step.resultSummary}
+                </div>
+            </div>
+            {hasDetail && (
+                <div>
+                    <Button
+                        onClick={() => setShowDetail(!showDetail)}
+                        className="text-[10px] text-text-tertiary hover:text-text-secondary transition-colors flex items-center gap-1"
+                    >
+                        {showDetail ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                        {showDetail ? '詳細を隠す' : '詳細を表示'}
+                    </Button>
+                    {showDetail && detailJson && (
+                        <pre className="mt-1 bg-surface rounded p-2 text-[10px] text-text-secondary leading-relaxed whitespace-pre-wrap overflow-x-auto animate-fade-in">
+                            {detailJson}
+                        </pre>
+                    )}
                 </div>
             )}
         </div>
@@ -389,6 +557,271 @@ function ScoreBar({ label, score, maxScore }: { label: string; score: { mean: nu
             </div>
             <GaugeBar value={normalizeScore(score.mean, maxScore)} barClassName={normalizedScoreBg(score.mean, maxScore)} />
             <p className="text-[10px] text-text-tertiary">標準偏差 {score.sd}</p>
+        </div>
+    );
+}
+
+/* ======= Cost Section ======= */
+type CostTab = 'total' | 'subject' | 'judge';
+
+function CostSection({ run }: { run: EvaluationRun }) {
+    const [activeTab, setActiveTab] = useState<CostTab>('total');
+
+    const hasSubjectSummary = !!run.usageSummarySubject;
+    const hasJudgeSummary = !!run.usageSummaryJudge;
+    const hasBreakdown = hasSubjectSummary || hasJudgeSummary;
+
+    // 表示対象のサマリーを選択
+    let us = run.usageSummary;
+    let tabLabel = 'Run全体';
+    if (hasBreakdown) {
+        if (activeTab === 'subject') {
+            us = run.usageSummarySubject;
+            tabLabel = '被検モデル';
+        } else if (activeTab === 'judge') {
+            us = run.usageSummaryJudge;
+            tabLabel = 'Judgeモデル';
+        }
+    }
+
+    if (!us) return null;
+
+    const totalCost = us.totals.estimatedCostUsd;
+
+    // ROI はアクティブなタブのコストで計算
+    const subjectCost = run.usageSummarySubject?.totals.estimatedCostUsd;
+    const judgeCost = run.usageSummaryJudge?.totals.estimatedCostUsd;
+    const hasSubjectCost = subjectCost !== null && subjectCost !== undefined && subjectCost > 0;
+    const hasJudgeCost = judgeCost !== null && judgeCost !== undefined && judgeCost > 0;
+
+    let roiCost: number | undefined;
+    let roiLabel: string;
+    let canCalculateRoi = false;
+
+    if (activeTab === 'subject') {
+        roiCost = hasSubjectCost ? subjectCost : undefined;
+        roiLabel = '被検コスト';
+        canCalculateRoi = hasSubjectCost;
+    } else if (activeTab === 'judge') {
+        roiCost = hasJudgeCost ? judgeCost : undefined;
+        roiLabel = 'Judgeコスト';
+        canCalculateRoi = hasJudgeCost;
+    } else {
+        // Run全体: subject と judge の両方が揃っている場合のみ計算
+        roiCost = (hasSubjectCost && hasJudgeCost) ? (subjectCost as number) + (judgeCost as number) : undefined;
+        roiLabel = '総コスト';
+        canCalculateRoi = hasSubjectCost && hasJudgeCost;
+    }
+
+    const roi = canCalculateRoi && roiCost !== undefined && roiCost > 0 && run.averageScore > 0
+        ? Number((run.averageScore / roiCost).toFixed(1))
+        : undefined;
+
+    const roiSub = roi
+        ? `平均点 / ${roiLabel}`
+        : canCalculateRoi
+            ? '平均点が取得できません'
+            : activeTab === 'total'
+                ? '被検/Judgeいずれかの価格未設定'
+                : `${roiLabel}の価格未設定`;
+
+    // 時間的ROI（タブごとに計算）
+    const subjectDurationMs = run.usageSummarySubject?.totals.totalDurationMs;
+    const judgeDurationMs = run.usageSummaryJudge?.totals.totalDurationMs;
+    const hasSubjectDuration = typeof subjectDurationMs === 'number' && subjectDurationMs > 0;
+    const hasJudgeDuration = typeof judgeDurationMs === 'number' && judgeDurationMs > 0;
+
+    let timeRoiMs: number | undefined;
+    let timeRoiLabel: string;
+    let canCalculateTimeRoi = false;
+
+    if (activeTab === 'subject') {
+        timeRoiMs = hasSubjectDuration ? subjectDurationMs : undefined;
+        timeRoiLabel = '被検時間';
+        canCalculateTimeRoi = hasSubjectDuration;
+    } else if (activeTab === 'judge') {
+        timeRoiMs = hasJudgeDuration ? judgeDurationMs : undefined;
+        timeRoiLabel = 'Judge時間';
+        canCalculateTimeRoi = hasJudgeDuration;
+    } else {
+        // Run全体: 内訳があれば合計、なければ実行時間をフォールバック
+        if (hasSubjectDuration && hasJudgeDuration) {
+            timeRoiMs = subjectDurationMs + judgeDurationMs;
+            timeRoiLabel = '総時間';
+            canCalculateTimeRoi = true;
+        } else {
+            timeRoiMs = run.executionDurationMs ?? undefined;
+            timeRoiLabel = '実行時間';
+            canCalculateTimeRoi = typeof timeRoiMs === 'number' && timeRoiMs > 0;
+        }
+    }
+
+    const timeRoiSec = timeRoiMs ? timeRoiMs / 1000 : undefined;
+    const timeRoi = canCalculateTimeRoi && timeRoiSec && timeRoiSec > 0 && run.averageScore > 0
+        ? Number((run.averageScore / timeRoiSec).toFixed(1))
+        : undefined;
+
+    const timeRoiSub = timeRoi
+        ? `平均点 / ${timeRoiLabel}`
+        : canCalculateTimeRoi
+            ? '平均点が取得できません'
+            : activeTab === 'total'
+                ? '実行時間が記録されていません'
+                : `${timeRoiLabel}が記録されていません`;
+
+    // 実行時間表示（タブごと）
+    const displayDurationMs = activeTab === 'subject'
+        ? subjectDurationMs
+        : activeTab === 'judge'
+            ? judgeDurationMs
+            : (hasSubjectDuration && hasJudgeDuration)
+                ? (subjectDurationMs ?? 0) + (judgeDurationMs ?? 0)
+                : run.executionDurationMs;
+
+    return (
+        <section className="card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+                <h2 className="section-label">コスト・トークン内訳</h2>
+                <span className="text-[10px] text-text-tertiary">
+                    {us.totals.pricingStatus === 'available' ? '実測' : us.totals.pricingStatus === 'partial' ? '一部推定' : '推定不可'}
+                </span>
+            </div>
+
+            {/* Category tabs */}
+            {hasBreakdown && (
+                <div className="border-b border-border">
+                    <div className="flex">
+                        <CostTabButton
+                            active={activeTab === 'total'}
+                            onClick={() => setActiveTab('total')}
+                            icon={<Layers size={13} />}
+                            label="Run全体"
+                        />
+                        <CostTabButton
+                            active={activeTab === 'subject'}
+                            onClick={() => setActiveTab('subject')}
+                            icon={<Cpu size={13} />}
+                            label="被検モデル"
+                        />
+                        <CostTabButton
+                            active={activeTab === 'judge'}
+                            onClick={() => setActiveTab('judge')}
+                            icon={<Gavel size={13} />}
+                            label="Judgeモデル"
+                        />
+                    </div>
+                </div>
+            )}
+
+            {!hasBreakdown && (
+                <p className="text-[10px] text-text-tertiary">
+                    ※旧フォーマットの結果のため、カテゴリ別内訳は表示できません
+                </p>
+            )}
+
+            {/* Summary cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <CostCard
+                    icon={<DollarSign size={12} />}
+                    label="推定コスト"
+                    value={totalCost !== null && totalCost !== undefined ? `$${totalCost.toFixed(4)}` : '—'}
+                    sub={`${us.totals.pricedCallCount}/${us.totals.callCount} 通算`}
+                />
+                <CostCard
+                    icon={<Coins size={12} />}
+                    label="総トークン"
+                    value={us.totals.totalTokens.toLocaleString()}
+                    sub={`入${us.totals.inputTokens.toLocaleString()} / 出${us.totals.outputTokens.toLocaleString()}`}
+                />
+                <CostCard
+                    icon={<TrendingUp size={12} />}
+                    label="コストROI"
+                    value={roi ? `${roi} 点/$` : '—'}
+                    sub={roiSub}
+                />
+                <CostCard
+                    icon={<Timer size={12} />}
+                    label="時間ROI"
+                    value={timeRoi ? `${timeRoi} 点/秒` : '—'}
+                    sub={timeRoiSub}
+                />
+                <CostCard
+                    icon={<Clock size={12} />}
+                    label="実行時間"
+                    value={typeof displayDurationMs === 'number' && displayDurationMs > 0 ? `${(displayDurationMs / 1000).toFixed(1)}s` : '—'}
+                    sub={activeTab === 'total' && !(hasSubjectDuration && hasJudgeDuration) ? 'Run全体' : ''}
+                />
+            </div>
+
+            {/* Per-model breakdown */}
+            {us.calls.length > 0 && (
+                <div className="space-y-1.5">
+                    <p className="text-[9px] text-text-tertiary uppercase tracking-wider">
+                        {tabLabel} モデル別内訳
+                    </p>
+                    <div className="space-y-1.5">
+                        {us.calls.map((call, i) => (
+                            <div key={i} className="bg-bg rounded border border-border p-2.5 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="data-display text-[11px] text-text-primary">{call.model}</span>
+                                        <span className="px-1.5 py-0 rounded text-[9px] font-medium bg-surface-hover text-text-secondary">{call.provider}</span>
+                                    </div>
+                                    <span className="data-display text-[11px] text-text-secondary">
+                                        {call.estimatedCostUsd !== null ? `$${call.estimatedCostUsd.toFixed(4)}` : '—'}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-[10px] text-text-tertiary">
+                                    <span>呼出 {call.callCount} 回</span>
+                                    <span>入 {call.inputTokens.toLocaleString()} tk</span>
+                                    <span>出 {call.outputTokens.toLocaleString()} tk</span>
+                                </div>
+                                {call.unpricedCallCount > 0 && (
+                                    <p className="text-[9px] text-score-mid">{call.unpricedCallCount} 回は価格未設定のため推定不能</p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {us.totals.unpricedModels.length > 0 && (
+                <p className="text-[10px] text-score-mid">
+                    価格未設定モデル: {us.totals.unpricedModels.join(', ')}
+                </p>
+            )}
+        </section>
+    );
+}
+
+function CostTabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+    return (
+        <button
+            onClick={onClick}
+            className={`relative flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-medium transition-colors select-none ${
+                active
+                    ? 'text-primary'
+                    : 'text-text-tertiary hover:text-text-secondary'
+            }`}
+        >
+            {icon}
+            {label}
+            {active && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-t-sm" />
+            )}
+        </button>
+    );
+}
+
+function CostCard({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub: string }) {
+    return (
+        <div className="bg-bg rounded border border-border p-3 space-y-1">
+            <div className="flex items-center gap-1 text-text-tertiary">
+                {icon}
+                <span className="text-[9px] uppercase tracking-wider">{label}</span>
+            </div>
+            <p className="data-display text-[13px] text-text-primary">{value}</p>
+            {sub && <p className="text-[9px] text-text-tertiary">{sub}</p>}
         </div>
     );
 }

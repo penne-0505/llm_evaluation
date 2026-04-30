@@ -26,6 +26,7 @@ class UsageMetrics:
     total_tokens: int | None = None
     cache_creation_input_tokens: int | None = None
     cache_read_input_tokens: int | None = None
+    duration_ms: int | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -36,6 +37,7 @@ class UsageMetrics:
             "total_tokens": self.total_tokens,
             "cache_creation_input_tokens": self.cache_creation_input_tokens,
             "cache_read_input_tokens": self.cache_read_input_tokens,
+            "duration_ms": self.duration_ms,
         }
 
 
@@ -143,12 +145,17 @@ class LLMAdapter(ABC):
         user_prompt: str,
         temperature: float = 0.0,
         max_tokens: int = 1024,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
         return CompletionResult(
             text=self.complete_with_model(
                 model, system_prompt, user_prompt, temperature, max_tokens
             )
         )
+
+    def is_reasoning_opt_in(self, model: str) -> bool:
+        """モデルがopt-inでreasoningを有効にできるか判定（デフォルトFalse）"""
+        return False
 
     def supports_native_tools(self) -> bool:
         return False
@@ -160,6 +167,7 @@ class LLMAdapter(ABC):
         tools: List[Dict[str, Any]],
         temperature: float = 0.0,
         max_tokens: int = 4096,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
         raise NativeToolsNotSupportedError(
             f"{self.__class__.__name__} does not support native tool calling"

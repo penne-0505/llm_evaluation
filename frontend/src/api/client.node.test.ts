@@ -82,6 +82,12 @@ test('convertBenchmarkResult ignores judge results without aggregated payload an
     assert.equal(converted.taskResults.length, 1);
     assert.equal(converted.taskResults[0]?.judgeEvaluations.length, 1);
     assert.equal(converted.taskResults[0]?.judgeEvaluations[0]?.judgeModelId, 'judge-ok');
+    assert.equal(converted.taskResults[0]?.inputPrompt, 'prompt');
+    assert.equal(converted.taskResults[0]?.subjectPrompt, '');
+    assert.deepStrictEqual(converted.taskResults[0]?.toolTrace, []);
     assert.equal(converted.holisticTaskResults.length, 1);
     assert.equal(converted.holisticTaskResults[0]?.judgeEvaluations.length, 0);
+    assert.equal(converted.holisticTaskResults[0]?.inputPrompt, 'holistic prompt');
+    assert.equal(converted.holisticTaskResults[0]?.subjectPrompt, '');
+    assert.deepStrictEqual(converted.holisticTaskResults[0]?.toolTrace, []);
 });

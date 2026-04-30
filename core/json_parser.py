@@ -18,7 +18,7 @@ class JudgeResponseParser:
     期待されるスキーマ:
     {
         "task_name": str,
-        "task_type": "fact" | "creative" | "speculative",
+        "task_type": "fact" | "creative" | "speculative" | "holistic",
         "inferred_task_type": str | null,
         "weights": {...},
         "score": {...},
@@ -66,7 +66,7 @@ class JudgeResponseParser:
                 raise ParseError(f"必須フィールド '{field}' が存在しません")
 
         # task_typeの検証
-        valid_task_types = ["fact", "creative", "speculative"]
+        valid_task_types = ["fact", "creative", "speculative", "holistic"]
         if data["task_type"] not in valid_task_types:
             raise ParseError(f"無効なtask_type: {data['task_type']}")
 

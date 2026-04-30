@@ -2,8 +2,10 @@
 
 import json
 import os
+import time
 from typing import Any, Dict, List, Optional
 
+import requests
 from openai import OpenAI, OpenAIError
 
 from core.provider_config_store import ProviderConfigStore
@@ -25,6 +27,7 @@ class LMStudioAdapter(LLMAdapter):
     PROVIDER = "lmstudio"
     DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
     PLACEHOLDER_API_KEY = "lm-studio"
+    _models_cache: Optional[Dict[str, Any]] = None
 
     def __init__(
         self,
@@ -106,6 +109,7 @@ class LMStudioAdapter(LLMAdapter):
         user_prompt: str,
         temperature: float = 0.0,
         max_tokens: int = 1024,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
         if not self.is_available() or self._client is None:
             raise LLMError("LM Studio の base URL が設定されていません")
@@ -113,15 +117,21 @@ class LMStudioAdapter(LLMAdapter):
         normalized_model = self._normalize_model_name(model)
 
         try:
-            response = self._client.chat.completions.create(
-                model=normalized_model,
-                messages=[
+            kwargs: Dict[str, Any] = {
+                "model": normalized_model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if extra_params:
+                kwargs["extra_body"] = extra_params
+
+            start = time.perf_counter()
+            response = self._client.chat.completions.create(**kwargs)
+            duration_ms = int((time.perf_counter() - start) * 1000)
 
             usage = getattr(response, "usage", None)
             return CompletionResult(
@@ -132,6 +142,7 @@ class LMStudioAdapter(LLMAdapter):
                     input_tokens=getattr(usage, "prompt_tokens", None),
                     output_tokens=getattr(usage, "completion_tokens", None),
                     total_tokens=getattr(usage, "total_tokens", None),
+                    duration_ms=duration_ms,
                 )
                 if usage is not None
                 else None,
@@ -151,6 +162,7 @@ class LMStudioAdapter(LLMAdapter):
         tools: List[Dict[str, Any]],
         temperature: float = 0.0,
         max_tokens: int = 4096,
+        extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
         if not self.is_available() or self._client is None:
             raise LLMError("LM Studio の base URL が設定されていません")
@@ -158,14 +170,21 @@ class LMStudioAdapter(LLMAdapter):
         normalized_model = self._normalize_model_name(model)
 
         try:
-            response = self._client.chat.completions.create(
-                model=normalized_model,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            kwargs: Dict[str, Any] = {
+                "model": normalized_model,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": "auto",
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if extra_params:
+                kwargs["extra_body"] = extra_params
+
+            start = time.perf_counter()
+            response = self._client.chat.completions.create(**kwargs)
+            duration_ms = int((time.perf_counter() - start) * 1000)
+
             message = response.choices[0].message
             tool_calls = []
             for tc in message.tool_calls or []:
@@ -191,6 +210,7 @@ class LMStudioAdapter(LLMAdapter):
                     input_tokens=getattr(usage, "prompt_tokens", None),
                     output_tokens=getattr(usage, "completion_tokens", None),
                     total_tokens=getattr(usage, "total_tokens", None),
+                    duration_ms=duration_ms,
                 )
                 if usage is not None
                 else None,
@@ -204,3 +224,42 @@ class LMStudioAdapter(LLMAdapter):
             raise LLMError(f"LM Studio APIエラー: {err}") from e
         except Exception as e:
             raise LLMError(f"予期しないエラー: {str(e)}") from e
+
+    def _fetch_models_cache(self) -> Optional[Dict[str, Any]]:
+        if LMStudioAdapter._models_cache is not None:
+            return LMStudioAdapter._models_cache
+        if not self._base_url:
+            return None
+        # /v1 エンドポイントを除き、ネイティブ /api/v1/models を使用
+        base = self._base_url.rstrip("/")
+        if base.endswith("/v1"):
+            base = base[:-3]
+        url = f"{base}/api/v1/models"
+        token = self._api_key or self.PLACEHOLDER_API_KEY
+        try:
+            resp = requests.get(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            LMStudioAdapter._models_cache = {
+                m["key"]: m for m in data.get("models", [])
+            }
+            return LMStudioAdapter._models_cache
+        except Exception:
+            return None
+
+    def is_reasoning_opt_in(self, model: str) -> bool:
+        models = self._fetch_models_cache()
+        if models is None:
+            return False
+        normalized = self._normalize_model_name(model)
+        info = models.get(normalized)
+        if not info:
+            return False
+        reasoning = info.get("capabilities", {}).get("reasoning")
+        if reasoning is None:
+            return False
+        return reasoning.get("default") == "off"

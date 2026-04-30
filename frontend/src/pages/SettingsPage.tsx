@@ -28,7 +28,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Button from '../components/Button';
 
-const CLOUD_PROVIDERS: Provider[] = ['openai', 'anthropic', 'gemini', 'openrouter'];
+const CLOUD_PROVIDERS: Provider[] = ['openrouter'];
 
 type ModelPickerProps = {
     availableModels: ReturnType<typeof useSettingsStore.getState>['availableModels'];
@@ -165,6 +165,7 @@ export default function SettingsPage() {
             <ModelSelectionSection />
             <EvalParamsSection />
             <HolisticSection />
+            <ParallelSection />
             <TaskSelectionSection />
             <RunLinkSection />
         </div>
@@ -902,7 +903,7 @@ function ModelSelectionSection() {
     );
 }
 
-/* ===================== EVAL PARAMS SECTION ===================== */
+/* ===================== HOLISTIC SECTION ===================== */
 function HolisticSection() {
     const { runHolistic, setRunHolistic } = useSettingsStore();
 
@@ -923,6 +924,47 @@ function HolisticSection() {
                     </div>
                 </div>
             </button>
+        </section>
+    );
+}
+
+/* ===================== PARALLEL SECTION ===================== */
+function ParallelSection() {
+    const { subjectParallel, setSubjectParallel, judgeParallel, setJudgeParallel } = useSettingsStore();
+
+    return (
+        <section className="space-y-3 animate-fade-up stagger-5">
+            <h2 className="section-label">並列実行設定</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <button
+                    onClick={() => setSubjectParallel(!subjectParallel)}
+                    className="card p-5 w-full text-left cursor-pointer hover:border-border-focus transition-colors duration-150"
+                >
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <p className="text-[12px] font-medium text-text-primary mb-0.5">被検モデル並列実行</p>
+                            <p className="text-[12px] text-text-secondary">OFF にするとタスクを1つずつ順次実行します（ローカルLLM向け）</p>
+                        </div>
+                        <div className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${subjectParallel ? 'bg-amber' : 'bg-border'}`}>
+                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${subjectParallel ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                        </div>
+                    </div>
+                </button>
+                <button
+                    onClick={() => setJudgeParallel(!judgeParallel)}
+                    className="card p-5 w-full text-left cursor-pointer hover:border-border-focus transition-colors duration-150"
+                >
+                    <div className="flex items-center justify-between gap-4">
+                        <div>
+                            <p className="text-[12px] font-medium text-text-primary mb-0.5">評価モデル並列実行</p>
+                            <p className="text-[12px] text-text-secondary">OFF にすると judge も1モデル・1回ずつ順次評価します</p>
+                        </div>
+                        <div className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${judgeParallel ? 'bg-amber' : 'bg-border'}`}>
+                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${judgeParallel ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                        </div>
+                    </div>
+                </button>
+            </div>
         </section>
     );
 }

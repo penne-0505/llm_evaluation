@@ -1,5 +1,6 @@
 """配布向け frontend 配信のテスト"""
 
+import json
 import os
 import tempfile
 import unittest
@@ -94,7 +95,7 @@ class TestPortableResourceResolution(unittest.TestCase):
             "task_type: creative", encoding="utf-8"
         )
         (self.bundled_task_configs / "03.json").write_text(
-            '{"subject_tools": {"enabled_tools": ["web-search"], "fixture_path": "task_fixtures/03.json"}}',
+            '{"subject_tools": {"enabled_tools": ["web_search"], "fixture_path": "task_fixtures/03.json"}}',
             encoding="utf-8",
         )
 
@@ -287,7 +288,7 @@ class TestStrictModeApi(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["id"], "official-v1")
         self.assertEqual(body["judge_runs"], 3)
-        self.assertEqual(body["subject_temperature"], 0.6)
+        self.assertEqual(body["subject_temperature"], 0.45)
         self.assertEqual(body["task_ids"], [f"{i:02d}" for i in range(1, 12)])
         self.assertEqual(
             [judge["id"] for judge in body["judge_models"]],
@@ -545,6 +546,32 @@ class TestResultDeletionApi(unittest.TestCase):
         self.assertFalse(saved_path.exists())
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(list_response.json(), [])
+
+    def test_run_with_empty_target_model_returns_error(self):
+        """空文字の target_model で run した場合、エラーが返されることを確認"""
+        client = TestClient(server.app)
+        with patch.object(
+            server, "_load_tasks", return_value=[{"id": "task-1", "type": "fact", "rubric_file": "/dev/null", "prompt_file": "/dev/null"}]
+        ):
+            response = client.post(
+                "/api/run",
+                json={
+                    "target_model": "",
+                    "judge_models": ["openrouter/openai/gpt-5.4"],
+                    "selected_task_ids": ["task-1"],
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        # SSE ストリームを読む
+        lines = response.text.split("\n")
+        events = []
+        for line in lines:
+            if line.startswith("data: "):
+                events.append(json.loads(line[6:]))
+        # error イベントが含まれる
+        error_events = [e for e in events if e.get("type") == "error"]
+        self.assertTrue(len(error_events) > 0, f"Expected error event, got events={events}")
+        self.assertIn("アダプタまたはAPIキーが見つかりません", error_events[0].get("message", ""))
 
 
 if __name__ == "__main__":

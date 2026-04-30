@@ -19,6 +19,7 @@ import type {
     AxisScore,
     TaskType,
     ToolMode,
+    ToolTraceStep,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -61,9 +62,6 @@ export async function fetchTasks(): Promise<Task[]> {
 // ---------------------------------------------------------------------------
 
 export interface KeyStatus {
-    openai: boolean;
-    anthropic: boolean;
-    gemini: boolean;
     openrouter: boolean;
 }
 
@@ -190,9 +188,6 @@ export interface ModelsResult {
 }
 
 const PROVIDER_MAP: Record<string, Provider> = {
-    openai: 'openai',
-    anthropic: 'anthropic',
-    gemini: 'gemini',
     openrouter: 'openrouter',
     lmstudio: 'lmstudio',
 };
@@ -357,6 +352,38 @@ export async function fetchResultSummaries(): Promise<ResultSummary[]> {
  *     judge_results: Record<judge_model, { runs: Run[], aggregated: Agg }> }
  */
 
+interface RawUsageSummary {
+    calls?: Array<{
+        provider: string;
+        model: string;
+        call_count: number;
+        input_tokens: number;
+        output_tokens: number;
+        total_tokens: number;
+        cache_creation_input_tokens: number;
+        cache_read_input_tokens: number;
+        estimated_cost_usd: number | null;
+        priced_call_count: number;
+        unpriced_call_count: number;
+        pricing_source: string | null;
+        duration_ms: number;
+    }>;
+    totals?: {
+        call_count: number;
+        input_tokens: number;
+        output_tokens: number;
+        total_tokens: number;
+        cache_creation_input_tokens: number;
+        cache_read_input_tokens: number;
+        estimated_cost_usd: number | null;
+        priced_call_count: number;
+        unpriced_call_count: number;
+        pricing_status: 'available' | 'partial' | 'unavailable';
+        unpriced_models: string[];
+        total_duration_ms: number;
+    };
+}
+
 interface RawBenchmarkResult {
     run_id: string;
     target_model: string;
@@ -377,12 +404,9 @@ interface RawBenchmarkResult {
         profile_label?: string | null;
         reasons?: string[];
     };
-    usage_summary?: {
-        totals?: {
-            total_tokens?: number;
-            estimated_cost_usd?: number;
-        };
-    };
+    usage_summary?: RawUsageSummary;
+    usage_summary_subject?: RawUsageSummary;
+    usage_summary_judge?: RawUsageSummary;
     tasks: RawTaskData[];
     holistic_tasks?: RawTaskData[];
     cancelled: boolean;
@@ -396,6 +420,7 @@ interface RawTaskData {
     task_name: string;
     task_type: string;
     input_prompt: string;
+    subject_prompt?: string;
     response: string;
     subject_usage?: {
         model?: string;
@@ -405,6 +430,14 @@ interface RawTaskData {
         output_tokens?: number;
         estimated_cost_usd?: number;
     };
+    tool_trace?: Array<{
+        step_index: number;
+        tool_name: string;
+        arguments: Record<string, unknown>;
+        result_summary: string;
+        result_detail?: string;
+        ok: boolean;
+    }>;
     judge_results: Record<string, RawJudgeResult>;
 }
 
@@ -483,11 +516,85 @@ function convertTask(raw: RawTaskData): TaskResult {
             evaluations.push(converted);
         }
     }
+    const toolTrace: ToolTraceStep[] = (raw.tool_trace || []).map((step) => ({
+        stepIndex: step.step_index,
+        toolName: step.tool_name,
+        arguments: step.arguments,
+        resultSummary: step.result_summary,
+        resultDetail: step.result_detail || '',
+        ok: step.ok,
+    }));
+    const subjectUsage: import('../types').SubjectUsage | null = raw.subject_usage
+        ? {
+              provider: raw.subject_usage.provider || 'unknown',
+              model: raw.subject_usage.model || 'unknown',
+              inputTokens: raw.subject_usage.input_tokens || 0,
+              outputTokens: raw.subject_usage.output_tokens || 0,
+              totalTokens: raw.subject_usage.total_tokens || 0,
+              estimatedCostUsd: raw.subject_usage.estimated_cost_usd ?? null,
+          }
+        : null;
     return {
         taskId: raw.task_name,
         taskType: (raw.task_type || 'fact') as TaskType,
+        inputPrompt: raw.input_prompt || '',
+        subjectPrompt: raw.subject_prompt || '',
         subjectResponse: raw.response || '',
+        subjectUsage,
         judgeEvaluations: evaluations,
+        toolTrace,
+    };
+}
+
+function convertUsageSummary(raw: RawBenchmarkResult['usage_summary']): import('../types').UsageSummary | undefined {
+    if (!raw) return undefined;
+    const rawCalls = raw.calls || [];
+    const rawTotals = raw.totals;
+    return {
+        calls: rawCalls.map((c) => ({
+            provider: c.provider,
+            model: c.model,
+            callCount: c.call_count,
+            inputTokens: c.input_tokens,
+            outputTokens: c.output_tokens,
+            totalTokens: c.total_tokens,
+            cacheCreationInputTokens: c.cache_creation_input_tokens,
+            cacheReadInputTokens: c.cache_read_input_tokens,
+            estimatedCostUsd: c.estimated_cost_usd,
+            pricedCallCount: c.priced_call_count,
+            unpricedCallCount: c.unpriced_call_count,
+            pricingSource: c.pricing_source,
+            durationMs: c.duration_ms ?? 0,
+        })),
+        totals: rawTotals
+            ? {
+                  callCount: rawTotals.call_count,
+                  inputTokens: rawTotals.input_tokens,
+                  outputTokens: rawTotals.output_tokens,
+                  totalTokens: rawTotals.total_tokens,
+                  cacheCreationInputTokens: rawTotals.cache_creation_input_tokens,
+                  cacheReadInputTokens: rawTotals.cache_read_input_tokens,
+                  estimatedCostUsd: rawTotals.estimated_cost_usd,
+                  pricedCallCount: rawTotals.priced_call_count,
+                  unpricedCallCount: rawTotals.unpriced_call_count,
+                  pricingStatus: rawTotals.pricing_status,
+                  unpricedModels: rawTotals.unpriced_models,
+                  totalDurationMs: rawTotals.total_duration_ms ?? 0,
+              }
+            : {
+                  callCount: 0,
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0,
+                  cacheCreationInputTokens: 0,
+                  cacheReadInputTokens: 0,
+                  estimatedCostUsd: null,
+                  pricedCallCount: 0,
+                  unpricedCallCount: 0,
+                  pricingStatus: 'unavailable',
+                  unpricedModels: [],
+                  totalDurationMs: 0,
+              },
     };
 }
 
@@ -532,6 +639,9 @@ export function convertBenchmarkResult(raw: RawBenchmarkResult): EvaluationRun {
         averageScore: raw.average_score ?? 0,
         bestScore: raw.best_score ?? 0,
         taskCount: raw.completed_tasks ?? raw.tasks?.length ?? 0,
+        usageSummary: convertUsageSummary(raw.usage_summary),
+        usageSummarySubject: convertUsageSummary(raw.usage_summary_subject),
+        usageSummaryJudge: convertUsageSummary(raw.usage_summary_judge),
     };
 }
 
@@ -560,10 +670,12 @@ export interface RunParams {
     strictPresetId?: string | null;
     taskToolModeOverrides?: Record<string, string>;
     runHolistic?: boolean;
+    subjectParallel?: boolean;
+    judgeParallel?: boolean;
 }
 
 export function buildRunRequestBody(params: RunParams): string {
-    return JSON.stringify({
+    const body = JSON.stringify({
         target_model: params.targetModel,
         judge_models: params.judgeModels,
         selected_task_ids: params.selectedTaskIds,
@@ -573,7 +685,10 @@ export function buildRunRequestBody(params: RunParams): string {
         strict_preset_id: params.strictPresetId ?? null,
         task_tool_mode_overrides: params.taskToolModeOverrides ?? {},
         run_holistic: params.runHolistic ?? true,
+        subject_parallel: params.subjectParallel ?? true,
+        judge_parallel: params.judgeParallel ?? true,
     });
+    return body;
 }
 
 export async function cancelRun(runId: string): Promise<void> {

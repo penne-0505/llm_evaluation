@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Literal, Optional
 TOOL_CALL_PATTERN = re.compile(
     r"^\s*<tool_call>\s*(\{.*\})\s*</tool_call>\s*$", re.DOTALL
 )
-TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_.\-/]+")
+TOKEN_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
 @dataclass
@@ -82,11 +82,11 @@ def parse_tool_call(text: str) -> Optional[ToolCall]:
 
 
 _OPENAI_TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
-    "web-search": {
+    "web_search": {
         "type": "function",
         "function": {
-            "name": "web-search",
-            "description": "ウェブ検索を実行し、関連する結果スニペットを返す",
+            "name": "web_search",
+            "description": "ウェブ検索を実行し、関連する結果を返す。各結果には url、title、snippet が含まれる。詳細なページ内容を読みたい場合は、結果の url を fetch_webpage に渡してください。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -96,15 +96,15 @@ _OPENAI_TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             },
         },
     },
-    "open-document": {
+    "fetch_webpage": {
         "type": "function",
         "function": {
-            "name": "open-document",
-            "description": "指定したURLの文書を取得して全文を返す",
+            "name": "fetch_webpage",
+            "description": "指定した URL の Web ページを取得して全文を返す。web_search の結果にある url フィールドを使用してください。",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "取得する文書のURL"},
+                    "url": {"type": "string", "description": "取得する Web ページの URL"},
                 },
                 "required": ["url"],
             },
@@ -132,7 +132,7 @@ class LocalToolRuntime:
             f"利用可能なツール: {tools}\n"
             "ツールを使う場合は、回答本文ではなく次の形式だけを返してください。\n"
             "<tool_call>\n"
-            '{"name":"web-search","arguments":{"query":"..."}}\n'
+            '{"name":"web_search","arguments":{"query":"..."}}\n'
             "</tool_call>\n"
             "最終回答では通常の文章だけを返し、参照した根拠の title または URL を明記してください。"
         )
@@ -145,7 +145,7 @@ class LocalToolRuntime:
                 "error": f"unknown tool: {call.name}",
             }
 
-        if call.name == "web-search":
+        if call.name == "web_search":
             query = str(call.arguments.get("query") or "").strip()
             return {
                 "name": call.name,
@@ -154,14 +154,9 @@ class LocalToolRuntime:
                 "results": self._search(query),
             }
 
-        if call.name == "open-document":
-            doc_id = str(
-                call.arguments.get("doc_id")
-                or call.arguments.get("id")
-                or call.arguments.get("url")
-                or ""
-            ).strip()
-            return self._open_document(doc_id)
+        if call.name == "fetch_webpage":
+            url = str(call.arguments.get("url") or "").strip()
+            return self._fetch_webpage(url)
 
         return {
             "name": call.name,
@@ -173,14 +168,14 @@ class LocalToolRuntime:
         if not result.get("ok"):
             return str(result.get("error") or "tool error")
 
-        if result.get("name") == "web-search":
+        if result.get("name") == "web_search":
             titles = [
                 str(item.get("title") or item.get("url") or "")
                 for item in result.get("results", [])[:3]
             ]
             return "; ".join(title for title in titles if title) or "0 results"
 
-        if result.get("name") == "open-document":
+        if result.get("name") == "fetch_webpage":
             return str(result.get("title") or result.get("url") or "document")
 
         return "ok"
@@ -190,6 +185,12 @@ class LocalToolRuntime:
         if len(payload) > self.config.max_result_chars:
             payload = payload[: self.config.max_result_chars] + "..."
         return f"<tool_result>\n{payload}\n</tool_result>"
+
+    def format_result_for_trace(self, result: Dict[str, Any]) -> str:
+        payload = json.dumps(result, ensure_ascii=False)
+        if len(payload) > self.config.max_result_chars:
+            payload = payload[: self.config.max_result_chars] + "..."
+        return payload
 
     def _load_fixture(self) -> Dict[str, Any]:
         if self._fixture is None:
@@ -222,25 +223,20 @@ class LocalToolRuntime:
 
         return []
 
-    def _documents_by_id(self) -> Dict[str, Dict[str, Any]]:
-        by_id: Dict[str, Dict[str, Any]] = {}
+    def _documents_by_url(self) -> Dict[str, Dict[str, Any]]:
+        by_url: Dict[str, Dict[str, Any]] = {}
         for document in self._documents():
             if not isinstance(document, dict):
                 continue
-            doc_id = str(
-                document.get("id")
-                or document.get("doc_id")
-                or document.get("url")
-                or ""
-            ).strip()
-            if doc_id:
-                by_id[doc_id] = document
-        return by_id
+            url = str(document.get("url") or "").strip()
+            if url:
+                by_url[url] = document
+        return by_url
 
     def _search(self, query: str) -> List[Dict[str, Any]]:
-        documents = self._documents_by_id()
+        documents = self._documents_by_url()
         query_tokens = self._tokenize(query)
-        scored: List[tuple[int, int, str, Dict[str, Any]]] = []
+        best_by_url: Dict[str, tuple[int, int, str, Dict[str, Any]]] = {}
 
         for snapshot_index, snapshot in enumerate(self._query_snapshots()):
             if not isinstance(snapshot, dict):
@@ -256,51 +252,55 @@ class LocalToolRuntime:
                 title = str(item.get("title") or "")
                 snippet = str(item.get("snippet") or item.get("content") or "")
                 url = str(item.get("url") or "")
-                doc_id = str(
-                    item.get("doc_id") or url or f"result-{snapshot_index}-{index}"
-                )
-                document = documents.get(doc_id) or documents.get(url) or {}
+                document = documents.get(url) or {}
                 text = str(document.get("text") or "")
                 haystack = " ".join(
                     [snapshot_query, title, snippet, url, text[:400]]
                 ).lower()
                 score = self._score(query_tokens, haystack)
-                scored.append(
-                    (
-                        -score,
-                        int(item.get("rank") or index),
-                        title or url,
-                        {
-                            "doc_id": doc_id,
-                            "title": title,
-                            "url": url,
-                            "snippet": snippet,
-                            "rank": int(item.get("rank") or (index + 1)),
-                            "score": score,
-                            "source_query": snapshot_query,
-                            "source_query_index": snapshot_index,
-                        },
-                    )
+                if score <= 0:
+                    continue
+
+                # 同じ URL はより高いスコアのものだけを保持
+                if url in best_by_url and best_by_url[url][0] >= score:
+                    continue
+
+                best_by_url[url] = (
+                    score,
+                    int(item.get("rank") or index),
+                    title or url,
+                    {
+                        "title": title,
+                        "url": url,
+                        "snippet": snippet,
+                        "rank": int(item.get("rank") or (index + 1)),
+                        "score": score,
+                        "source_query": snapshot_query,
+                        "source_query_index": snapshot_index,
+                    },
                 )
 
+        scored = [
+            (-entry[0], entry[1], entry[2], entry[3])
+            for entry in best_by_url.values()
+        ]
         scored.sort(key=lambda entry: entry[:3])
         return [entry[3] for entry in scored[:5]]
 
-    def _open_document(self, doc_id: str) -> Dict[str, Any]:
-        document = self._documents_by_id().get(doc_id)
+    def _fetch_webpage(self, url: str) -> Dict[str, Any]:
+        document = self._documents_by_url().get(url)
         if document is None:
             return {
-                "name": "open-document",
+                "name": "fetch_webpage",
                 "ok": False,
-                "error": f"document not found: {doc_id}",
+                "error": f"page not found: {url}",
             }
 
         return {
-            "name": "open-document",
+            "name": "fetch_webpage",
             "ok": True,
-            "doc_id": doc_id,
+            "url": url,
             "title": document.get("title"),
-            "url": document.get("url"),
             "source_type": document.get("source_type"),
             "published_at": document.get("published_at"),
             "fetch_status": document.get("fetch_status"),

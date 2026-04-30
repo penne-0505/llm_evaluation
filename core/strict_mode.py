@@ -32,11 +32,11 @@ _OFFICIAL_STRICT_PRESET: Dict[str, Any] = {
             "id": "openrouter/google/gemini-3.1-pro-preview",
             "label": "Gemini 3.1 Pro Preview",
             "provider": "openrouter",
-        }
+        },
     ],
     "task_ids": [f"{i:02d}" for i in range(1, 12)],
     "judge_runs": 3,
-    "subject_temperature": 0.6,
+    "subject_temperature": 0.45,
     "judge_temperature": 0.0,
 }
 

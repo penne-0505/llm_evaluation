@@ -67,6 +67,12 @@ interface SettingsState {
     // Holistic
     runHolistic: boolean;
     setRunHolistic: (v: boolean) => void;
+
+    // Parallel execution
+    subjectParallel: boolean;
+    judgeParallel: boolean;
+    setSubjectParallel: (v: boolean) => void;
+    setJudgeParallel: (v: boolean) => void;
 }
 
 type CloudProvider = Exclude<Provider, 'lmstudio'>;
@@ -119,7 +125,7 @@ export const useSettingsStore = create<SettingsState>()(
             refreshKeyStatus: async () => {
                 try {
                     const status = await fetchKeyStatus();
-                    const providers: CloudProvider[] = ['openai', 'anthropic', 'gemini', 'openrouter'];
+                    const providers: CloudProvider[] = ['openrouter'];
                     const newKeys: Partial<Record<Provider, ApiKeyEntry>> = {};
                     for (const p of providers) {
                         if (status[p]) {
@@ -277,6 +283,12 @@ export const useSettingsStore = create<SettingsState>()(
             // --- Holistic ---
             runHolistic: true,
             setRunHolistic: (v) => set({ runHolistic: v }),
+
+            // --- Parallel execution ---
+            subjectParallel: true,
+            judgeParallel: true,
+            setSubjectParallel: (v) => set({ subjectParallel: v }),
+            setJudgeParallel: (v) => set({ judgeParallel: v }),
         }),
         {
             name: 'llm-eval-settings',
@@ -291,6 +303,8 @@ export const useSettingsStore = create<SettingsState>()(
                 selectedTaskIds: state.selectedTaskIds,
                 taskToolModeOverrides: state.taskToolModeOverrides,
                 runHolistic: state.runHolistic,
+                subjectParallel: state.subjectParallel,
+                judgeParallel: state.judgeParallel,
             }),
         }
     )

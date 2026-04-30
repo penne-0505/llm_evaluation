@@ -18,6 +18,7 @@ from core.tool_runtime import LocalToolRuntime, ToolCall, ToolRuntimeConfig, par
 class SubjectRunResult:
     result: CompletionResult
     tool_trace: List[Dict[str, Any]]
+    subject_prompt: str = ""
 
 
 class TaskResult:
@@ -32,6 +33,7 @@ class TaskResult:
         judge_results: Dict[str, Dict[str, Any]],
         subject_usage: Optional[Dict[str, Any]] = None,
         tool_trace: Optional[List[Dict[str, Any]]] = None,
+        subject_prompt: Optional[str] = None,
     ):
         self.task_name = task_name
         self.task_type = task_type
@@ -40,6 +42,7 @@ class TaskResult:
         self.judge_results = judge_results
         self.subject_usage = subject_usage
         self.tool_trace = tool_trace or []
+        self.subject_prompt = subject_prompt or ""
 
     def to_dict(self) -> Dict[str, Any]:
         """辞書形式に変換"""
@@ -47,6 +50,7 @@ class TaskResult:
             "task_name": self.task_name,
             "task_type": self.task_type,
             "input_prompt": self.input_prompt,
+            "subject_prompt": self.subject_prompt,
             "response": self.response,
             "judge_results": self.judge_results,
             "subject_usage": self.subject_usage,
@@ -64,12 +68,14 @@ class BenchmarkResult:
         judge_models: Dict[str, str],
         judge_runs: int,
         tasks: List[TaskResult],
+        holistic_tasks: Optional[List[TaskResult]] = None,
     ):
         self.run_id = run_id
         self.target_model = target_model
         self.judge_models = judge_models
         self.judge_runs = judge_runs
         self.tasks = tasks
+        self.holistic_tasks = holistic_tasks or []
         self.executed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     def to_dict(self) -> Dict[str, Any]:
@@ -81,6 +87,7 @@ class BenchmarkResult:
             "judge_runs": self.judge_runs,
             "executed_at": self.executed_at,
             "tasks": [task.to_dict() for task in self.tasks],
+            "holistic_tasks": [task.to_dict() for task in self.holistic_tasks],
         }
 
 
@@ -105,6 +112,7 @@ class BenchmarkEngine:
         max_parallel_runs_per_judge: int = 3,
         judge_dispatch_min_interval_sec: float = 0.25,
         judge_dispatch_jitter_sec: float = 0.15,
+        judge_parallel: bool = True,
     ):
         """
         Args:
@@ -117,14 +125,15 @@ class BenchmarkEngine:
             max_parallel_runs_per_judge: 各judgeモデル内のrun並列数
             judge_dispatch_min_interval_sec: 同一judgeモデル内の最小投入間隔(秒)
             judge_dispatch_jitter_sec: 同一judgeモデル内の投入ジッター最大値(秒)
+            judge_parallel: judge評価を並列実行するか
         """
         self.subject_adapter = subject_adapter
         self.subject_model = subject_model
         self.judge_adapters = judge_adapters
         self.judge_runs = judge_runs
-        self.max_parallel_judges = max_parallel_judges
+        self.max_parallel_judges = max_parallel_judges if judge_parallel else 1
         self.judge_fail_fast_threshold = judge_fail_fast_threshold
-        self.max_parallel_runs_per_judge = max_parallel_runs_per_judge
+        self.max_parallel_runs_per_judge = max_parallel_runs_per_judge if judge_parallel else 1
         self.judge_dispatch_min_interval_sec = max(0.0, judge_dispatch_min_interval_sec)
         self.judge_dispatch_jitter_sec = max(0.0, judge_dispatch_jitter_sec)
 
@@ -250,6 +259,7 @@ class BenchmarkEngine:
             if subject_result.usage
             else None,
             tool_trace=subject_run.tool_trace,
+            subject_prompt=subject_run.subject_prompt,
         )
 
     async def _call_subject_llm(
@@ -302,6 +312,10 @@ class BenchmarkEngine:
         tool_trace: List[Dict[str, Any]] = []
         usage_records: List[CompletionResult] = []
 
+        extra_params = None
+        if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
+            extra_params = {"reasoning": {"effort": "medium"}}
+
         for step_index in range(config.max_steps + 1):
             if cancel_checker:
                 cancel_checker()
@@ -313,6 +327,7 @@ class BenchmarkEngine:
                 tools_schema,
                 temperature,
                 4096,
+                extra_params,
             )
             usage_records.append(
                 CompletionResult(text=native_result.content or "", usage=native_result.usage)
@@ -323,6 +338,7 @@ class BenchmarkEngine:
                 return SubjectRunResult(
                     result=self._merge_subject_usage(final_text, usage_records),
                     tool_trace=tool_trace,
+                    subject_prompt=input_prompt,
                 )
 
             if step_index >= config.max_steps:
@@ -331,6 +347,7 @@ class BenchmarkEngine:
                         "[ERROR] tool step limit exceeded before final answer", usage_records
                     ),
                     tool_trace=tool_trace,
+                    subject_prompt=input_prompt,
                 )
 
             # assistant メッセージをそのままmessages配列へ追加
@@ -362,6 +379,7 @@ class BenchmarkEngine:
                     "tool_name": tc.name,
                     "arguments": tc.arguments,
                     "result_summary": runtime.summarize_result(tool_result),
+                    "result_detail": runtime.format_result_for_trace(tool_result),
                     "ok": bool(tool_result.get("ok")),
                 })
                 messages.append({
@@ -375,6 +393,7 @@ class BenchmarkEngine:
                 "[ERROR] tool loop terminated without final answer", usage_records
             ),
             tool_trace=tool_trace,
+            subject_prompt=input_prompt,
         )
 
     async def _call_subject_llm_text(
@@ -411,6 +430,7 @@ class BenchmarkEngine:
                 return SubjectRunResult(
                     result=self._merge_subject_usage(response.text, usage_records),
                     tool_trace=tool_trace,
+                    subject_prompt=user_prompt,
                 )
 
             if step_index >= config.max_steps:
@@ -420,6 +440,7 @@ class BenchmarkEngine:
                         usage_records,
                     ),
                     tool_trace=tool_trace,
+                    subject_prompt=user_prompt,
                 )
 
             if progress_callback:
@@ -433,6 +454,7 @@ class BenchmarkEngine:
                 "tool_name": tool_call.name,
                 "arguments": tool_call.arguments,
                 "result_summary": runtime.summarize_result(tool_result),
+                "result_detail": runtime.format_result_for_trace(tool_result),
                 "ok": bool(tool_result.get("ok")),
             })
             history.append(("assistant", response.text))
@@ -443,6 +465,7 @@ class BenchmarkEngine:
                 "[ERROR] tool loop terminated without final answer", usage_records
             ),
             tool_trace=tool_trace,
+            subject_prompt=user_prompt,
         )
 
     async def _complete_subject_once(
@@ -453,6 +476,9 @@ class BenchmarkEngine:
     ) -> CompletionResult:
         if cancel_checker:
             cancel_checker()
+        extra_params = None
+        if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
+            extra_params = {"reasoning": {"effort": "medium"}}
         return await asyncio.to_thread(
             self.subject_adapter.complete_with_model_result,
             self.subject_model,
@@ -460,6 +486,7 @@ class BenchmarkEngine:
             user_prompt,
             temperature,
             4096,
+            extra_params,
         )
 
     @staticmethod
@@ -734,6 +761,9 @@ class BenchmarkEngine:
                 judge_temperature = 0.0
                 if "gemini-3" in model_name.lower():
                     judge_temperature = 1.0
+                extra_params = None
+                if adapter.is_reasoning_opt_in(model_name):
+                    extra_params = {"reasoning": {"effort": "medium"}}
                 response = await asyncio.to_thread(
                     adapter.complete_with_model_result,
                     model_name,
@@ -741,6 +771,7 @@ class BenchmarkEngine:
                     user_prompt,
                     judge_temperature,
                     4096,
+                    extra_params,
                 )
                 return response
 

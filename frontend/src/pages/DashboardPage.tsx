@@ -70,6 +70,7 @@ type ModelAggregate = {
     runCount: number;
     latest: string;
     avgCostPer1m?: number;
+    avgExecutionTimeMs?: number;
 };
 
 type StrictModeProfile = {
@@ -88,6 +89,7 @@ function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
         best: number;
         latest: string;
         costPer1m: number[];
+        executionTimes: number[];
     }>();
 
     runs.forEach((run) => {
@@ -97,6 +99,7 @@ function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
             best: 0,
             latest: '',
             costPer1m: [],
+            executionTimes: [],
         };
         entry.scores.push(run.averageScore);
         entry.best = Math.max(entry.best, run.bestScore);
@@ -105,6 +108,9 @@ function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
         }
         if (typeof run.subjectCostPer1mTokensUsd === 'number') {
             entry.costPer1m.push(run.subjectCostPer1mTokensUsd);
+        }
+        if (typeof run.executionDurationMs === 'number' && run.executionDurationMs > 0) {
+            entry.executionTimes.push(run.executionDurationMs);
         }
         map.set(run.subjectModelId, entry);
     });
@@ -120,6 +126,7 @@ function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
             runCount: entry.scores.length,
             latest: entry.latest,
             avgCostPer1m: entry.costPer1m.length > 0 ? Number(mean(entry.costPer1m).toFixed(6)) : undefined,
+            avgExecutionTimeMs: entry.executionTimes.length > 0 ? Number(mean(entry.executionTimes).toFixed(0)) : undefined,
         }))
         .sort((a, b) => b.avgScore - a.avgScore);
 }
@@ -341,7 +348,7 @@ function StrictModeLeaderboard({ profiles }: { profiles: StrictModeProfile[] }) 
                                 <table className="w-full min-w-[680px] text-[12px]">
                                     <thead>
                                         <tr className="border-b border-border/70">
-                                            {['順位', 'モデル', '実行数', '平均', '最高', '単価/1M'].map((heading) => (
+                                            {['順位', 'モデル', '実行数', '平均', '最高', '単価/1M', '実行時間', '時間ROI'].map((heading) => (
                                                 <th
                                                     key={heading}
                                                     className={`px-4 py-2.5 text-[9px] font-display font-bold uppercase tracking-wider text-text-tertiary ${
@@ -385,6 +392,12 @@ function StrictModeLeaderboard({ profiles }: { profiles: StrictModeProfile[] }) 
                                                 </td>
                                                 <td className="px-4 py-3 text-center text-text-secondary">
                                                     {formatUsd(row.avgCostPer1m)}
+                                                </td>
+                                                <td className="px-4 py-3 text-center text-text-secondary">
+                                                    {formatDuration(row.avgExecutionTimeMs)}
+                                                </td>
+                                                <td className="px-4 py-3 text-center text-text-secondary">
+                                                    {formatTimeRoi(row.avgScore, row.avgExecutionTimeMs)}
                                                 </td>
                                             </tr>
                                         ))}
@@ -582,6 +595,17 @@ function getAllTaskIds(left: EvaluationRun, right: EvaluationRun): string[] {
     return Array.from(ids).sort();
 }
 
+function formatDuration(value: number | undefined): string {
+    if (value === undefined || value === null || Number.isNaN(value)) return 'N/A';
+    if (value < 1000) return `${value}ms`;
+    return `${(value / 1000).toFixed(1)}s`;
+}
+
+function formatTimeRoi(score: number, ms: number | undefined): string {
+    if (!ms || ms <= 0 || score <= 0) return 'N/A';
+    return `${(score / (ms / 1000)).toFixed(1)} 点/秒`;
+}
+
 function AggregationTable({ data }: { data: ModelAggregate[] }) {
     return (
         <section className="space-y-3 animate-fade-up stagger-10">
@@ -590,7 +614,7 @@ function AggregationTable({ data }: { data: ModelAggregate[] }) {
                 <table className="w-full text-[12px]">
                     <thead>
                         <tr className="border-b border-border">
-                            {['モデル', '実行数', '平均', '最高', '単価/1M', '最新'].map((heading) => (
+                            {['モデル', '実行数', '平均', '最高', '単価/1M', '実行時間', '時間ROI', '最新'].map((heading) => (
                                 <th key={heading} className={`px-4 py-2.5 text-[9px] font-display font-bold text-text-tertiary uppercase tracking-wider ${heading === 'モデル' || heading === '最新' ? 'text-left' : 'text-center'} ${heading === '最新' ? 'text-right' : ''}`}>{heading}</th>
                             ))}
                         </tr>
@@ -608,6 +632,8 @@ function AggregationTable({ data }: { data: ModelAggregate[] }) {
                                 </td>
                                 <td className="px-4 py-2.5 text-center"><span className={`data-display ${scoreTextColor(row.bestScore)}`}>{row.bestScore.toFixed(1)}</span></td>
                                 <td className="px-4 py-2.5 text-center text-text-secondary">{formatUsd(row.avgCostPer1m)}</td>
+                                <td className="px-4 py-2.5 text-center text-text-secondary">{formatDuration(row.avgExecutionTimeMs)}</td>
+                                <td className="px-4 py-2.5 text-center text-text-secondary">{formatTimeRoi(row.avgScore, row.avgExecutionTimeMs)}</td>
                                 <td className="px-4 py-2.5 text-right text-text-secondary">{formatDateOnly(row.latest)}</td>
                             </tr>
                         ))}

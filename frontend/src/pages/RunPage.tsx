@@ -45,6 +45,8 @@ export default function RunPage() {
         availableModels, subjectModelId, judgeModelIds, freeTextSubject,
         freeTextJudges, selectedTaskIds, tasks, evalParams, taskToolModeOverrides,
         runHolistic, setRunHolistic,
+        subjectParallel, setSubjectParallel,
+        judgeParallel, setJudgeParallel,
     } = useSettingsStore();
     const {
         status, progress, result, resultFilePath, cancelRequested, errorMessage, runId,
@@ -144,6 +146,8 @@ export default function RunPage() {
             strictPresetId: strictPreset?.id ?? null,
             taskToolModeOverrides,
             runHolistic: runHolistic,
+            subjectParallel,
+            judgeParallel,
         });
     };
 
@@ -240,6 +244,38 @@ export default function RunPage() {
                             </div>
                         </div>
                     </button>
+
+                    {/* Parallel execution toggles */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <button
+                            onClick={() => setSubjectParallel(!subjectParallel)}
+                            className="card p-4 w-full text-left cursor-pointer hover:border-border-focus transition-colors duration-150"
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="section-label mb-0.5">被検モデル並列実行</p>
+                                    <p className="text-[12px] text-text-secondary">OFF にするとタスクを1つずつ順次実行します（ローカルLLM向け）</p>
+                                </div>
+                                <div className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${subjectParallel ? 'bg-amber' : 'bg-border'}`}>
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${subjectParallel ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                                </div>
+                            </div>
+                        </button>
+                        <button
+                            onClick={() => setJudgeParallel(!judgeParallel)}
+                            className="card p-4 w-full text-left cursor-pointer hover:border-border-focus transition-colors duration-150"
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="section-label mb-0.5">評価モデル並列実行</p>
+                                    <p className="text-[12px] text-text-secondary">OFF にすると judge も1モデル・1回ずつ順次評価します</p>
+                                </div>
+                                <div className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${judgeParallel ? 'bg-amber' : 'bg-border'}`}>
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${judgeParallel ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                                </div>
+                            </div>
+                        </button>
+                    </div>
 
                     {/* Stats */}
                     <div className="card p-4">

@@ -181,7 +181,11 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 
 ## Inbox
 
-- (empty)
+- タスクそれぞれにかかる所要時間の目安を表示する機能の検討（ベンチマーク実行時に各タスクの所要時間を記録し、結果表示画面で推定所要時間や進捗予測を表示する）
+- 包括評価（Holistic Evaluation）の bundled_responses 構築時に、judge LLM のコンテキストウィンドウ超過リスクがある。タスク数・レスポンス長に応じた切り詰めや分割処理を検討する。
+- `run_holistic_task` で `TaskResult` を生成する際に `subject_prompt` が渡されていない（デフォルト空文字）。通常タスクとの一貫性のために、明示的に渡すか意図をコメントで残すべき。
+- ChatGPT（OpenAI）をjudgeモデルに指定した場合、reasoning/thinking過程をAPI経由で取得・表示する機能を実装する。Chat Completions APIではreasoningトークンは不可視なので、Responses APIへの移行や、プロンプトレベルでの`<thinking>`タグ指示による抽出を検討する。
+- Claude（Anthropic）、Gemini（Google）をjudgeモデルに指定した場合でも、同様にreasoning/thinking過程をAPI経由で取得・表示できるかを調査・修正する。AnthropicはMessages APIの`thinking`ブロックで取得可能だが、現状のアダプターでは抽出していない。Geminiについては要調査。
 
 ---
 

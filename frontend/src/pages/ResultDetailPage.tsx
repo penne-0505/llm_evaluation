@@ -4,7 +4,7 @@ import { useHistoryStore } from '../store/historyStore';
 import { useRunStore } from '../store/runStore';
 import { deleteResult } from '../api/client';
 import ResultDetail from '../components/ResultDetail';
-import { ArrowLeft, AlertCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Trash2 } from 'lucide-react';
 import { decodeResultRouteParam } from '../lib/resultRoutes';
 import Button from '../components/Button';
 
@@ -23,7 +23,10 @@ export default function ResultDetailPage() {
     const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
-        if (!runId) return;
+        if (!runId) {
+            navigate('/dashboard', { replace: true });
+            return;
+        }
 
         let cancelled = false;
 
@@ -43,28 +46,16 @@ export default function ResultDetailPage() {
         return () => {
             cancelled = true;
         };
-    }, [initializeHistory, loadRunDetail, runId]);
+    }, [initializeHistory, loadRunDetail, runId, navigate]);
 
-    if (!isLoaded || isLoadingDetail) {
+    useEffect(() => {
+        if (isLoaded && !isLoadingDetail && !run) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [isLoaded, isLoadingDetail, run, navigate]);
+
+    if (!isLoaded || isLoadingDetail || !run) {
         return <div className="flex items-center justify-center h-64"><div className="w-5 h-5 border-2 border-amber border-t-transparent rounded-full animate-spin" /></div>;
-    }
-
-    if (!run) {
-        return (
-            <div className="space-y-6 animate-fade-up">
-                <Button
-                    onClick={() => navigate(-1)}
-                    className="flex items-center gap-1.5 text-[12px] text-text-secondary hover:text-amber transition-colors"
-                >
-                    <ArrowLeft size={14} /> 戻る
-                </Button>
-                <div className="card p-12 text-center space-y-3">
-                    <AlertCircle size={28} className="text-score-low mx-auto" />
-                    <h2 className="text-[14px] font-display font-semibold text-text-secondary">結果が見つかりません</h2>
-                    <p className="text-[12px] text-text-tertiary">実行 "{runId}" は履歴から削除された可能性があります。</p>
-                </div>
-            </div>
-        );
     }
 
     const handleDelete = async () => {

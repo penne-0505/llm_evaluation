@@ -25,7 +25,11 @@ from pydantic import BaseModel
 from adapters import get_adapter_for_model, get_available_judge_adapters
 from core import BenchmarkEngine, GroundingCorpusStore, ResultStorage
 from core.app_paths import AppPaths
-from core.cost_estimator import summarize_benchmark_usage
+from core.cost_estimator import (
+    summarize_benchmark_usage,
+    summarize_judge_usage,
+    summarize_subject_usage,
+)
 from core.logging_utils import configure_logging
 from core.model_catalog import ModelCatalog
 from core.openrouter_admin import OpenRouterAdminError, fetch_credits
@@ -384,12 +388,6 @@ def _load_holistic_tasks() -> List[Dict[str, Any]]:
 
 def _resolve_subject_key(model_name: str, api_keys: Dict[str, str]) -> Optional[str]:
     model_lower = model_name.lower()
-    if any(model_lower.startswith(p) for p in ["gpt-", "o1", "o3", "o4"]):
-        return api_keys.get("openai")
-    if model_lower.startswith("claude-"):
-        return api_keys.get("anthropic")
-    if model_lower.startswith("gemini-"):
-        return api_keys.get("gemini")
     if any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
         return api_keys.get("openrouter")
     if model_lower.startswith("lmstudio/"):
@@ -561,16 +559,10 @@ def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any
 
 
 class ApiKeySaveRequest(BaseModel):
-    openai: Optional[str] = None
-    anthropic: Optional[str] = None
-    gemini: Optional[str] = None
     openrouter: Optional[str] = None
 
 
 class ApiKeyClearRequest(BaseModel):
-    openai: bool = False
-    anthropic: bool = False
-    gemini: bool = False
     openrouter: bool = False
 
 
@@ -592,6 +584,8 @@ class RunRequest(BaseModel):
     strict_preset_id: Optional[str] = None
     task_tool_mode_overrides: Dict[str, str] = {}
     run_holistic: bool = True
+    subject_parallel: bool = True
+    judge_parallel: bool = True
 
 
 class ClientErrorRequest(BaseModel):
@@ -719,7 +713,7 @@ def get_keys_status() -> Dict[str, Any]:
     existing = SecretsStore.load_existing()
     return {
         provider: bool(existing.get(provider))
-        for provider in ["openai", "anthropic", "gemini", "openrouter"]
+        for provider in ["openrouter"]
     }
 
 
@@ -1012,6 +1006,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 max_parallel_runs_per_judge=3,
                 judge_dispatch_min_interval_sec=0.25,
                 judge_dispatch_jitter_sec=0.15,
+                judge_parallel=req.judge_parallel,
             )
             logger.info(
                 "run started run_id=%s target_model=%s tasks=%d judges=%d judge_runs=%d log_file=%s",
@@ -1091,7 +1086,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
             cancelled = False
             cancel_reason = ""
 
-            task_semaphore = asyncio.Semaphore(3)
+            task_semaphore = asyncio.Semaphore(3 if req.subject_parallel else 1)
 
             async def _run_single_task(idx: int, task_info: Dict[str, Any]) -> None:
                 async with task_semaphore:
@@ -1348,8 +1343,13 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 "completed_tasks": len(completed),
                 "total_tasks": total_tasks,
             }
-            usage_summary = summarize_benchmark_usage(completed)
+            all_tasks = completed + holistic_results
+            usage_summary = summarize_benchmark_usage(all_tasks)
+            usage_summary_subject = summarize_subject_usage(completed)
+            usage_summary_judge = summarize_judge_usage(all_tasks)
             benchmark_result["usage_summary"] = usage_summary
+            benchmark_result["usage_summary_subject"] = usage_summary_subject
+            benchmark_result["usage_summary_judge"] = usage_summary_judge
             benchmark_result["estimated_cost_usd"] = usage_summary["totals"].get(
                 "estimated_cost_usd"
             )

@@ -1,8 +1,8 @@
 {
   "subject_tools": {
     "enabled_tools": [
-      "web-search",
-      "open-document"
+      "web_search",
+      "fetch_webpage"
     ],
     "fixture_path": "task_fixtures/08.json",
     "max_steps": 4,

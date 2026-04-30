@@ -242,7 +242,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         )
         subject_adapter = _StubAdapter(
             [
-                '<tool_call>{"name":"web-search","arguments":{"query":"deep research model updates"}}</tool_call>',
+                '<tool_call>{"name":"web_search","arguments":{"query":"deep research model updates"}}</tool_call>',
                 "結論として、対象期間中に Deep Research の内部モデルは賢くなっていません。",
             ]
         )
@@ -267,7 +267,6 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
                                 "results": [
                                     {
                                         "rank": 1,
-                                        "doc_id": "doc-1",
                                         "title": "Deep Research follow-up update",
                                         "url": "https://example.com/1",
                                         "content": "workflow update, model unchanged",
@@ -277,7 +276,6 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
                         ],
                         "documents": [
                             {
-                                "id": "doc-1",
                                 "url": "https://example.com/1",
                                 "title": "Deep Research follow-up update",
                                 "text": "The workflow changed, but the internal model stayed the same.",
@@ -296,7 +294,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
                 rubric_content="rubric",
                 system_prompt="system",
                 subject_tools={
-                    "enabled_tools": ["web-search", "open-document"],
+                    "enabled_tools": ["web_search", "fetch_webpage"],
                     "fixture_path": str(fixture_path),
                     "max_steps": 3,
                 },
@@ -304,7 +302,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
 
         payload = result.to_dict()
         self.assertEqual(subject_adapter.call_count, 2)
-        self.assertEqual(payload["tool_trace"][0]["tool_name"], "web-search")
+        self.assertEqual(payload["tool_trace"][0]["tool_name"], "web_search")
         self.assertEqual(payload["subject_usage"]["total_tokens"], 30)
         self.assertIn("賢くなっていません", payload["response"])
 
