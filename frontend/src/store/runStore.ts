@@ -103,7 +103,20 @@ export const useRunStore = create<RunState>((set) => ({
 
     setResult: (result) => set({ result }),
 
-    clearResult: () => set({ result: null, resultFilePath: null }),
+    clearResult: () =>
+        set((s) => ({
+            result: null,
+            resultFilePath: null,
+            ...(s.status === 'completed'
+                ? {
+                    status: 'idle',
+                    progress: null,
+                    runId: null,
+                    cancelRequested: false,
+                    errorMessage: null,
+                }
+                : {}),
+        })),
 
     setError: (message) =>
         set({
