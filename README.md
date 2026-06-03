@@ -247,7 +247,7 @@ grounding corpus は検索結果 JSON と採用 document 本文を紐付けて a
 - APIキーをUIから保存すると app data 配下に保存されます。共有環境ではユーザーごとの OS アカウントを利用してください。
 - 前回のモデル/タスク選択は app data 配下に保存され、再起動後に復元されます。
 - `http://127.0.0.1:<port>/api/resources` で judge system prompt の解決元と候補 layer を確認できます。
-- judgeのJSONが不正な場合はリトライ後にスキップされます。
+- judgeのJSONが不正な場合はリトライ後にスキップされ、0点扱いではなく集計対象外になります。
 
 ## License
 

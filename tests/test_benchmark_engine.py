@@ -13,8 +13,9 @@ from core.benchmark_engine import BenchmarkEngine
 
 
 class _StubAdapter(LLMAdapter):
-    def __init__(self, responses):
+    def __init__(self, responses, reasoning_opt_in=False):
         self._responses = list(responses)
+        self._reasoning_opt_in = reasoning_opt_in
         self.call_count = 0
         self.calls = []
         self.PROVIDER = "stub"
@@ -32,6 +33,9 @@ class _StubAdapter(LLMAdapter):
 
     def is_available(self) -> bool:
         return True
+
+    def is_reasoning_opt_in(self, model: str) -> bool:
+        return self._reasoning_opt_in
 
     def complete_with_model(
         self,
@@ -140,7 +144,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         judge_runs = result.judge_results["judge-model"]["runs"]
         fail_fast_skipped = [run for run in judge_runs if run.get("fail_fast_skipped")]
 
-        self.assertEqual(judge_adapter.call_count, 2)
+        self.assertEqual(judge_adapter.call_count, 4)
         self.assertEqual(len(judge_runs), 5)
         self.assertEqual(len(fail_fast_skipped), 3)
 
@@ -225,6 +229,126 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
                 "output_tokens"
             ],
             5,
+        )
+
+    async def test_reasoning_opt_in_judge_uses_high_effort(self):
+        valid_response = json.dumps(
+            {
+                "task_name": "test",
+                "task_type": "fact",
+                "score": {
+                    "logic_and_fact": 60,
+                    "constraint_adherence": 30,
+                    "helpfulness_and_creativity": 10,
+                },
+                "total_score": 100,
+                "confidence": "high",
+            }
+        )
+        subject_adapter = _StubAdapter(["subject-response"])
+        judge_adapter = _StubAdapter([valid_response], reasoning_opt_in=True)
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="gpt-4o",
+            judge_adapters={"judge-model": judge_adapter},
+            judge_runs=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+
+        await engine.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+
+        self.assertEqual(
+            judge_adapter.calls[0]["extra_params"],
+            {"reasoning": {"effort": "high"}},
+        )
+
+    async def test_judge_parse_failure_retries_model_once_and_excludes_failure(self):
+        valid_response = json.dumps(
+            {
+                "task_name": "test",
+                "task_type": "fact",
+                "score": {
+                    "logic_and_fact": 60,
+                    "constraint_adherence": 30,
+                    "helpfulness_and_creativity": 10,
+                },
+                "total_score": 100,
+                "confidence": "high",
+            }
+        )
+        subject_adapter = _StubAdapter(["subject-response"])
+        judge_adapter = _StubAdapter(["", valid_response])
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="gpt-4o",
+            judge_adapters={"judge-model": judge_adapter},
+            judge_runs=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+
+        result = await engine.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+
+        judge_result = result.judge_results["judge-model"]
+        self.assertEqual(judge_adapter.call_count, 2)
+        self.assertEqual(len(judge_result["runs"]), 1)
+        self.assertNotIn("error", judge_result["runs"][0])
+        self.assertEqual(judge_result["aggregated"]["total_score_mean"], 100.0)
+
+    async def test_judge_parse_failure_after_retry_is_skipped_not_zero_scored(self):
+        valid_response = json.dumps(
+            {
+                "task_name": "test",
+                "task_type": "fact",
+                "score": {
+                    "logic_and_fact": 54,
+                    "constraint_adherence": 27,
+                    "helpfulness_and_creativity": 9,
+                },
+                "total_score": 90,
+                "confidence": "high",
+            }
+        )
+        subject_adapter = _StubAdapter(["subject-response"])
+        judge_adapter = _StubAdapter(["", "", valid_response])
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="gpt-4o",
+            judge_adapters={"judge-model": judge_adapter},
+            judge_runs=2,
+            max_parallel_runs_per_judge=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+
+        result = await engine.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+
+        judge_result = result.judge_results["judge-model"]
+        self.assertEqual(judge_adapter.call_count, 3)
+        self.assertTrue(judge_result["runs"][0]["skipped"])
+        self.assertEqual(judge_result["aggregated"]["total_score_mean"], 90.0)
+        self.assertEqual(
+            judge_result["aggregated"]["confidence_distribution"],
+            {"high": 1, "medium": 0, "low": 0},
         )
 
     async def test_cancel_checker_stops_unstarted_judge_runs(self):

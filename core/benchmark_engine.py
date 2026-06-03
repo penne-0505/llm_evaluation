@@ -730,30 +730,42 @@ class BenchmarkEngine:
 
                     await _wait_for_dispatch_slot()
 
-                    response = await self._call_judge_with_retry(
-                        adapter=adapter,
-                        model_name=model_name,
-                        system_prompt=system_prompt,
-                        user_prompt=user_prompt,
-                        cancel_checker=cancel_checker,
-                    )
-
-                    try:
-                        parsed = JudgeResponseParser.parse_with_retry(
-                            response.text, max_retries=1
+                    last_response: Optional[CompletionResult] = None
+                    last_parse_error: Optional[ParseError] = None
+                    for parse_attempt in range(2):
+                        response = await self._call_judge_with_retry(
+                            adapter=adapter,
+                            model_name=model_name,
+                            system_prompt=system_prompt,
+                            user_prompt=user_prompt,
+                            cancel_checker=cancel_checker,
                         )
-                        if response.usage is not None:
-                            parsed["usage"] = response.usage.to_dict()
-                        runs_by_index[run_index] = parsed
-                    except ParseError as e:
+                        last_response = response
+                        try:
+                            parsed = JudgeResponseParser.parse_with_retry(
+                                response.text, max_retries=1
+                            )
+                            if response.usage is not None:
+                                parsed["usage"] = response.usage.to_dict()
+                            runs_by_index[run_index] = parsed
+                            break
+                        except ParseError as e:
+                            last_parse_error = e
+                            if parse_attempt == 0:
+                                continue
+
+                    if runs_by_index[run_index] is None:
                         failures = await _register_failure()
                         runs_by_index[run_index] = {
-                            "error": f"パース失敗: {str(e)}",
-                            "raw_response": response.text,
+                            "error": f"パース失敗: {str(last_parse_error)}",
+                            "raw_response": last_response.text
+                            if last_response is not None
+                            else "",
                             "skipped": True,
                             "failure_count": failures,
-                            "usage": response.usage.to_dict()
-                            if response.usage is not None
+                            "usage": last_response.usage.to_dict()
+                            if last_response is not None
+                            and last_response.usage is not None
                             else None,
                         }
                 except asyncio.CancelledError:
@@ -828,7 +840,7 @@ class BenchmarkEngine:
                     judge_temperature = 1.0
                 extra_params = None
                 if adapter.is_reasoning_opt_in(model_name):
-                    extra_params = {"reasoning": {"effort": "medium"}}
+                    extra_params = {"reasoning": {"effort": "high"}}
                 response = await asyncio.to_thread(
                     adapter.complete_with_model_result,
                     model_name,

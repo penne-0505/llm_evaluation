@@ -9,6 +9,26 @@ class ResultAggregator:
     複数回のjudge評価結果を集計する
     """
 
+    REQUIRED_SCORE_KEYS = (
+        "logic_and_fact",
+        "constraint_adherence",
+        "helpfulness_and_creativity",
+    )
+
+    @classmethod
+    def _is_valid_run(cls, run: Dict[str, Any]) -> bool:
+        if run.get("skipped") or "error" in run:
+            return False
+        score = run.get("score")
+        if not isinstance(score, dict):
+            return False
+        if not isinstance(run.get("total_score"), (int, float)):
+            return False
+        return all(
+            isinstance(score.get(key), (int, float))
+            for key in cls.REQUIRED_SCORE_KEYS
+        )
+
     @staticmethod
     def aggregate(runs: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -34,7 +54,7 @@ class ResultAggregator:
                 }
             }
         """
-        valid_runs = [r for r in runs if not r.get("skipped") and "error" not in r]
+        valid_runs = [r for r in runs if ResultAggregator._is_valid_run(r)]
 
         if not valid_runs:
             return {"runs": runs, "aggregated": None}

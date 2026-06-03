@@ -230,6 +230,43 @@ def test_result_aggregator_with_skipped():
     print("スキップ含む集計テスト完了")
 
 
+def test_result_aggregator_excludes_incomplete_score_runs():
+    """不完全なスコアrunは0点扱いせず集計から除外する"""
+    print("\n=== 不完全スコア除外テスト ===")
+
+    runs = [
+        {
+            "score": {
+                "logic_and_fact": 60,
+                "constraint_adherence": 30,
+                "helpfulness_and_creativity": 10,
+            },
+            "total_score": 100,
+            "confidence": "high",
+            "critical_fail": False,
+        },
+        {
+            "score": {},
+            "total_score": 0,
+            "confidence": "low",
+            "critical_fail": False,
+        },
+    ]
+
+    result = ResultAggregator.aggregate(runs)
+
+    assert result["aggregated"]["logic_and_fact_mean"] == 60.0
+    assert result["aggregated"]["total_score_mean"] == 100.0
+    assert result["aggregated"]["confidence_distribution"] == {
+        "high": 1,
+        "medium": 0,
+        "low": 0,
+    }
+
+    print("✓ 不完全なスコアrunを0点扱いせず除外")
+    print("不完全スコア除外テスト完了")
+
+
 def test_result_aggregator_empty():
     """空の結果集計テスト"""
     print("\n=== 空の結果集計テスト ===")
