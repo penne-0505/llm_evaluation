@@ -45,7 +45,7 @@ const TASK_TYPE_AXIS_MAX: Record<TaskType, { logicAndFact: number; constraintAdh
     fact: { logicAndFact: 60, constraintAdherence: 30, helpfulness: 10 },
     creative: { logicAndFact: 30, constraintAdherence: 30, helpfulness: 40 },
     speculative: { logicAndFact: 40, constraintAdherence: 20, helpfulness: 40 },
-    holistic: { logicAndFact: 100, constraintAdherence: 100, helpfulness: 100 },
+    holistic: { logicAndFact: 40, constraintAdherence: 30, helpfulness: 30 },
 };
 
 function normalizeScore(score: number, maxScore: number): number {
@@ -309,8 +309,8 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                 <div className="flex items-center gap-3">
                     {/* Mini scores preview */}
                     {!expanded && tr.judgeEvaluations.length > 0 && (
-                        <div className="flex items-center gap-2">
-                            {tr.judgeEvaluations.slice(0, 3).map((je) => (
+                        <div className="flex max-w-[min(55vw,32rem)] flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                            {tr.judgeEvaluations.map((je) => (
                                 <span key={je.judgeModelId} className={`data-display text-[11px] ${scoreColor(je.totalScore.mean)}`}>
                                     {je.totalScore.mean}
                                 </span>

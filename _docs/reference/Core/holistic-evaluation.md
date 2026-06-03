@@ -198,5 +198,5 @@ judge に渡される user_prompt は以下の構造になります。
 ## Notes
 
 - 包括評価タスクはタスク選択 UI に表示されません。ファイルが存在する場合は常に自動実行されます。
-- holistic ルーブリックの軸最大値は UI 上 100 点としてレンダリングされます（軸ごとの重みを rubric 側で自由に設定できるため）。
+- holistic ルーブリックの軸最大値は bundled `rubrics/holistic/style.md` の配点に合わせ、UI 上は Logic & Fact 40 点、Constraint Adherence 30 点、Helpfulness & Creativity 30 点としてレンダリングされます。
 - 包括評価タスクがキャンセルされた場合、それまでに完了した通常タスクの結果は保存されます。
