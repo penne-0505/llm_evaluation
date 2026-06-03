@@ -137,6 +137,16 @@ class LocalToolRuntime:
             "最終回答では通常の文章だけを返し、参照した根拠の title または URL を明記してください。"
         )
 
+    def render_native_tool_instruction(self) -> str:
+        tools = ", ".join(f"`{name}`" for name in self.config.enabled_tools)
+        return (
+            "必要ならローカル検索ツールを使ってから回答してください。\n"
+            f"利用可能なツール: {tools}\n"
+            "ツールは外部 web ではなく、評価用 fixture に保存済みの検索結果と本文だけを返します。\n"
+            "十分な根拠が集まったら追加検索を続けず、通常の文章で最終回答を返してください。\n"
+            "最終回答では、参照した根拠の title または URL を明記してください。"
+        )
+
     def execute(self, call: ToolCall) -> Dict[str, Any]:
         if call.name not in self.config.enabled_tools:
             return {

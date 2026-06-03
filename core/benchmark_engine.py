@@ -219,6 +219,7 @@ class BenchmarkEngine:
                         input_prompt=input_prompt,
                         rubric_content=rubric_content,
                         system_prompt=system_prompt,
+                        tool_trace=subject_run.tool_trace,
                         progress_callback=progress_callback,
                         cancel_checker=cancel_checker,
                     )
@@ -308,7 +309,10 @@ class BenchmarkEngine:
     ) -> SubjectRunResult:
         config = runtime.config
         tools_schema = runtime.build_openai_tools_schema()
-        messages: List[Dict[str, Any]] = [{"role": "user", "content": input_prompt}]
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": runtime.render_native_tool_instruction()},
+            {"role": "user", "content": input_prompt},
+        ]
         tool_trace: List[Dict[str, Any]] = []
         usage_records: List[CompletionResult] = []
 
@@ -342,12 +346,12 @@ class BenchmarkEngine:
                 )
 
             if step_index >= config.max_steps:
-                return SubjectRunResult(
-                    result=self._merge_subject_usage(
-                        "[ERROR] tool step limit exceeded before final answer", usage_records
-                    ),
+                return await self._finalize_subject_after_tool_budget(
+                    input_prompt=input_prompt,
                     tool_trace=tool_trace,
-                    subject_prompt=input_prompt,
+                    usage_records=usage_records,
+                    temperature=temperature,
+                    cancel_checker=cancel_checker,
                 )
 
             # assistant メッセージをそのままmessages配列へ追加
@@ -434,13 +438,12 @@ class BenchmarkEngine:
                 )
 
             if step_index >= config.max_steps:
-                return SubjectRunResult(
-                    result=self._merge_subject_usage(
-                        "[ERROR] tool step limit exceeded before final answer",
-                        usage_records,
-                    ),
+                return await self._finalize_subject_after_tool_budget(
+                    input_prompt=input_prompt,
                     tool_trace=tool_trace,
-                    subject_prompt=user_prompt,
+                    usage_records=usage_records,
+                    temperature=temperature,
+                    cancel_checker=cancel_checker,
                 )
 
             if progress_callback:
@@ -509,6 +512,66 @@ class BenchmarkEngine:
                 parts.extend([f"### {label}", content])
         return "\n".join(parts)
 
+    async def _finalize_subject_after_tool_budget(
+        self,
+        input_prompt: str,
+        tool_trace: List[Dict[str, Any]],
+        usage_records: List[CompletionResult],
+        temperature: float,
+        cancel_checker: Optional[Callable[[], None]],
+    ) -> SubjectRunResult:
+        final_prompt = self._build_tool_budget_final_prompt(input_prompt, tool_trace)
+        response = await self._complete_subject_once(
+            user_prompt=final_prompt,
+            temperature=temperature,
+            cancel_checker=cancel_checker,
+        )
+        usage_records.append(response)
+        return SubjectRunResult(
+            result=self._merge_subject_usage(response.text, usage_records),
+            tool_trace=tool_trace,
+            subject_prompt=final_prompt,
+        )
+
+    @staticmethod
+    def _build_tool_budget_final_prompt(
+        input_prompt: str, tool_trace: List[Dict[str, Any]]
+    ) -> str:
+        trace_parts: List[str] = []
+        total_chars = 0
+        max_total_chars = 12000
+        max_entry_chars = 2500
+
+        for trace in tool_trace:
+            detail = str(trace.get("result_detail") or trace.get("result_summary") or "")
+            if len(detail) > max_entry_chars:
+                detail = detail[:max_entry_chars] + "..."
+            entry = (
+                f"### step {trace.get('step_index')} {trace.get('tool_name')}\n"
+                f"arguments: {json.dumps(trace.get('arguments') or {}, ensure_ascii=False)}\n"
+                f"result: {detail}"
+            )
+            if total_chars + len(entry) > max_total_chars:
+                trace_parts.append("### omitted\n以降の tool 結果は入力長制限のため省略しました。")
+                break
+            trace_parts.append(entry)
+            total_chars += len(entry)
+
+        return "\n".join(
+            [
+                "## ユーザー依頼",
+                input_prompt,
+                "",
+                "## 重要",
+                "ローカル検索ツールの利用上限に達しました。これ以上 tool call はできません。",
+                "以下の tool 実行結果だけを根拠にして、通常の文章で最終回答を作成してください。",
+                "<tool_call> タグや JSON の tool call は出力しないでください。",
+                "",
+                "## 収集済み tool 結果",
+                "\n\n".join(trace_parts) if trace_parts else "tool 結果はありません。",
+            ]
+        )
+
     def _merge_subject_usage(
         self, text: str, responses: List[CompletionResult]
     ) -> CompletionResult:
@@ -542,6 +605,7 @@ class BenchmarkEngine:
         input_prompt: str,
         rubric_content: str,
         system_prompt: str,
+        tool_trace: Optional[List[Dict[str, Any]]] = None,
         progress_callback: Optional[Callable[[str], None]] = None,
         cancel_checker: Optional[Callable[[], None]] = None,
     ) -> Dict[str, Any]:
@@ -574,6 +638,7 @@ class BenchmarkEngine:
             input_prompt=input_prompt,
             subject_response=subject_response,
             rubric_content=rubric_content,
+            tool_trace=tool_trace,
         )
 
         def _is_cancelled() -> bool:
@@ -889,7 +954,11 @@ class BenchmarkEngine:
         return "\n\n---\n\n".join(parts)
 
     def _build_judge_user_prompt(
-        self, input_prompt: str, subject_response: str, rubric_content: str
+        self,
+        input_prompt: str,
+        subject_response: str,
+        rubric_content: str,
+        tool_trace: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """
         judgeへのユーザープロンプトを構築
@@ -904,12 +973,59 @@ class BenchmarkEngine:
         Returns:
             組み立てられたプロンプト
         """
+        tool_trace_section = self._build_judge_tool_trace_summary(tool_trace)
         return f"""## 入力プロンプト（被験LLMに渡したもの）
 {input_prompt}
 
 ## 被験LLMの回答
 {subject_response}
+{tool_trace_section}
 
 ## タスク固有ルーブリック
 {rubric_content}
 """
+
+    @staticmethod
+    def _build_judge_tool_trace_summary(
+        tool_trace: Optional[List[Dict[str, Any]]],
+    ) -> str:
+        if not tool_trace:
+            return ""
+
+        step_values = {
+            trace.get("step_index")
+            for trace in tool_trace
+            if trace.get("step_index") is not None
+        }
+        success_count = sum(1 for trace in tool_trace if trace.get("ok"))
+        failure_count = len(tool_trace) - success_count
+        lines = [
+            "",
+            "## 被験LLMのtool利用（評価補助情報）",
+            f"tool_call_count: {len(tool_trace)}",
+            f"tool_step_count: {len(step_values)}",
+            f"tool_success_count: {success_count}",
+            f"tool_failure_count: {failure_count}",
+            "注: これは被験LLMの最終回答本文ではありません。回答の根拠利用・検証姿勢・過不足の評価にだけ使ってください。",
+            "",
+            "### tool trace summary",
+        ]
+
+        max_entries = 12
+        for index, trace in enumerate(tool_trace[:max_entries], start=1):
+            args = json.dumps(trace.get("arguments") or {}, ensure_ascii=False)
+            if len(args) > 500:
+                args = args[:500] + "..."
+            summary = str(trace.get("result_summary") or "")
+            if len(summary) > 500:
+                summary = summary[:500] + "..."
+            ok_label = "ok" if trace.get("ok") else "failed"
+            lines.append(
+                f"- #{index} step={trace.get('step_index')} tool={trace.get('tool_name')} "
+                f"status={ok_label} arguments={args} result_summary={summary}"
+            )
+
+        if len(tool_trace) > max_entries:
+            lines.append(f"- omitted_tool_calls: {len(tool_trace) - max_entries}")
+
+        return "\n".join(lines)

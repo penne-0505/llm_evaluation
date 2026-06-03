@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from adapters import CompletionResult, LLMAdapter, UsageMetrics
+from adapters.base import NativeCompletionResult, NativeToolCall
 from core.benchmark_engine import BenchmarkEngine
 
 
@@ -15,6 +16,7 @@ class _StubAdapter(LLMAdapter):
     def __init__(self, responses):
         self._responses = list(responses)
         self.call_count = 0
+        self.calls = []
         self.PROVIDER = "stub"
 
     def complete(
@@ -50,8 +52,19 @@ class _StubAdapter(LLMAdapter):
         user_prompt: str,
         temperature: float = 0.0,
         max_tokens: int = 1024,
+        extra_params=None,
     ) -> CompletionResult:
         self.call_count += 1
+        self.calls.append(
+            {
+                "model": model,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "extra_params": extra_params,
+            }
+        )
         if self._responses:
             text = self._responses.pop(0)
         else:
@@ -66,6 +79,39 @@ class _StubAdapter(LLMAdapter):
                 total_tokens=15,
             ),
         )
+
+
+class _NativeToolLoopAdapter(_StubAdapter):
+    def __init__(self, native_responses, final_responses):
+        super().__init__(final_responses)
+        self._native_responses = list(native_responses)
+        self.native_call_count = 0
+
+    def supports_native_tools(self) -> bool:
+        return True
+
+    def complete_with_model_native_tools(
+        self,
+        model,
+        messages,
+        tools,
+        temperature=0.0,
+        max_tokens=4096,
+        extra_params=None,
+    ):
+        self.native_call_count += 1
+        if self._native_responses:
+            result = self._native_responses.pop(0)
+        else:
+            result = NativeCompletionResult(content="final", tool_calls=[])
+        result.usage = UsageMetrics(
+            provider=self.PROVIDER,
+            model=model,
+            input_tokens=10,
+            output_tokens=5,
+            total_tokens=15,
+        )
+        return result
 
 
 class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
@@ -305,6 +351,106 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["tool_trace"][0]["tool_name"], "web_search")
         self.assertEqual(payload["subject_usage"]["total_tokens"], 30)
         self.assertIn("賢くなっていません", payload["response"])
+        self.assertIn("## 被験LLMのtool利用", judge_adapter.calls[0]["user_prompt"])
+        self.assertIn("tool_call_count: 1", judge_adapter.calls[0]["user_prompt"])
+        self.assertIn("tool_step_count: 1", judge_adapter.calls[0]["user_prompt"])
+        self.assertIn("tool=web_search", judge_adapter.calls[0]["user_prompt"])
+
+    async def test_native_tool_loop_finalizes_when_tool_budget_is_exhausted(self):
+        valid_response = json.dumps(
+            {
+                "task_name": "test",
+                "task_type": "fact",
+                "score": {
+                    "logic_and_fact": 60,
+                    "constraint_adherence": 30,
+                    "helpfulness_and_creativity": 10,
+                },
+                "total_score": 100,
+                "confidence": "high",
+            }
+        )
+        subject_adapter = _NativeToolLoopAdapter(
+            native_responses=[
+                NativeCompletionResult(
+                    content=None,
+                    tool_calls=[
+                        NativeToolCall(
+                            id="call_1",
+                            name="web_search",
+                            arguments={"query": "deep research model updates"},
+                        )
+                    ],
+                ),
+                NativeCompletionResult(
+                    content=None,
+                    tool_calls=[
+                        NativeToolCall(
+                            id="call_2",
+                            name="web_search",
+                            arguments={"query": "more deep research updates"},
+                        )
+                    ],
+                ),
+            ],
+            final_responses=[
+                "結論として、収集済みの根拠から回答します。"
+            ],
+        )
+        judge_adapter = _StubAdapter([valid_response])
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="deepseek-test",
+            judge_adapters={"judge-model": judge_adapter},
+            judge_runs=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_path = Path(tmp) / "fixture.json"
+            fixture_path.write_text(
+                json.dumps(
+                    {
+                        "query_snapshots": [
+                            {
+                                "query": "deep research model updates",
+                                "results": [
+                                    {
+                                        "rank": 1,
+                                        "title": "Deep Research update",
+                                        "url": "https://example.com/1",
+                                        "content": "internal model unchanged",
+                                    }
+                                ],
+                            }
+                        ],
+                        "documents": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            result = await engine.run_task(
+                task_name="08",
+                task_type="fact",
+                input_prompt="prompt",
+                rubric_content="rubric",
+                system_prompt="system",
+                subject_tools={
+                    "enabled_tools": ["web_search", "fetch_webpage"],
+                    "fixture_path": str(fixture_path),
+                    "max_steps": 1,
+                    "tool_mode": "native",
+                },
+            )
+
+        payload = result.to_dict()
+        self.assertNotIn("[ERROR] tool step limit exceeded", payload["response"])
+        self.assertIn("収集済みの根拠", payload["response"])
+        self.assertEqual(len(payload["tool_trace"]), 1)
+        self.assertEqual(subject_adapter.native_call_count, 2)
 
 
 if __name__ == "__main__":

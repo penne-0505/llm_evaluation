@@ -222,10 +222,12 @@ grounding corpus は検索結果 JSON と採用 document 本文を紐付けて a
 - task ごとの設定は `task_configs/<task_id>.json` に置きます。
 - 検索用 fixture は `task_fixtures/<task_id>.json` に置き、`query_snapshots` と `documents` を保持します。
 - `query_snapshots` は `temp/search_result*.json` のような検索レスポンス単位の保存領域です。各 snapshot は `query`, `source_file`, `results[]` を持ちます。
-- `documents` は URL 単位の本文ストアです。各 document は `url`, `title`, `source_type`, `fetch_status`, `text` を持ち、`open-document(url)` がこの本文を返します。
-- 現在は `task08` が `web-search` / `open-document` を使う対象です。
+- `documents` は URL 単位の本文ストアです。各 document は `url`, `title`, `source_type`, `fetch_status`, `text` を持ち、`fetch_webpage(url)` がこの本文を返します。
+- 現在は `task08` が `web_search` / `fetch_webpage` を使う対象です。
 - `/api/tasks` の各 task には `has_subject_tools` が含まれ、subject 側の tool runtime が有効かどうかを確認できます。
 - 実行結果 JSON の各 task には `tool_trace` が保存され、被験モデルがどのツールを呼んだかを後から確認できます。
+- tool-use task では、judge prompt にも `tool_trace` の compact summary が渡されます。summary には `tool_call_count`、`tool_step_count`、成功/失敗数、各 call の tool 名・引数・結果概要が含まれます。
+- 被験モデルが tool 上限に達しても、runtime は収集済みの `tool_trace` を使って tool なしの最終回答を 1 回だけ生成させます。これにより、過剰検索がそのまま `[ERROR]` 回答として採点されることを避けます。
 
 ## 注意事項
 
