@@ -10,27 +10,27 @@ from typing import Any, Dict, List
 
 
 STRICT_MODE_VERSION = "v2"
-OFFICIAL_STRICT_PRESET_ID = "official-v1"
+OFFICIAL_STRICT_PRESET_ID = "official-v2"
 
 _OFFICIAL_STRICT_PRESET: Dict[str, Any] = {
     "id": OFFICIAL_STRICT_PRESET_ID,
-    "label": "Official Strict v1",
+    "label": "Official Strict v2",
     "description": "固定 judge・固定 task set・固定 parameter で leaderboard 比較を成立させる正式モード",
     "subject_model_policy": "variable",
     "judge_models": [
         {
-            "id": "openrouter/anthropic/claude-sonnet-4.6",
-            "label": "Claude Sonnet 4.6",
+            "id": "openrouter/anthropic/claude-sonnet-5",
+            "label": "Claude Sonnet 5",
             "provider": "openrouter",
         },
         {
-            "id": "openrouter/openai/gpt-5.4",
-            "label": "GPT-5.4",
+            "id": "openrouter/openai/gpt-5.6-terra",
+            "label": "GPT-5.6 Terra",
             "provider": "openrouter",
         },
         {
-            "id": "openrouter/google/gemini-3.1-pro-preview",
-            "label": "Gemini 3.1 Pro Preview",
+            "id": "openrouter/google/gemini-3.5-flash",
+            "label": "Gemini 3.5 Flash",
             "provider": "openrouter",
         },
     ],

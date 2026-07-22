@@ -215,8 +215,9 @@ user override の配置先:
 各 task には `subject_usage`、各 judge run には `usage` が保存されます。さらに結果全体には `usage_summary`、`estimated_cost_usd`、`cost_estimate_status` が追加され、usage が取れた呼び出しと価格が分かるモデルについて推定コストを保存します。
 推定コストは現状 OpenRouter モデルで優先的に対応しており、価格不明なモデルは `cost_estimate_status: partial` または `unavailable` になります。
 結果JSONには `strict_mode` も保存されます。正式な Strict Mode は Settings で `Strict` を選んだうえで official preset を満たした run だけが `requested: true` / `enforced: true` になり、Dashboard の Strict Mode leaderboard 集計対象になります。
-official preset は `task_ids=01..11`、`judge_models=[openrouter/anthropic/claude-sonnet-4.6, openrouter/openai/gpt-5.4, openrouter/google/gemini-3.1-pro-preview]`、`judge_runs=3`、`subject_temperature=0.6`、bundled prompt / rubric / judge_system_prompt 固定です。
+official preset v2 は `task_ids=01..11`、`judge_models=[openrouter/anthropic/claude-sonnet-5, openrouter/openai/gpt-5.6-terra, openrouter/google/gemini-3.5-flash]`、`judge_runs=3`、`subject_temperature=0.45`、bundled prompt / rubric / judge_system_prompt 固定です。
 Strict Mode の judge 3モデルはすべて OpenRouter 経由で呼び出され、OpenAI / Anthropic / Gemini の native provider へ自動で切り替えることはしません。
+reasoning を明示指定できる被験モデルには effort `medium`、judgeモデルには effort `high` を指定します。モデルカタログ上で reasoning の明示指定に対応しないモデルは、各 provider / model の既定動作を使用します。
 実行時のアプリログは app data 配下の `logs/app.log` にローテーション付きで保存されます。
 保存済み結果は UI から削除でき、削除時は対応する JSON と `index.json` のサマリーが同時に更新されます。
 

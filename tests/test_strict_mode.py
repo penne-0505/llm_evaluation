@@ -48,7 +48,7 @@ class TestStrictModeMetadata(unittest.TestCase):
             selected_tasks=selected_tasks,
             judge_models=["judge-a"],
             judge_runs=3,
-            subject_temp=0.6,
+            subject_temp=0.45,
             judge_system_prompt_path=self.judge_prompt_path,
             judge_system_prompt_source="bundled",
             preset=preset,
@@ -58,7 +58,7 @@ class TestStrictModeMetadata(unittest.TestCase):
             selected_tasks=selected_tasks,
             judge_models=["judge-a"],
             judge_runs=3,
-            subject_temp=0.6,
+            subject_temp=0.45,
             judge_system_prompt_path=self.judge_prompt_path,
             judge_system_prompt_source="bundled",
             preset=preset,
@@ -127,7 +127,7 @@ class TestStrictModeMetadata(unittest.TestCase):
         )
 
         self.assertIn("judge_runs mismatch expected=3 actual=5", violations)
-        self.assertIn("subject_temp mismatch expected=0.60 actual=0.70", violations)
+        self.assertIn("subject_temp mismatch expected=0.45 actual=0.70", violations)
 
 
 if __name__ == "__main__":

@@ -296,6 +296,47 @@ def test_extra_body_passed_to_openrouter():
     print("OpenRouter extra_body テスト完了")
 
 
+def test_openrouter_omits_unsupported_temperature():
+    """catalog 上 temperature 非対応のモデルには temperature を送らない"""
+    adapter = OpenRouterAdapter(api_key="sk-or-v1-test12345678901234567890")
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "ok"
+    mock_response.choices[0].message.tool_calls = []
+    mock_response.usage = None
+    mock_client.chat.completions.create.return_value = mock_response
+    adapter._client = mock_client
+
+    OpenRouterAdapter._models_cache = {
+        "anthropic/claude-sonnet-5": {
+            "id": "anthropic/claude-sonnet-5",
+            "supported_parameters": ["reasoning", "max_tokens", "tools"],
+        }
+    }
+    try:
+        adapter.complete_with_model_result(
+            model="openrouter/anthropic/claude-sonnet-5",
+            system_prompt="sys",
+            user_prompt="user",
+            temperature=0.0,
+        )
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
+
+        mock_client.chat.completions.create.reset_mock()
+        adapter.complete_with_model_native_tools(
+            model="openrouter/anthropic/claude-sonnet-5",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            temperature=0.0,
+        )
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
+    finally:
+        OpenRouterAdapter._models_cache = None
+
+
 def test_extra_body_passed_to_lmstudio():
     """extra_params が LM Studio の extra_body として渡される"""
     print("\n=== LM Studio extra_body テスト ===")
@@ -359,6 +400,7 @@ def run_all_tests():
         test_is_reasoning_opt_in_openrouter()
         test_is_reasoning_opt_in_lmstudio()
         test_extra_body_passed_to_openrouter()
+        test_openrouter_omits_unsupported_temperature()
         test_extra_body_passed_to_lmstudio()
 
         print("\n" + "=" * 50)

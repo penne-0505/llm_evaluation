@@ -123,8 +123,9 @@ class OpenRouterAdapter(LLMAdapter):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                "temperature": temperature,
             }
+            if self._supports_parameter(normalized_model, "temperature") is not False:
+                kwargs["temperature"] = temperature
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens
             else:
@@ -179,8 +180,9 @@ class OpenRouterAdapter(LLMAdapter):
                 "messages": messages,
                 "tools": tools,
                 "tool_choice": "auto",
-                "temperature": temperature,
             }
+            if self._supports_parameter(normalized_model, "temperature") is not False:
+                kwargs["temperature"] = temperature
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens
             else:
@@ -247,6 +249,17 @@ class OpenRouterAdapter(LLMAdapter):
         supports = "reasoning" in info.get("supported_parameters", [])
         always_on = normalized.endswith(":thinking")
         return supports and not always_on
+
+    def _supports_parameter(self, model: str, parameter: str) -> Optional[bool]:
+        """OpenRouter catalog が既知なら、未対応 parameter を送信しない。"""
+        models = self._fetch_models_cache()
+        if models is None:
+            return None
+        normalized = self._normalize_model_name(model)
+        info = models.get(normalized)
+        if not info:
+            return None
+        return parameter in info.get("supported_parameters", [])
 
     @staticmethod
     def _normalize_model_name(model: str) -> str:

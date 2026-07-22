@@ -3,7 +3,7 @@ title: Strict Mode Leaderboard
 status: active
 draft_status: n/a
 created_at: 2026-04-04
-updated_at: 2026-04-04
+updated_at: 2026-07-22
 references: []
 related_issues: []
 related_prs: []
@@ -27,12 +27,13 @@ related_prs: []
 ## Requirements
 - **Functional**:
   - Strict Mode run は official preset によって task set、judge set、judge runs、temperature、resource version が固定されていること。
-  - official preset:
+  - official preset v2:
     - `task_ids`: `01..11`
-    - `judge_models`: `openrouter/anthropic/claude-sonnet-4.6`, `openrouter/openai/gpt-5.4`, `openrouter/google/gemini-3.1-pro-preview`
+    - `judge_models`: `openrouter/anthropic/claude-sonnet-5`, `openrouter/openai/gpt-5.6-terra`, `openrouter/google/gemini-3.5-flash`
     - `judge_runs`: `3`
-    - `subject_temperature`: `0.6`
+    - `subject_temperature`: `0.45`
     - `judge_temperature`: `0.0`
+    - reasoning を明示指定できる場合、`subject_reasoning_effort`: `medium`、`judge_reasoning_effort`: `high`
   - Settings UI では strict 選択時に上記設定を lock 表示すること。
   - backend は strict request を実行前に再検証し、条件を満たさない場合は run を開始しないこと。
   - leaderboard 集計対象には、再現に必要な run metadata を保存すること。

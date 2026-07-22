@@ -286,16 +286,17 @@ class TestStrictModeApi(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertEqual(body["id"], "official-v1")
+        self.assertEqual(body["id"], "official-v2")
+        self.assertEqual(body["label"], "Official Strict v2")
         self.assertEqual(body["judge_runs"], 3)
         self.assertEqual(body["subject_temperature"], 0.45)
         self.assertEqual(body["task_ids"], [f"{i:02d}" for i in range(1, 12)])
         self.assertEqual(
             [judge["id"] for judge in body["judge_models"]],
             [
-                "openrouter/anthropic/claude-sonnet-4.6",
-                "openrouter/openai/gpt-5.4",
-                "openrouter/google/gemini-3.1-pro-preview",
+                "openrouter/anthropic/claude-sonnet-5",
+                "openrouter/openai/gpt-5.6-terra",
+                "openrouter/google/gemini-3.5-flash",
             ],
         )
 
