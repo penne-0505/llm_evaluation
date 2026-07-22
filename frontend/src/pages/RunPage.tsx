@@ -18,6 +18,7 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import Button from '../components/Button';
+import { getSelectedTasksInCanonicalOrder } from './runPageTaskSelection';
 
 function formatTime(ms: number): string {
     const s = Math.floor(ms / 1000);
@@ -49,7 +50,7 @@ export default function RunPage() {
         judgeParallel, setJudgeParallel,
     } = useSettingsStore();
     const {
-        status, progress, result, resultFilePath, cancelRequested, errorMessage, runId,
+        status, progress, holisticProgress, result, resultFilePath, cancelRequested, errorMessage, runId,
         startRun, requestCancel, reset, setResult,
     } = useRunStore();
 
@@ -67,7 +68,8 @@ export default function RunPage() {
     const effectiveSubjectName = subjectModel?.name || freeTextSubject || '未選択';
     const effectiveJudgeNames = judgeModels.length > 0 ? judgeModels.map((m) => m.name) : freeTextJudges;
     const effectiveJudgeIds = judgeModels.length > 0 ? judgeModels.map((m) => m.id) : freeTextJudges;
-    const selectedTasks = tasks.filter((t) => selectedTaskIds.includes(t.id));
+    const selectedTasks = getSelectedTasksInCanonicalOrder(tasks, selectedTaskIds);
+    const canonicalSelectedTaskIds = selectedTasks.map((task) => task.id);
     const totalSteps = selectedTasks.length * Math.max(effectiveJudgeNames.length, 1) * evalParams.judgeRunCount;
     const isStrict = evaluationMode === 'strict';
     const strictIssues = getStrictModeIssues({
@@ -139,7 +141,7 @@ export default function RunPage() {
         sseRef.current = startBenchmarkSSE({
             targetModel,
             judgeModels: effectiveJudgeIds,
-            selectedTaskIds,
+            selectedTaskIds: canonicalSelectedTaskIds,
             judgeRuns: evalParams.judgeRunCount,
             subjectTemp: evalParams.subjectTemperature,
             strictMode: isStrict,
@@ -356,6 +358,10 @@ export default function RunPage() {
                                 emptyMessage="完了したタスクはここに表示されます。"
                             />
                         </div>
+
+                        {holisticProgress && (
+                            <HolisticProgressCard progress={holisticProgress} />
+                        )}
                     </div>
 
                 </div>
@@ -442,6 +448,46 @@ export default function RunPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+function HolisticProgressCard({
+    progress,
+}: {
+    progress: NonNullable<ReturnType<typeof useRunStore.getState>['holisticProgress']>;
+}) {
+    const processedTaskCount = progress.completedTaskCount + progress.failedTaskCount;
+    const statusLabel = progress.status === 'completed'
+        ? '完了'
+        : progress.status === 'running'
+            ? '実行中'
+            : '開始中';
+
+    return (
+        <section className="rounded-lg border border-amber/20 bg-amber-glow p-4 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <p className="section-label text-[9px]">包括評価</p>
+                    <p className="mt-1 text-[12px] text-text-secondary">{progress.message}</p>
+                </div>
+                <span className="rounded-full bg-amber-dim px-2 py-1 text-[10px] font-medium text-amber">
+                    {statusLabel}
+                </span>
+            </div>
+            <div className="flex items-end justify-between gap-3 text-[11px] text-text-tertiary">
+                <span className="data-display tabular-nums">
+                    {processedTaskCount} / {progress.totalTaskCount} タスク処理済み
+                </span>
+                {progress.currentTaskId && (
+                    <span className="data-display min-w-0 truncate text-text-secondary">
+                        #{(progress.currentTaskIndex ?? 0) + 1} {progress.currentTaskId}
+                    </span>
+                )}
+            </div>
+            {progress.failedTaskCount > 0 && (
+                <p className="text-[11px] text-score-low">失敗 {progress.failedTaskCount} 件</p>
+            )}
+        </section>
     );
 }
 

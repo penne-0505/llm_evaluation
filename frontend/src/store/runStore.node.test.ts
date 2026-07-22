@@ -35,3 +35,35 @@ test('clearResult resets a completed run back to the runnable idle state', () =>
     assert.equal(state.cancelRequested, false);
     assert.equal(state.errorMessage, null);
 });
+
+test('holistic progress is kept separately from standard task progress', () => {
+    const store = useRunStore.getState();
+    store.reset();
+    store.startRun(4);
+    useRunStore.getState().updateProgress({
+        completedTaskCount: 2,
+        activeTaskCount: 0,
+        queuedTaskCount: 0,
+    });
+    useRunStore.getState().updateHolisticProgress({
+        status: 'running',
+        completedTaskCount: 0,
+        failedTaskCount: 0,
+        totalTaskCount: 1,
+        currentTaskIndex: 0,
+        currentTaskId: 'style',
+        message: '包括評価 1/1: 実行中',
+    });
+
+    const state = useRunStore.getState();
+    assert.equal(state.progress?.completedTaskCount, 2);
+    assert.deepEqual(state.holisticProgress, {
+        status: 'running',
+        completedTaskCount: 0,
+        failedTaskCount: 0,
+        totalTaskCount: 1,
+        currentTaskIndex: 0,
+        currentTaskId: 'style',
+        message: '包括評価 1/1: 実行中',
+    });
+});

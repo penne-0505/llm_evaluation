@@ -20,7 +20,8 @@ related_prs: []
 ## Summary
 
 localStorage実行プリセットのschema、欠損filter、manual model復元、Settings CRUD、
-reload後永続、desktop表示、console状態を検証した。
+reload後永続、desktop表示、console状態を検証した。追加で、integer-like task IDを
+含むプリセットが現在のtask catalog順で復元され、欠損task検出を維持することを検証した。
 
 ## Verification Verdict
 
@@ -47,6 +48,26 @@ frontend lint: PASS
 frontend node tests: 7 PASS
 backend pytest: 77 PASS
 scoped frontmatter / intent / doc-links: PASS
+```
+
+### Task-order regression update
+
+```bash
+node --test frontend/src/lib/executionPresets.node.test.ts
+npm run lint --prefix frontend
+npm run build --prefix frontend
+DD_SCOPE_PATHS='_docs/reference/UI/execution-presets.md:_docs/qa/UI/execution-presets/test-plan.md:_docs/qa/UI/execution-presets/verification.md' deno run --allow-read --allow-env --allow-run=git scripts/validate-frontmatter.mjs
+DD_SCOPE_PATHS='_docs/reference/UI/execution-presets.md:_docs/qa/UI/execution-presets/test-plan.md:_docs/qa/UI/execution-presets/verification.md' deno run --allow-read --allow-env --allow-run=git scripts/validate-doc-links.mjs
+DD_SCOPE_PATHS='_docs/reference/UI/execution-presets.md:_docs/qa/UI/execution-presets/test-plan.md:_docs/qa/UI/execution-presets/verification.md' deno run --allow-read --allow-env --allow-run=git scripts/validate-qa.mjs
+```
+
+Result:
+
+```text
+executionPresets.node.test.ts: 4 PASS
+frontend lint: PASS
+frontend production build: PASS
+scoped frontmatter / doc-links / QA validation: PASS
 ```
 
 ## Automated Test Results
@@ -82,13 +103,14 @@ scoped frontmatter / intent / doc-links: PASS
 | AC-003 | PASS | resolve unit testとconsole方針review |
 | AC-004 | PASS | manual model unit test |
 | AC-005 | PASS | schema / store partialize review |
+| AC-006 | PASS | `02, 04, 10, 11`のcatalog順復元と`99`の欠損検出をunit testで確認 |
 
 ## Decision Conformance
 
 | ID | Result | Why the implementation remains aligned |
 | --- | --- | --- |
 | DEC-001 | PASS | backendを変更せず既存localStorage persistへ追加 |
-| DEC-002 | PASS | 合意済み6項目だけをconfigへ保存 |
+| DEC-002 | PASS | 合意済み6項目だけをconfigへ保存し、選択済みtaskを現在のcatalog順で復元 |
 | DEC-003 | PASS | 欠損をfilterしconsole warningのみ記録 |
 
 ## Invariant Coverage

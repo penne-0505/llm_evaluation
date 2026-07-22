@@ -8,8 +8,8 @@
 ### 1.2 参照ドキュメント
 - 要件定義書: `_docs/draft/requirements.md`
 - judgeシステムプロンプト: `_docs/draft/judge_sys_instruction.md`
-- タスクルーブリック: `_docs/draft/rubrics_draft/01.md`〜`11.md`
-- タスクプロンプト: `_docs/draft/prompts_for_subject_model/01.md`〜`11.md`
+- タスクルーブリック: `rubrics/01.md`〜`11.md`
+- タスクプロンプト: `prompts/01.md`〜`11.md`
 
 ### 1.3 スコープ
 - **内包**: Streamlit UI、アダプタ層、評価実行エンジン、結果表示・保存機能

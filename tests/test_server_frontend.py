@@ -1,5 +1,6 @@
 """配布向け frontend 配信のテスト"""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -228,6 +229,135 @@ class TestRunProgressSnapshot(unittest.TestCase):
             snapshot["completed_tasks"][0]["judge_completed_count"],
             2,
         )
+
+    def test_holistic_tasks_are_excluded_from_standard_progress_lanes(self):
+        standard_task = server._initial_task_progress_state(
+            "standard-task", 0, ["judge-a"]
+        )
+        standard_task["phase"] = "completed"
+        standard_task["subject_done"] = True
+        standard_task["judge_states"]["judge-a"] = "completed"
+        holistic_task = server._initial_task_progress_state(
+            "style", 1, ["judge-a"], task_kind="holistic"
+        )
+        holistic_task["phase"] = "running_judges"
+        holistic_task["subject_done"] = True
+        holistic_task["judge_states"]["judge-a"] = "running"
+
+        snapshot = server._build_progress_snapshot([standard_task, holistic_task])
+
+        self.assertEqual(snapshot["completed_task_count"], 1)
+        self.assertEqual(snapshot["active_task_count"], 0)
+        self.assertEqual(snapshot["queued_task_count"], 0)
+        self.assertEqual(
+            [task["task_id"] for task in snapshot["completed_tasks"]],
+            ["standard-task"],
+        )
+        self.assertEqual(snapshot["completed_tasks"][0]["task_kind"], "standard")
+
+    def test_holistic_progress_event_has_dedicated_lifecycle_payload(self):
+        event = server._build_holistic_progress_event(
+            status="running",
+            completed_task_count=1,
+            failed_task_count=0,
+            total_task_count=2,
+            current_task_index=1,
+            current_task_id="style",
+            message="包括評価 2/2: 実行中",
+        )
+
+        self.assertEqual(event["type"], "holistic_progress")
+        self.assertEqual(event["status"], "running")
+        self.assertEqual(event["completed_task_count"], 1)
+        self.assertEqual(event["total_task_count"], 2)
+        self.assertEqual(event["current_task_index"], 1)
+        self.assertEqual(event["current_task_id"], "style")
+
+
+class TestHolisticProgressDelivery(unittest.IsolatedAsyncioTestCase):
+    async def test_progress_event_is_yielded_before_holistic_task_completes(self):
+        progress_queue: asyncio.Queue[Optional[dict]] = asyncio.Queue()
+        release_task = asyncio.Event()
+
+        async def run_holistic_task() -> None:
+            progress_queue.put_nowait(
+                server._build_holistic_progress_event(
+                    status="running",
+                    completed_task_count=0,
+                    failed_task_count=0,
+                    total_task_count=1,
+                    current_task_index=0,
+                    current_task_id="style",
+                    message="包括評価 1/1: 実行中",
+                )
+            )
+            await release_task.wait()
+
+        running_task = asyncio.create_task(run_holistic_task())
+        delivered_events = []
+        async for event in server._drain_progress_events_while_task_runs(
+            running_task, progress_queue, lambda: None
+        ):
+            delivered_events.append(event)
+            self.assertFalse(running_task.done())
+            release_task.set()
+
+        await running_task
+        self.assertEqual(delivered_events[0]["type"], "holistic_progress")
+        self.assertEqual(delivered_events[0]["status"], "running")
+
+    async def test_cancelling_progress_drain_cancels_and_awaits_holistic_task(self):
+        progress_queue: asyncio.Queue[Optional[dict]] = asyncio.Queue()
+        task_cancelled = asyncio.Event()
+
+        async def run_holistic_task() -> None:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                task_cancelled.set()
+
+        running_task = asyncio.create_task(run_holistic_task())
+        await asyncio.sleep(0)
+
+        with self.assertRaises(asyncio.CancelledError):
+            async for _event in server._drain_progress_events_while_task_runs(
+                running_task,
+                progress_queue,
+                lambda: (_ for _ in ()).throw(asyncio.CancelledError()),
+            ):
+                pass
+
+        self.assertTrue(running_task.done())
+        self.assertTrue(running_task.cancelled())
+        self.assertTrue(task_cancelled.is_set())
+
+    async def test_failed_holistic_task_finishes_before_exception_is_observed(self):
+        progress_queue: asyncio.Queue[Optional[dict]] = asyncio.Queue()
+
+        async def run_holistic_task() -> None:
+            progress_queue.put_nowait(
+                server._build_holistic_progress_event(
+                    status="running",
+                    completed_task_count=0,
+                    failed_task_count=0,
+                    total_task_count=1,
+                    message="包括評価 1/1: 実行中",
+                )
+            )
+            await asyncio.sleep(0)
+            raise RuntimeError("judge failure")
+
+        running_task = asyncio.create_task(run_holistic_task())
+        delivered_events = []
+        async for event in server._drain_progress_events_while_task_runs(
+            running_task, progress_queue, lambda: None
+        ):
+            delivered_events.append(event)
+
+        with self.assertRaisesRegex(RuntimeError, "judge failure"):
+            await running_task
+        self.assertTrue(running_task.done())
+        self.assertEqual(delivered_events[0]["type"], "holistic_progress")
 
 
 class TestGroundingCorpusApi(unittest.TestCase):

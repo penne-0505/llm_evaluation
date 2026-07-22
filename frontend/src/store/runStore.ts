@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { RunStatus, RunProgress, EvaluationRun } from '../types';
+import type { RunStatus, RunProgress, EvaluationRun, HolisticRunProgress } from '../types';
 
 interface RunState {
     status: RunStatus;
     progress: RunProgress | null;
+    holisticProgress: HolisticRunProgress | null;
     result: EvaluationRun | null;
     resultFilePath: string | null;
     runId: string | null;
@@ -13,6 +14,7 @@ interface RunState {
     startRun: (totalSteps: number) => void;
     setRunId: (runId: string) => void;
     updateProgress: (update: Partial<RunProgress> & { totalSteps?: number }) => void;
+    updateHolisticProgress: (update: HolisticRunProgress) => void;
     completeRun: (result: EvaluationRun, savedPath?: string) => void;
     cancelRun: () => void;
     requestCancel: () => void;
@@ -25,6 +27,7 @@ interface RunState {
 export const useRunStore = create<RunState>((set) => ({
     status: 'idle',
     progress: null,
+    holisticProgress: null,
     result: null,
     resultFilePath: null,
     runId: null,
@@ -52,6 +55,7 @@ export const useRunStore = create<RunState>((set) => ({
                 activeTasks: [],
                 queuedTasks: [],
             },
+            holisticProgress: null,
             result: null,
             resultFilePath: null,
         }),
@@ -79,6 +83,8 @@ export const useRunStore = create<RunState>((set) => ({
                 },
         })),
 
+    updateHolisticProgress: (update) => set({ holisticProgress: update }),
+
     completeRun: (result, savedPath) =>
         set({
             status: 'completed',
@@ -94,6 +100,7 @@ export const useRunStore = create<RunState>((set) => ({
         set({
             status: 'idle',
             progress: null,
+            holisticProgress: null,
             result: null,
             resultFilePath: null,
             runId: null,
@@ -111,6 +118,7 @@ export const useRunStore = create<RunState>((set) => ({
                 ? {
                     status: 'idle',
                     progress: null,
+                    holisticProgress: null,
                     runId: null,
                     cancelRequested: false,
                     errorMessage: null,

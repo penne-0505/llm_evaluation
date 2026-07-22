@@ -14,7 +14,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -425,11 +425,15 @@ def _extract_judge_model(message: str) -> str:
 
 
 def _initial_task_progress_state(
-    task_id: str, task_index: int, judge_models: List[str]
+    task_id: str,
+    task_index: int,
+    judge_models: List[str],
+    task_kind: str = "standard",
 ) -> Dict[str, Any]:
     return {
         "task_id": task_id,
         "task_index": task_index,
+        "task_kind": task_kind,
         "phase": "queued",
         "message": "Queued",
         "subject_done": False,
@@ -469,14 +473,24 @@ def _apply_progress_message(
 
 
 def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any]:
-    completed_count = sum(1 for state in task_states if state["phase"] == "completed")
-    completed_states = [state for state in task_states if state["phase"] == "completed"]
+    # intent: DEC-001 (Core/holistic-run-progress) — 通常 task の lane と post-processing phase を混同させない。
+    standard_task_states = [
+        state for state in task_states if state.get("task_kind", "standard") == "standard"
+    ]
+    completed_count = sum(
+        1 for state in standard_task_states if state["phase"] == "completed"
+    )
+    completed_states = [
+        state for state in standard_task_states if state["phase"] == "completed"
+    ]
     active_states = [
         state
-        for state in task_states
+        for state in standard_task_states
         if state["phase"] in ("running_subject", "running_judges")
     ]
-    queued_states = [state for state in task_states if state["phase"] == "queued"]
+    queued_states = [
+        state for state in standard_task_states if state["phase"] == "queued"
+    ]
     queued_count = len(queued_states)
 
     active_tasks = []
@@ -486,6 +500,7 @@ def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any
             {
                 "task_id": state["task_id"],
                 "task_index": state["task_index"],
+                "task_kind": state.get("task_kind", "standard"),
                 "phase": state["phase"],
                 "message": state["message"],
                 "subject_done": state["subject_done"],
@@ -510,6 +525,7 @@ def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any
             {
                 "task_id": state["task_id"],
                 "task_index": state["task_index"],
+                "task_kind": state.get("task_kind", "standard"),
                 "phase": state["phase"],
                 "message": state["message"],
                 "subject_done": state["subject_done"],
@@ -528,6 +544,7 @@ def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any
             {
                 "task_id": state["task_id"],
                 "task_index": state["task_index"],
+                "task_kind": state.get("task_kind", "standard"),
                 "phase": state["phase"],
                 "message": state["message"],
                 "subject_done": state["subject_done"],
@@ -551,6 +568,53 @@ def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any
         "active_tasks": sorted(active_tasks, key=lambda item: item["task_index"]),
         "queued_tasks": sorted(queued_tasks, key=lambda item: item["task_index"]),
     }
+
+
+def _build_holistic_progress_event(
+    *,
+    status: str,
+    completed_task_count: int,
+    failed_task_count: int,
+    total_task_count: int,
+    message: str,
+    current_task_index: Optional[int] = None,
+    current_task_id: str = "",
+) -> Dict[str, Any]:
+    """包括評価専用の SSE progress payload を構築する。"""
+    return {
+        "type": "holistic_progress",
+        "status": status,
+        "completed_task_count": completed_task_count,
+        "failed_task_count": failed_task_count,
+        "total_task_count": total_task_count,
+        "current_task_index": current_task_index,
+        "current_task_id": current_task_id,
+        "message": message,
+    }
+
+
+async def _drain_progress_events_while_task_runs(
+    running_task: asyncio.Task[Any],
+    progress_queue: asyncio.Queue[Optional[Dict[str, Any]]],
+    cancel_checker: Callable[[], None],
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """実行中 task の progress event を接続へ遅延なく渡す。"""
+    try:
+        while not running_task.done() or not progress_queue.empty():
+            cancel_checker()
+            try:
+                event = progress_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(0.05)
+                continue
+
+            if event is not None:
+                yield event
+    except asyncio.CancelledError:
+        if not running_task.done():
+            running_task.cancel()
+        await asyncio.gather(running_task, return_exceptions=True)
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -869,6 +933,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
 
     イベント種別:
       {"type": "progress", "message": str, "current": int, "total": int}
+      {"type": "holistic_progress", "status": "started|running|completed", ...}
       {"type": "complete", "result": {...}, "saved_path": str}
       {"type": "cancelled", "completed_tasks": int, "total_tasks": int}
       {"type": "error", "message": str, "traceback": str}
@@ -1040,6 +1105,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 task_index: int = 0,
                 task_id: str = "",
                 judge_model: str = "",
+                task_kind: str = "standard",
                 increment_step: bool = True,
             ) -> None:
                 nonlocal progress_current
@@ -1055,8 +1121,30 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                         "task_index": task_index,
                         "task_id": task_id,
                         "judge_model": judge_model,
+                        "task_kind": task_kind,
                         **snapshot,
                     }
+                )
+
+            def enqueue_holistic_progress_event(
+                *,
+                status: str,
+                completed_task_count: int,
+                failed_task_count: int,
+                message: str,
+                current_task_index: Optional[int] = None,
+                current_task_id: str = "",
+            ) -> None:
+                progress_queue.put_nowait(
+                    _build_holistic_progress_event(
+                        status=status,
+                        completed_task_count=completed_task_count,
+                        failed_task_count=failed_task_count,
+                        total_task_count=holistic_task_count,
+                        message=message,
+                        current_task_index=current_task_index,
+                        current_task_id=current_task_id,
+                    )
                 )
 
             def progress_callback(
@@ -1075,6 +1163,11 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                     task_index=task_index,
                     task_id=task_id,
                     judge_model=judge_model,
+                    task_kind=(
+                        task_states[task_index].get("task_kind", "standard")
+                        if 0 <= task_index < len(task_states)
+                        else "standard"
+                    ),
                 )
 
             def cancel_checker() -> None:
@@ -1217,6 +1310,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
             # --- 包括評価フェーズ ---
             holistic_results: List[Dict[str, Any]] = []
             if not cancelled and holistic_tasks_meta and req.run_holistic:
+                failed_holistic_task_count = 0
                 non_creative_responses = [
                     {
                         "task_name": r["task_name"],
@@ -1227,6 +1321,12 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                     for r in completed
                     if r.get("task_type") != "creative"
                 ]
+                enqueue_holistic_progress_event(
+                    status="started",
+                    completed_task_count=0,
+                    failed_task_count=0,
+                    message="包括評価を開始します",
+                )
 
                 for h_idx, h_task in enumerate(holistic_tasks_meta):
                     try:
@@ -1238,14 +1338,27 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
 
                     h_state_index = total_tasks + h_idx
                     h_state = _initial_task_progress_state(
-                        h_task["id"], h_state_index, list(judge_adapters.keys())
+                        h_task["id"],
+                        h_state_index,
+                        list(judge_adapters.keys()),
+                        task_kind="holistic",
                     )
                     task_states.append(h_state)
+
+                    enqueue_holistic_progress_event(
+                        status="running",
+                        completed_task_count=len(holistic_results),
+                        failed_task_count=failed_holistic_task_count,
+                        current_task_index=h_idx,
+                        current_task_id=h_task["id"],
+                        message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 実行中",
+                    )
 
                     enqueue_progress_event(
                         message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 実行開始",
                         task_index=h_state_index,
                         task_id=h_task["id"],
+                        task_kind="holistic",
                         increment_step=False,
                     )
 
@@ -1254,8 +1367,8 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                     )
                     eval_prompt = Path(h_task["prompt_file"]).read_text(encoding="utf-8")
 
-                    try:
-                        h_result = await engine.run_holistic_task(
+                    holistic_future = asyncio.create_task(
+                        engine.run_holistic_task(
                             task_name=h_task["id"],
                             eval_prompt=eval_prompt,
                             rubric_content=rubric_content,
@@ -1271,6 +1384,15 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                             ),
                             cancel_checker=cancel_checker,
                         )
+                    )
+                    try:
+                        # intent: DEC-001 (Core/holistic-run-progress) — 専用イベントを完了後まで滞留させず、実行中の phase を観測可能にする。
+                        async for event in _drain_progress_events_while_task_runs(
+                            holistic_future, progress_queue, cancel_checker
+                        ):
+                            yield _sse_event(event)
+
+                        h_result = await holistic_future
                         holistic_results.append(h_result.to_dict())
                         task_states[h_state_index]["phase"] = "completed"
                         task_states[h_state_index]["subject_done"] = True
@@ -1279,7 +1401,14 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                             message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 完了",
                             task_index=h_state_index,
                             task_id=h_task["id"],
+                            task_kind="holistic",
                             increment_step=False,
+                        )
+                        enqueue_holistic_progress_event(
+                            status="running",
+                            completed_task_count=len(holistic_results),
+                            failed_task_count=failed_holistic_task_count,
+                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 完了",
                         )
                     except asyncio.CancelledError:
                         cancelled = True
@@ -1293,11 +1422,19 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                         )
                         task_states[h_state_index]["phase"] = "failed"
                         task_states[h_state_index]["message"] = f"Failed: {h_exc}"
+                        failed_holistic_task_count += 1
                         enqueue_progress_event(
                             message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 失敗",
                             task_index=h_state_index,
                             task_id=h_task["id"],
+                            task_kind="holistic",
                             increment_step=False,
+                        )
+                        enqueue_holistic_progress_event(
+                            status="running",
+                            completed_task_count=len(holistic_results),
+                            failed_task_count=failed_holistic_task_count,
+                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 失敗",
                         )
 
                 # キューの残りをフラッシュ
@@ -1307,6 +1444,20 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                         yield _sse_event(event)
                     except asyncio.QueueEmpty:
                         break
+
+                if not cancelled:
+                    enqueue_holistic_progress_event(
+                        status="completed",
+                        completed_task_count=len(holistic_results),
+                        failed_task_count=failed_holistic_task_count,
+                        message="包括評価が完了しました",
+                    )
+                    while not progress_queue.empty():
+                        try:
+                            event = progress_queue.get_nowait()
+                            yield _sse_event(event)
+                        except asyncio.QueueEmpty:
+                            break
 
             if cancelled:
                 logger.info(

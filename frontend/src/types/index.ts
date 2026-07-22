@@ -210,6 +210,7 @@ export type RunJudgePhase = 'pending' | 'running' | 'completed' | 'error';
 export interface ActiveRunTask {
     taskId: string;
     taskIndex: number;
+    taskKind: 'standard' | 'holistic';
     phase: RunTaskPhase;
     message: string;
     subjectDone: boolean;
@@ -218,6 +219,18 @@ export interface ActiveRunTask {
     judgeErrorCount: number;
     judgeTotalCount: number;
     activeJudges: string[];
+}
+
+export type HolisticRunStatus = 'started' | 'running' | 'completed';
+
+export interface HolisticRunProgress {
+    status: HolisticRunStatus;
+    completedTaskCount: number;
+    failedTaskCount: number;
+    totalTaskCount: number;
+    currentTaskIndex: number | null;
+    currentTaskId: string;
+    message: string;
 }
 
 export interface RunProgress {

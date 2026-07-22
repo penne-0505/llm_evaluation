@@ -71,6 +71,7 @@ interface ExecutionPreset {
 - モデルカタログが利用可能な場合、存在しない被験・judgeモデルを除外する。
 - モデルカタログが空の場合、保存したモデル文字列をfree-text入力として復元する。
 - 現在のtask一覧に存在しないtask IDは除外する。
+- 選択済みtaskは、保存JSONのキー列挙順ではなく現在のtask一覧の順序で復元する。
 - 除外したモデル・taskはUIへ表示せず、`console.warn`へ記録する。
 - judge評価回数は`1..5`、subject temperatureは`0..1`へ正規化する。
 - 未対応のschema versionは適用せず、`console.warn`へ記録する。

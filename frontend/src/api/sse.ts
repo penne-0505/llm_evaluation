@@ -6,6 +6,8 @@
  *   { type: "progress",  message, current, total, task_index, task_id, judge_model,
  *                        completed_task_count, active_task_count, queued_task_count,
  *                        completed_tasks, active_tasks, queued_tasks }
+ *   { type: "holistic_progress", status, completed_task_count, failed_task_count,
+ *                        total_task_count, current_task_index, current_task_id, message }
  *   { type: "complete",  result, saved_path }
  *   { type: "cancelled", completed_tasks, total_tasks, reason }
  *   { type: "error",     message, traceback }
@@ -137,6 +139,20 @@ function handleSSEEvent(
             });
             break;
 
+        case 'holistic_progress':
+            store.updateHolisticProgress({
+                status: normalizeHolisticStatus(event.status),
+                completedTaskCount: (event.completed_task_count as number) || 0,
+                failedTaskCount: (event.failed_task_count as number) || 0,
+                totalTaskCount: (event.total_task_count as number) || 0,
+                currentTaskIndex: typeof event.current_task_index === 'number'
+                    ? event.current_task_index
+                    : null,
+                currentTaskId: (event.current_task_id as string) || '',
+                message: (event.message as string) || '',
+            });
+            break;
+
         case 'complete': {
             const rawResult = event.result as Record<string, unknown>;
             const savedPath = event.saved_path as string;
@@ -167,6 +183,7 @@ function normalizeActiveTasks(raw: unknown): ActiveRunTask[] {
         return {
             taskId: (item.task_id as string) || '',
             taskIndex: (item.task_index as number) || 0,
+            taskKind: item.task_kind === 'holistic' ? 'holistic' : 'standard',
             phase: (item.phase as ActiveRunTask['phase']) || 'queued',
             message: (item.message as string) || '',
             subjectDone: Boolean(item.subject_done),
@@ -177,4 +194,11 @@ function normalizeActiveTasks(raw: unknown): ActiveRunTask[] {
             activeJudges: (item.active_judges as string[]) || [],
         };
     });
+}
+
+function normalizeHolisticStatus(status: unknown): 'started' | 'running' | 'completed' {
+    if (status === 'running' || status === 'completed') {
+        return status;
+    }
+    return 'started';
 }

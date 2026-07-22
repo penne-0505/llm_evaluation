@@ -88,6 +88,7 @@ export function resolveExecutionPresetConfig(
     const requestedTaskIds = Object.entries(config.taskSelections)
         .filter(([, selected]) => selected)
         .map(([id]) => id);
+    const requestedTaskIdSet = new Set(requestedTaskIds);
 
     return {
         subjectModelId:
@@ -99,7 +100,9 @@ export function resolveExecutionPresetConfig(
             : [],
         freeTextSubject: hasCatalogModels ? '' : config.subjectModel ?? '',
         freeTextJudges: hasCatalogModels ? [] : [...config.judgeModels],
-        selectedTaskIds: requestedTaskIds.filter((id) => availableTaskIds.has(id)),
+        selectedTaskIds: availableTasks
+            .filter((task) => requestedTaskIdSet.has(task.id))
+            .map((task) => task.id),
         runHolistic: config.runHolistic,
         judgeRunCount: Math.min(5, Math.max(1, Math.round(config.judgeRunCount))),
         subjectTemperature: Math.min(1, Math.max(0, config.subjectTemperature)),

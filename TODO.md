@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 31` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 32` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -321,6 +321,33 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 ---
 
 ## In Progress
+
+### Core-Enhance-31: [Enhance] Expose holistic evaluation progress in the run board
+
+- **Title**: [Enhance] Expose holistic evaluation progress in the run board
+- **ID**: Core-Enhance-31
+- **Priority**: P1
+- **Size**: M
+- **Risk**: Medium
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: 包括評価を有効にした実行で、通常タスクの進捗と混同せずに開始・進行・完了を Run 画面で確認でき、送信タスク ID は画面の canonical 順に保たれる。
+- **Acceptance Criteria**:
+  - AC-001: backend は包括評価の開始・各タスクの進行・完了を専用 SSE event として送信し、通常タスクの lane 集計へ包括タスクを混在させない。
+  - AC-002: frontend は専用 event を型安全に store へ反映し、Run 画面で包括評価の段階・件数・現在のメッセージを通常 lane と別に表示する。
+  - AC-003: RunPage が backend へ送る `selectedTaskIds` は画面 `tasks` の canonical 順で `selectedTasks.map(...)` から構築され、選択状態由来の順序・未知 ID・重複に左右されない。
+- **Steps**:
+  1. [x] 現行 SSE / Run store / RunPage の進捗経路と選択 ID の送信経路を確認する。
+  2. [x] Plan / Intent / QA test-plan を作成する。
+  3. [x] backend / frontend の専用包括進捗経路と canonical task-ID 正規化を実装する。
+  4. [ ] `run_holistic=true/false` の live Run 画面で専用 card の lifecycle を確認し、PARTIAL verification を PASS へ更新する。
+- **Description**:
+  - Context: 現行の包括評価は通常 `progress` snapshot の `task_states` へ追加されるため、Run 画面の通常 task lane と完了件数が包括評価を明示せずに増加する。
+  - Notes: 実行プロトコルを変えず、SSE の dedicated event と store の derived display state で観測可能性を追加する。通常 task の選択 canonicalization は UI boundary で行う。通常状態の Run 画面は実ブラウザで確認済みだが、provider を呼び出す live holistic run は未実施である。
+- **Plan**: _docs/plan/Core/holistic-run-progress/plan.md
+- **Intent**: _docs/intent/Core/holistic-run-progress/decision.md
+- **QA**: _docs/qa/Core/holistic-run-progress/test-plan.md
+- **Verification**: _docs/qa/Core/holistic-run-progress/verification.md
 
 ### Workflow-Chore-30: [Chore] Complete docs-driven template v1.0.0 migration closure
 

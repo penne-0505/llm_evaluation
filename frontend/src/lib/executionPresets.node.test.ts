@@ -66,6 +66,37 @@ test('resolveExecutionPresetConfig silently filters unavailable models and tasks
     assert.equal(resolved.subjectTemperature, 0);
 });
 
+test('resolveExecutionPresetConfig restores selected tasks in the available task order', () => {
+    const availableTasks: Task[] = [
+        { id: '02', type: 'creative', promptPreview: 'task 02' },
+        { id: '04', type: 'fact', promptPreview: 'task 04' },
+        { id: '10', type: 'speculative', promptPreview: 'task 10' },
+        { id: '11', type: 'fact', promptPreview: 'task 11' },
+    ];
+
+    const resolved = resolveExecutionPresetConfig(
+        {
+            subjectModel: null,
+            judgeModels: [],
+            taskSelections: {
+                '02': true,
+                '04': true,
+                '10': true,
+                '11': true,
+                '99': true,
+            },
+            runHolistic: false,
+            judgeRunCount: 1,
+            subjectTemperature: 0,
+        },
+        models,
+        availableTasks,
+    );
+
+    assert.deepEqual(resolved.selectedTaskIds, ['02', '04', '10', '11']);
+    assert.deepEqual(resolved.missingTaskIds, ['99']);
+});
+
 test('capture and resolve preserve manual models when the catalog is unavailable', () => {
     const config = captureExecutionPresetConfig({
         subjectModelId: null,

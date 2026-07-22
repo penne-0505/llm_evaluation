@@ -34,6 +34,7 @@ related_prs: []
 - AC-003: モデル・task欠損を除外し、warningだけを記録する。
 - AC-004: catalog未取得時のmanual model文字列をfree-text入力へ復元する。
 - AC-005: API key、tool mode、並列設定をプリセットへ保存しない。
+- AC-006: 選択済みtaskを現在のtask catalog順で復元し、integer-like task IDのJSONキー列挙順に依存しない。
 
 ## Decision Review Scope
 
@@ -73,6 +74,7 @@ related_prs: []
 | AC-002 | Intent DEC-001 | CRUDとreload後永続 | rendered QA | Settings `/settings` | `1 saved`、reload後option保持、削除後`0 saved` | verified |
 | AC-003 | Intent DEC-003 | 欠損除外 | unit | `executionPresets.node.test.ts` | missing IDと適用値を分離 | verified |
 | AC-004 | Intent DEC-002 | manual model復元 | unit | `executionPresets.node.test.ts` | free-textへ復元 | verified |
+| AC-006 | Intent DEC-002 | task復元順序 | unit | `executionPresets.node.test.ts` | `02, 04, 10, 11`をcatalog順で復元し、`99`を欠損として検出 | verified |
 | INV-001 | DEC-002 | API key非保存 | review | schema / partialize review | configにsecret fieldなし | verified |
 | INV-002 | DEC-003 | UIを中断しない | unit / rendered QA | resolve test / browser console | filter後も適用、関連errorなし | verified |
 
