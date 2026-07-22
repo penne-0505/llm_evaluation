@@ -311,7 +311,7 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                     {!expanded && tr.judgeEvaluations.length > 0 && (
                         <div className="flex max-w-[min(55vw,32rem)] flex-wrap items-center justify-end gap-x-2 gap-y-1">
                             {tr.judgeEvaluations.map((je) => (
-                                <span key={je.judgeModelId} className={`data-display text-[11px] ${scoreColor(je.totalScore.mean)}`}>
+                                <span key={je.judgeModelId} className={`data-display inline-block w-[4ch] shrink-0 text-right text-[11px] ${scoreColor(je.totalScore.mean)}`}>
                                     {je.totalScore.mean}
                                 </span>
                             ))}
@@ -325,7 +325,7 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                 <div className="px-4 pb-4 space-y-4 border-t border-border animate-fade-in">
                     <div className="pt-3 space-y-1.5">
                         <p className="text-[9px] text-text-tertiary uppercase tracking-wider">被験モデルの回答</p>
-                        <div className="bg-bg rounded p-3 text-[12px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+                        <div className="h-48 min-h-24 max-h-[70vh] resize-y overflow-y-auto rounded bg-bg p-3 text-[12px] leading-relaxed text-text-secondary whitespace-pre-wrap">
                             {tr.subjectResponse}
                         </div>
                     </div>
