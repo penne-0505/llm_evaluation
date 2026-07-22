@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Prism LLM Eval
+Comment=Evaluate language models with task-specific rubrics
+Exec=prism-llm-eval
+Icon=prism-llm-eval
+Terminal=true
+Categories=Development;

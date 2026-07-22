@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write
 
+# intent: DEC-002 (DevOps/linux-appimage-release) — OS別jobを依存させず、同一tagのRelease更新だけを直列化する。
+concurrency:
+  group: release-assets-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   windows-bundle:
     runs-on: windows-latest

@@ -118,6 +118,39 @@ GitHub Releases で配布する成果物名は `prism-llm-eval-{tag}-windows-x86
 
 詳細な利用ガイドとトラブルシュートは `_docs/guide/DevOps/windows-portable-zip.md` を参照してください。
 
+## Linux AppImage の使い方
+
+GitHub Releases では Linux x86_64 向けに
+`prism-llm-eval-{tag}-linux-x86_64.AppImage` と対応する `.sha256` を配布します。
+
+```bash
+sha256sum --check prism-llm-eval-*-linux-x86_64.AppImage.sha256
+chmod +x prism-llm-eval-*-linux-x86_64.AppImage
+./prism-llm-eval-*-linux-x86_64.AppImage
+```
+
+FUSEを利用できない環境では、展開実行に切り替えられます。
+
+```bash
+./prism-llm-eval-*-linux-x86_64.AppImage --appimage-extract-and-run
+```
+
+AppImageはLinux x86_64を対象とし、CIではUbuntu 22.04上でbuildとsmoke testを行います。
+詳細は `_docs/guide/DevOps/linux-appimage.md` を参照してください。
+
+## Linux AppImage の生成
+
+Linux x86_64上でfrontend build、PyInstaller bundling、AppImage生成をまとめて実行します。
+
+```bash
+./scripts/build_linux_appimage.sh v0.8.0
+```
+
+生成物:
+
+- AppImage: `dist/prism-llm-eval-<version>-linux-x86_64.AppImage`
+- SHA256: `dist/prism-llm-eval-<version>-linux-x86_64.AppImage.sha256`
+
 ## Windows 向けバンドル生成
 
 PowerShell から以下を実行すると、frontend build と PyInstaller bundling をまとめて行います。

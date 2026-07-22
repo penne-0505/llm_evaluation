@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 32` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 33` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -321,6 +321,36 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 ---
 
 ## In Progress
+
+### DevOps-Feat-32: [Feat] Publish Linux x86_64 AppImage releases
+
+- **Title**: [Feat] Publish Linux x86_64 AppImage releases
+- **ID**: DevOps-Feat-32
+- **Priority**: P1
+- **Size**: M
+- **Risk**: High
+- **Area**: DevOps
+- **Dependencies**: []
+- **Goal**: version tag の release workflow が Linux x86_64 AppImage と SHA256 を再現可能に生成し、既存の Windows portable ZIP と同じ GitHub Release へ添付する。
+- **Acceptance Criteria**:
+  - AC-001: Linux build は frontend、Python runtime、prompt / rubric / task resource を含む PyInstaller onedir bundle を AppDir に格納し、単一の `prism-llm-eval-<tag>-linux-x86_64.AppImage` を生成する。
+  - AC-002: AppImage は `--appimage-extract-and-run --no-browser` で起動前診断を通過し、HTTP endpoint が応答する smoke test を Linux CI で完了する。
+  - AC-003: tag push時に AppImage と対応する `.sha256` が既存の Windows成果物と同じ GitHub Releaseへ添付され、手動workflowではworkflow artifactとして取得できる。
+  - AC-004: AppImage生成ツールと埋め込みruntimeはversionとSHA256を固定し、READMEとLinux利用guideに成果物名、起動方法、既知の互換性境界を記載する。
+- **Steps**:
+  1. [x] 現行のWindows release workflow、PyInstaller spec、runtime resource解決を確認する。
+  2. [x] Plan / Intent / QA test-planを作成する。
+  3. [x] Linux PyInstaller spec、AppDir metadata、build scriptを実装する。
+  4. [x] GitHub ActionsのLinux build、smoke test、artifact / Release uploadを実装する。
+  5. [x] ローカル検証とdocs validatorを実行し、verification verdictを記録する。
+  6. [ ] push後にGitHub ActionsのUbuntu 22.04 buildとworkflow artifactを確認し、次回tagで同一Releaseへのasset集約を確認する。
+- **Description**:
+  - Context: Windows向けにはPyInstaller onedirのportable ZIPがtag releaseで配布されているが、Linux利用者がPython / Node.js環境を構築せずに起動できる成果物はない。
+  - Notes: Linux配布はraw PyInstaller onefileではなく、onedirを内包するAppImageとする。対象はLinux x86_64であり、macOS、ARM、sandbox integration、system packageへの登録は含めない。
+- **Plan**: _docs/plan/DevOps/linux-appimage-release/plan.md
+- **Intent**: _docs/intent/DevOps/linux-appimage-release/decision.md
+- **QA**: _docs/qa/DevOps/linux-appimage-release/test-plan.md
+- **Verification**: _docs/qa/DevOps/linux-appimage-release/verification.md
 
 ### Core-Enhance-31: [Enhance] Expose holistic evaluation progress in the run board
 

@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+appdir_path=${APPDIR:-$(dirname "$(readlink -f "$0")")}
+exec "$appdir_path/usr/lib/prism-llm-eval/prism-llm-eval" "$@"

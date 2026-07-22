@@ -1,0 +1,74 @@
+name: Build Linux AppImage
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+# intent-invariant: INV-001 (DevOps/linux-appimage-release) — Linux固有の失敗をWindows release jobから分離する。
+permissions:
+  contents: write
+
+# intent: DEC-002 (DevOps/linux-appimage-release) — OS別jobを依存させず、同一tagのRelease更新だけを直列化する。
+concurrency:
+  group: release-assets-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux-appimage:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Determine artifact name
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="sha-${GITHUB_SHA:0:7}"
+          fi
+          basename="prism-llm-eval-${version}-linux-x86_64.AppImage"
+          echo "APPIMAGE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "APPIMAGE_BASENAME=$basename" >> "$GITHUB_ENV"
+
+      - name: Build AppImage and SHA256
+        run: ./scripts/build_linux_appimage.sh "$APPIMAGE_VERSION"
+
+      - name: Verify SHA256
+        working-directory: dist
+        run: sha256sum --check "$APPIMAGE_BASENAME.sha256"
+
+      - name: Smoke test AppImage
+        run: ./scripts/smoke_test_linux_appimage.sh "dist/$APPIMAGE_BASENAME"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APPIMAGE_BASENAME }}
+          path: |
+            dist/${{ env.APPIMAGE_BASENAME }}
+            dist/${{ env.APPIMAGE_BASENAME }}.sha256
+
+      - name: Upload release asset
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ env.APPIMAGE_BASENAME }}
+            dist/${{ env.APPIMAGE_BASENAME }}.sha256

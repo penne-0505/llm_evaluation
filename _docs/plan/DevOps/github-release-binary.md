@@ -1,16 +1,19 @@
 ---
 title: GitHub Release Binary Distribution
-status: active
+status: superseded
 draft_status: n/a
 created_at: 2026-02-18
-updated_at: 2026-02-18
-references: []
+updated_at: 2026-07-22
+references:
+  - "_docs/plan/DevOps/linux-appimage-release/plan.md"
+  - "_docs/intent/DevOps/windows-portable-zip-distribution.md"
 related_issues: []
 related_prs: []
 ---
 
 ## Overview
 - GitHub Releases向けに単一バイナリを配布するための計画を定義する。
+- この計画は配布方式の初期案であり、Windows portable ZIPとLinux AppImageの個別契約に置き換えられた。
 
 ## Scope
 - GitHub Actionsでビルドとリリース用アーティファクト生成を行う。
