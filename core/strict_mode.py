@@ -38,6 +38,9 @@ _OFFICIAL_STRICT_PRESET: Dict[str, Any] = {
     "judge_runs": 3,
     "subject_temperature": 0.45,
     "judge_temperature": 0.0,
+    "judge_temperature_omitted_models": [
+        "openrouter/google/gemini-3.5-flash",
+    ],
 }
 
 
@@ -150,6 +153,9 @@ def build_strict_mode_metadata(
         "judge_runs": strict_preset["judge_runs"],
         "subject_temperature": round(float(strict_preset["subject_temperature"]), 4),
         "judge_temperature": round(float(strict_preset["judge_temperature"]), 4),
+        "judge_temperature_omitted_models": list(
+            strict_preset.get("judge_temperature_omitted_models", [])
+        ),
         "judge_system_prompt_sha256": _sha256_file(judge_system_prompt_path),
         "task_resources": task_resources,
     }
@@ -193,6 +199,9 @@ def build_strict_mode_metadata(
             "judge_runs": strict_preset["judge_runs"],
             "subject_temperature": strict_preset["subject_temperature"],
             "judge_temperature": strict_preset["judge_temperature"],
+            "judge_temperature_omitted_models": list(
+                strict_preset.get("judge_temperature_omitted_models", [])
+            ),
         },
         "resources": {
             "judge_system_prompt": {

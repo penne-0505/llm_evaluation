@@ -72,6 +72,10 @@ class TestStrictModeMetadata(unittest.TestCase):
         self.assertEqual(run_a["profile_id"], run_b["profile_id"])
         self.assertEqual(run_a["config"]["subject_model"], "openrouter/model-a")
         self.assertEqual(run_b["config"]["subject_model"], "openrouter/model-b")
+        self.assertEqual(
+            run_a["policy"]["judge_temperature_omitted_models"],
+            ["openrouter/google/gemini-3.5-flash"],
+        )
 
     def test_override_resource_marks_run_ineligible(self):
         preset = get_official_strict_preset()

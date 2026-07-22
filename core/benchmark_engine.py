@@ -835,9 +835,9 @@ class BenchmarkEngine:
             if cancel_checker:
                 cancel_checker()
             try:
-                judge_temperature = 0.0
+                judge_temperature: Optional[float] = 0.0
                 if "gemini-3" in model_name.lower():
-                    judge_temperature = 1.0
+                    judge_temperature = None
                 extra_params = None
                 if adapter.is_reasoning_opt_in(model_name):
                     extra_params = {"reasoning": {"effort": "high"}}

@@ -290,6 +290,10 @@ class TestStrictModeApi(unittest.TestCase):
         self.assertEqual(body["label"], "Official Strict v2")
         self.assertEqual(body["judge_runs"], 3)
         self.assertEqual(body["subject_temperature"], 0.45)
+        self.assertEqual(
+            body["judge_temperature_omitted_models"],
+            ["openrouter/google/gemini-3.5-flash"],
+        )
         self.assertEqual(body["task_ids"], [f"{i:02d}" for i in range(1, 12)])
         self.assertEqual(
             [judge["id"] for judge in body["judge_models"]],

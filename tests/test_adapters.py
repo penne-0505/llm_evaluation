@@ -296,8 +296,8 @@ def test_extra_body_passed_to_openrouter():
     print("OpenRouter extra_body テスト完了")
 
 
-def test_openrouter_omits_unsupported_temperature():
-    """catalog 上 temperature 非対応のモデルには temperature を送らない"""
+def test_openrouter_omits_none_or_unsupported_temperature():
+    """None または catalog 上非対応なら temperature を送らない"""
     adapter = OpenRouterAdapter(api_key="sk-or-v1-test12345678901234567890")
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -312,7 +312,16 @@ def test_openrouter_omits_unsupported_temperature():
         "anthropic/claude-sonnet-5": {
             "id": "anthropic/claude-sonnet-5",
             "supported_parameters": ["reasoning", "max_tokens", "tools"],
-        }
+        },
+        "google/gemini-3.5-flash": {
+            "id": "google/gemini-3.5-flash",
+            "supported_parameters": [
+                "reasoning",
+                "temperature",
+                "max_tokens",
+                "tools",
+            ],
+        },
     }
     try:
         adapter.complete_with_model_result(
@@ -333,8 +342,64 @@ def test_openrouter_omits_unsupported_temperature():
         )
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert "temperature" not in call_kwargs
+
+        mock_client.chat.completions.create.reset_mock()
+        adapter.complete_with_model_result(
+            model="openrouter/google/gemini-3.5-flash",
+            system_prompt="sys",
+            user_prompt="user",
+            temperature=None,
+        )
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
+
+        mock_client.chat.completions.create.reset_mock()
+        adapter.complete_with_model_native_tools(
+            model="openrouter/google/gemini-3.5-flash",
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            temperature=None,
+        )
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
     finally:
         OpenRouterAdapter._models_cache = None
+
+
+def test_lmstudio_omits_none_temperature():
+    with patch(
+        "adapters.lmstudio_adapter.ProviderConfigStore.load_provider",
+        return_value={"base_url": "http://127.0.0.1:1234/v1"},
+    ):
+        adapter = LMStudioAdapter()
+
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "ok"
+    mock_response.choices[0].message.tool_calls = []
+    mock_response.usage = None
+    mock_client.chat.completions.create.return_value = mock_response
+    adapter._client = mock_client
+
+    adapter.complete_with_model_result(
+        model="local-model",
+        system_prompt="sys",
+        user_prompt="user",
+        temperature=None,
+    )
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert "temperature" not in call_kwargs
+
+    mock_client.chat.completions.create.reset_mock()
+    adapter.complete_with_model_native_tools(
+        model="local-model",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[],
+        temperature=None,
+    )
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert "temperature" not in call_kwargs
 
 
 def test_extra_body_passed_to_lmstudio():
@@ -400,7 +465,8 @@ def run_all_tests():
         test_is_reasoning_opt_in_openrouter()
         test_is_reasoning_opt_in_lmstudio()
         test_extra_body_passed_to_openrouter()
-        test_openrouter_omits_unsupported_temperature()
+        test_openrouter_omits_none_or_unsupported_temperature()
+        test_lmstudio_omits_none_temperature()
         test_extra_body_passed_to_lmstudio()
 
         print("\n" + "=" * 50)

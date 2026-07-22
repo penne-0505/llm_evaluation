@@ -293,6 +293,45 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             {"reasoning": {"effort": "high"}},
         )
 
+    async def test_gemini_3_judge_omits_temperature(self):
+        valid_response = json.dumps(
+            {
+                "task_name": "test",
+                "task_type": "fact",
+                "score": {
+                    "logic_and_fact": 60,
+                    "constraint_adherence": 30,
+                    "helpfulness_and_creativity": 10,
+                },
+                "total_score": 100,
+                "confidence": "high",
+            }
+        )
+        subject_adapter = _StubAdapter(["subject-response"])
+        judge_adapter = _StubAdapter([valid_response], reasoning_opt_in=True)
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="subject-model",
+            judge_adapters={"openrouter/google/gemini-3.5-flash": judge_adapter},
+            judge_runs=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+
+        await engine.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+
+        self.assertIsNone(judge_adapter.calls[0]["temperature"])
+        self.assertEqual(
+            judge_adapter.calls[0]["extra_params"],
+            {"reasoning": {"effort": "high"}},
+        )
+
     async def test_judge_parse_failure_retries_model_once_and_excludes_failure(self):
         valid_response = json.dumps(
             {

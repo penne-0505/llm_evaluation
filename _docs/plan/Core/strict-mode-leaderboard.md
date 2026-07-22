@@ -32,7 +32,7 @@ related_prs: []
     - `judge_models`: `openrouter/anthropic/claude-sonnet-5`, `openrouter/openai/gpt-5.6-terra`, `openrouter/google/gemini-3.5-flash`
     - `judge_runs`: `3`
     - `subject_temperature`: `0.45`
-    - `judge_temperature`: `0.0`
+    - `judge_temperature`: 原則 `0.0`。`google/gemini-3.5-flash` は送信せずモデル既定値を使用
     - reasoning を明示指定できる場合、`subject_reasoning_effort`: `high`、`judge_reasoning_effort`: `high`
   - Settings UI では strict 選択時に上記設定を lock 表示すること。
   - backend は strict request を実行前に再検証し、条件を満たさない場合は run を開始しないこと。

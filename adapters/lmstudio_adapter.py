@@ -74,7 +74,7 @@ class LMStudioAdapter(LLMAdapter):
         self,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
     ) -> str:
         model = os.getenv("JUDGE_LMSTUDIO_MODEL", "lmstudio/local-model")
@@ -91,7 +91,7 @@ class LMStudioAdapter(LLMAdapter):
         model: str,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
     ) -> str:
         return self.complete_with_model_result(
@@ -107,7 +107,7 @@ class LMStudioAdapter(LLMAdapter):
         model: str,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
@@ -123,9 +123,10 @@ class LMStudioAdapter(LLMAdapter):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                "temperature": temperature,
                 "max_tokens": max_tokens,
             }
+            if temperature is not None:
+                kwargs["temperature"] = temperature
             if extra_params:
                 kwargs["extra_body"] = extra_params
 
@@ -160,7 +161,7 @@ class LMStudioAdapter(LLMAdapter):
         model: str,
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 4096,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
@@ -175,9 +176,10 @@ class LMStudioAdapter(LLMAdapter):
                 "messages": messages,
                 "tools": tools,
                 "tool_choice": "auto",
-                "temperature": temperature,
                 "max_tokens": max_tokens,
             }
+            if temperature is not None:
+                kwargs["temperature"] = temperature
             if extra_params:
                 kwargs["extra_body"] = extra_params
 

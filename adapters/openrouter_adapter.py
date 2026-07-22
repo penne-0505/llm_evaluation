@@ -50,7 +50,7 @@ class OpenRouterAdapter(LLMAdapter):
         self,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
     ) -> str:
         """
@@ -59,7 +59,7 @@ class OpenRouterAdapter(LLMAdapter):
         Args:
             system_prompt: システムプロンプト
             user_prompt: ユーザープロンプト
-            temperature: 温度パラメータ
+            temperature: 温度パラメータ（None は送信しない）
             max_tokens: 最大トークン数
 
         Returns:
@@ -82,7 +82,7 @@ class OpenRouterAdapter(LLMAdapter):
         model: str,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
     ) -> str:
         return self.complete_with_model_result(
@@ -104,7 +104,7 @@ class OpenRouterAdapter(LLMAdapter):
         model: str,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
@@ -124,7 +124,10 @@ class OpenRouterAdapter(LLMAdapter):
                     {"role": "user", "content": user_prompt},
                 ],
             }
-            if self._supports_parameter(normalized_model, "temperature") is not False:
+            if (
+                temperature is not None
+                and self._supports_parameter(normalized_model, "temperature") is not False
+            ):
                 kwargs["temperature"] = temperature
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens
@@ -165,7 +168,7 @@ class OpenRouterAdapter(LLMAdapter):
         model: str,
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 4096,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
@@ -181,7 +184,10 @@ class OpenRouterAdapter(LLMAdapter):
                 "tools": tools,
                 "tool_choice": "auto",
             }
-            if self._supports_parameter(normalized_model, "temperature") is not False:
+            if (
+                temperature is not None
+                and self._supports_parameter(normalized_model, "temperature") is not False
+            ):
                 kwargs["temperature"] = temperature
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens

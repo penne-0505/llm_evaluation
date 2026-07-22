@@ -75,7 +75,7 @@ class LLMAdapter(ABC):
         self,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
     ) -> str:
         """
@@ -84,7 +84,7 @@ class LLMAdapter(ABC):
         Args:
             system_prompt: システムプロンプト
             user_prompt: ユーザープロンプト
-            temperature: 温度パラメータ
+            temperature: 温度パラメータ（None は送信しない）
             max_tokens: 最大トークン数
 
         Returns:
@@ -99,7 +99,7 @@ class LLMAdapter(ABC):
         self,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
     ) -> CompletionResult:
         return CompletionResult(
@@ -117,7 +117,7 @@ class LLMAdapter(ABC):
         model: str,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
     ) -> str:
         """
@@ -127,7 +127,7 @@ class LLMAdapter(ABC):
             model: 使用するモデル名
             system_prompt: システムプロンプト
             user_prompt: ユーザープロンプト
-            temperature: 温度パラメータ
+            temperature: 温度パラメータ（None は送信しない）
             max_tokens: 最大トークン数
 
         Returns:
@@ -143,7 +143,7 @@ class LLMAdapter(ABC):
         model: str,
         system_prompt: str,
         user_prompt: str,
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 1024,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
@@ -165,7 +165,7 @@ class LLMAdapter(ABC):
         model: str,
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
-        temperature: float = 0.0,
+        temperature: Optional[float] = 0.0,
         max_tokens: int = 4096,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
