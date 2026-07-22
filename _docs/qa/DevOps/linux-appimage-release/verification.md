@@ -2,14 +2,14 @@
 title: "QA Verification: Linux AppImage Release"
 status: active
 draft_status: n/a
-qa_status: partial
+qa_status: verified
 risk: High
 qa_schema: 2
 created_at: 2026-07-22
 updated_at: 2026-07-22
 references:
   - "_docs/intent/DevOps/linux-appimage-release/decision.md"
-  - "_docs/plan/DevOps/linux-appimage-release/plan.md"
+  - "_docs/archives/plan/DevOps/linux-appimage-release/plan.md"
   - "_docs/qa/DevOps/linux-appimage-release/test-plan.md"
 related_issues: []
 related_prs: []
@@ -19,11 +19,11 @@ related_prs: []
 
 ## Summary
 
-Linux x86_64 hostでAppImageを実buildし、checksum、FUSE非依存起動、HTTP resource / task診断、既存test suite、frontend gate、workflow構造を確認した。GitHub ActionsのUbuntu 22.04 runnerとtag Release uploadは未実施である。
+Linux x86_64 hostでAppImageを実buildし、checksum、FUSE非依存起動、HTTP resource / task診断、既存test suite、frontend gate、workflow構造を確認した。さらに`v0.9.0` tagでUbuntu 22.04のLinux workflow、Windows workflow、Docs CI、同一GitHub Releaseへの4資産集約をlive確認した。
 
 ## Verification Verdict
 
-Verdict: PARTIAL
+Verdict: PASS
 
 ## Commands Run
 
@@ -60,6 +60,10 @@ npx markdownlint-cli2 README.md TODO.md \
   _docs/reference/DevOps/linux-appimage-runtime.md
 # DD_SCOPE_PATHSに今回のchanged docsを指定してfrontmatter / TODO / link / intent / QA validatorを実行
 # DD_SCOPE_PATHSを外してvalidator fixture suiteとworkflow hook testを実行
+gh run list --commit 0f45c4c98049d8b275fbc021d15b8ef0df9ea59b \
+  --json databaseId,workflowName,status,conclusion,url
+gh release view v0.9.0 --json tagName,isDraft,isPrerelease,url,assets
+git ls-remote --tags origin refs/tags/v0.9.0 refs/tags/v0.9.0^{}
 ```
 
 Result:
@@ -73,6 +77,10 @@ Backend: 90 passed
 Frontend lint/build: PASS
 Workflow YAML parse, shell syntax, diff whitespace: PASS
 Changed-doc validators / validator fixtures / workflow hooks: PASS
+Docs CI: PASS (run 29921365100)
+Linux AppImage workflow: PASS (run 29921379456)
+Windows portable ZIP workflow: PASS (run 29921379439)
+GitHub Release v0.9.0: PASS (Linux / Windows本体と各SHA256の4資産)
 ```
 
 `uv run pytest`はproject外のsystem pytestを実行してdependenciesを参照できずcollection errorになったため、pytestを明示的に追加する上記commandで再実行した。
@@ -89,8 +97,8 @@ Changed-doc validators / validator fixtures / workflow hooks: PASS
 | Frontend lint / build | PASS | ESLint、TypeScript、Vite build成功 |
 | Workflow / shell static checks | PASS | YAML parse、`bash -n`、`git diff --check`成功 |
 | Docs validators / fixtures / hooks | PASS | 差分scopeとfixture suiteを環境分離して成功 |
-| GitHub Actions Ubuntu 22.04 build | DEFERRED | 未pushのためworkflow未実行 |
-| Tag Release asset upload | DEFERRED | 新しいtagでのlive upload未実行 |
+| GitHub Actions Ubuntu 22.04 build | PASS | run `29921379456`でbuild、checksum、smoke、artifact / Release upload成功 |
+| Tag Release asset upload | PASS | `v0.9.0` ReleaseにLinux / Windows本体と各SHA256を確認 |
 
 ## Manual QA Results
 
@@ -101,7 +109,7 @@ Changed-doc validators / validator fixtures / workflow hooks: PASS
 | Bundled resource diagnostics | PASS | preflight通過後にresource layerとtaskを確認 |
 | Pinned tool inputs | PASS | tool / runtime digest verification後にbuild |
 | Windows release isolation | PASS | build / upload手順とspecは不変。共通concurrency guardのみ追加 |
-| Same-tag GitHub Release assets | DEFERRED | live CI未実施 |
+| Same-tag GitHub Release assets | PASS | 4資産が`v0.9.0`へ集約された |
 
 ## Acceptance Criteria Coverage
 
@@ -109,7 +117,7 @@ Changed-doc validators / validator fixtures / workflow hooks: PASS
 | --- | --- | --- |
 | AC-001 | PASS | local buildでAppImageとbundled resourceを確認 |
 | AC-002 | PASS | extract-and-run HTTP smokeが成功 |
-| AC-003 | PARTIAL | workflow定義は確認済み、artifact / Release uploadはlive未確認 |
+| AC-003 | PASS | Linux / Windows workflow成功と`v0.9.0`の4資産をlive確認 |
 | AC-004 | PASS | tool / runtime pinning、README、guide、referenceを確認 |
 
 ## Decision Conformance
@@ -129,17 +137,12 @@ Changed-doc validators / validator fixtures / workflow hooks: PASS
 
 ## Deferred / Not Covered
 
-| ID | Reason | Follow-up |
-| --- | --- | --- |
-| AC-003 live CI | 変更をまだpushしておらずGitHub Actionsを起動できない | push後に手動workflowを実行しartifactを確認する |
-| AC-003 tag upload | 次version tagは未作成 | 次回tag releaseでAppImageとSHA256を確認する |
+None
 
 ## Residual Risks
 
-- Ubuntu 22.04 runnerでのPyInstaller / AppImage buildは未確認。
-- 共通concurrency groupによる同一tag Release更新の直列化はlive確認していない。
+None
 
 ## Follow-up TODOs
 
-- `DevOps-Feat-32`をIn Progressに維持し、push後のworkflow artifact確認でPASS可否を判断する。
-- 次回version tagで同一ReleaseへのWindows / Linux asset集約を確認する。
+None

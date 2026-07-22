@@ -9,7 +9,7 @@ created_at: 2026-07-22
 updated_at: 2026-07-22
 references:
   - "_docs/intent/DevOps/linux-appimage-release/decision.md"
-  - "_docs/plan/DevOps/linux-appimage-release/plan.md"
+  - "_docs/archives/plan/DevOps/linux-appimage-release/plan.md"
 related_issues: []
 related_prs: []
 ---
@@ -19,7 +19,7 @@ related_prs: []
 ## Source of Intent
 
 - TODO: `DevOps-Feat-32`
-- Plan: `_docs/plan/DevOps/linux-appimage-release/plan.md`
+- Plan: `_docs/archives/plan/DevOps/linux-appimage-release/plan.md`
 - Intent: `_docs/intent/DevOps/linux-appimage-release/decision.md`
 
 ## Quality Goal

@@ -6,7 +6,7 @@ intent_schema: 2
 created_at: 2026-07-22
 updated_at: 2026-07-22
 references:
-  - "_docs/plan/DevOps/linux-appimage-release/plan.md"
+  - "_docs/archives/plan/DevOps/linux-appimage-release/plan.md"
   - "_docs/qa/DevOps/linux-appimage-release/test-plan.md"
   - "_docs/guide/DevOps/linux-appimage.md"
   - "_docs/reference/DevOps/linux-appimage-runtime.md"

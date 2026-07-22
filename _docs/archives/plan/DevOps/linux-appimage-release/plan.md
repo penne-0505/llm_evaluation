@@ -1,6 +1,6 @@
 ---
 title: Linux AppImage Release Plan
-status: active
+status: superseded
 draft_status: n/a
 created_at: 2026-07-22
 updated_at: 2026-07-22
@@ -16,6 +16,7 @@ related_prs: []
 
 - Linux x86_64向けに、PyInstaller onedirを内包するAppImageをtag releaseで配布する。
 - 既存のWindows portable ZIP workflowとRelease資産の命名・checksum運用を揃える。
+- 本planは`v0.9.0`で実装・live release検証を完了したためarchiveした。
 
 ## Scope
 

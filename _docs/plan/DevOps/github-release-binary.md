@@ -5,7 +5,7 @@ draft_status: n/a
 created_at: 2026-02-18
 updated_at: 2026-07-22
 references:
-  - "_docs/plan/DevOps/linux-appimage-release/plan.md"
+  - "_docs/archives/plan/DevOps/linux-appimage-release/plan.md"
   - "_docs/intent/DevOps/windows-portable-zip-distribution.md"
 related_issues: []
 related_prs: []
