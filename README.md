@@ -26,11 +26,26 @@
 - React / Vite
 - openai / anthropic / google-genai / python-dotenv
 
+## ドキュメント駆動 workflow
+
+開発タスクは [TODO.md](TODO.md) を source of truth とし、Size M 以上または
+Risk Medium 以上では Plan / Intent / QA test-plan を実装前に用意します。
+入口と検証コマンドは [Quickstart](QUICKSTART.md)、詳細な契約は
+[_docs/documentation_guide.md](_docs/documentation_guide.md) を参照してください。
+
+```bash
+./scripts/check-docs.sh
+```
+
+この repository は docs-driven template `v1.0.0` を採用しています。採用元は
+[docs-template.lock.json](docs-template.lock.json) で固定し、legacy document の
+strict schema 移行状態は migration verification で別に管理します。
+
 ## UIフォント
 
 - フロントエンド UI には `UDEV Gothic 35NFLG` をローカル同梱で使用しています。
 - フォントファイルは `frontend/public/fonts/` に配置され、Google Fonts などの外部配信には依存しません。
-- 同梱フォントのライセンスは [UDEVGothic-LICENSE.txt](/home/penne/dev/active/llm_evaluation/frontend/public/fonts/UDEVGothic-LICENSE.txt) を参照してください。
+- 同梱フォントのライセンスは [UDEVGothic-LICENSE.txt](frontend/public/fonts/UDEVGothic-LICENSE.txt) を参照してください。
 
 ## セットアップ
 
@@ -40,7 +55,7 @@
 uv sync
 ```
 
-2. フロントエンド依存関係のインストール
+1. フロントエンド依存関係のインストール
 
 ```bash
 npm ci --prefix frontend
@@ -54,13 +69,13 @@ npm ci --prefix frontend
 uv run uvicorn server:app --reload --host 127.0.0.1 --port 8000
 ```
 
-2. フロントエンド起動
+1. フロントエンド起動
 
 ```bash
 npm run dev --prefix frontend -- --host 127.0.0.1 --port 5173
 ```
 
-3. ブラウザで開く
+1. ブラウザで開く
 
 ```text
 http://127.0.0.1:5173/
@@ -76,7 +91,7 @@ http://127.0.0.1:5173/
 npm run build --prefix frontend
 ```
 
-2. launcher から起動
+1. launcher から起動
 
 ```bash
 uv run prism-llm-eval
@@ -176,7 +191,7 @@ user override の配置先:
 
 ## ディレクトリ構成
 
-```
+```text
 .
 ├── server.py
 ├── adapters/

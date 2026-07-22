@@ -1,0 +1,274 @@
+path	upstream_status	project_delta	project_relation	resolution	disposition	rationale
+.agents/skills/docs-cleanup/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.agents/skills/docs-inventory/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.agents/skills/docs-prep/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.agents/skills/docs-template-migration/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	adapted-to-direct-downstream-lock	Keep paired migration skill operational without example file
+.agents/skills/implementation-prep/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.agents/skills/post-implementation/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.agents/skills/qa-prep/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.agents/skills/qa-review/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.agents/skills/test-maintenance/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/settings.json	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/docs-cleanup/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/docs-inventory/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/docs-prep/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/docs-template-migration/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	adapted-to-direct-downstream-lock	Keep paired migration skill operational without example file
+.claude/skills/implementation-prep/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/post-implementation/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/qa-prep/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/qa-review/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.claude/skills/test-maintenance/SKILL.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.codex/hooks.json	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+.env.example	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+.github/ISSUE_TEMPLATE/bug_report.yml	D	D	customized-shared	remove	already-absent-at-P	Honor U deletion without permanent deletion
+.github/ISSUE_TEMPLATE/feature_request.yml	D	D	customized-shared	remove	already-absent-at-P	Honor U deletion without permanent deletion
+.github/workflows/docs-ci.yml	M	D	customized-shared	apply	restored-with-compat-acmr	Scope is exactly paths added/copied/modified/renamed from P d309974a77c736b6d333819a38460edaeb21e57e while DD_SCOPE_DIFF_FILTER=ACMR remains configured; it ends only when an owner-approved strict frontmatter/link/intent PASS replaces it
+.github/workflows/windows-bundle.yml	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+.gitignore	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+.logs/app.log	unchanged	R100-to	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+.markdownlint.jsonc	M	unchanged	upstream-owned-unmodified	apply	upstream-policy-retained	No migration-local lint exemptions; U-derived 12-rule policy remains unchanged and project-local lint fixes are recorded in artifacts/markdownlint-remediation.tsv
+.opencode/opencode.jsonc	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+.opencode/package.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+.opencode/skills/debug/SKILL.md	D	unchanged	upstream-owned-unmodified	remove	quarantined-nonoperational	U removed stale active guidance; content retained without discovery
+.opencode/skills/docs-cleanup/SKILL.md	D	unchanged	upstream-owned-unmodified	remove	quarantined-nonoperational	U removed stale active guidance; content retained without discovery
+.opencode/skills/docs-prep/SKILL.md	D	unchanged	upstream-owned-unmodified	remove	quarantined-nonoperational	U removed stale active guidance; content retained without discovery
+.opencode/skills/frontend-design/SKILL.md	D	unchanged	upstream-owned-unmodified	remove	quarantined-nonoperational	U removed stale active guidance; content retained without discovery
+.opencode/skills/implementation-prep/SKILL.md	D	unchanged	upstream-owned-unmodified	remove	quarantined-nonoperational	U removed stale active guidance; content retained without discovery
+.opencode/skills/post-implementation/SKILL.md	D	unchanged	upstream-owned-unmodified	remove	quarantined-nonoperational	U removed stale active guidance; content retained without discovery
+.python-version	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+AGENTS.md	M	M	customized-shared	merge	merged-project-agent-guidance	Preserve project commands and add U workflow rules
+CLAUDE.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+CONTRIBUTING.template.md	D	D	customized-shared	remove	already-absent-at-P	Honor U deletion without permanent deletion
+LICENSE.txt	M	M	customized-shared	keep	preserved-project-license	Project attribution is not template-owned
+QUICKSTART.md	A	unchanged	upstream-owned-unmodified	merge	added-project-specific-quickstart	Use project commands instead of template onboarding
+README.md	M	M	customized-shared	merge	merged-project-docs-workflow	Preserve application README and add workflow entrypoint
+TODO.md	M	M	customized-shared	merge	migrated-task-schema-preserved-inbox	Adopt U task contract, preserve Inbox, and track residual migration work as Workflow-Chore-30
+_docs/archives/plan/DevOps/windows-portable-zip-execution-breakdown.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/archives/plan/DevOps/windows-portable-zip-finalization.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/documentation_guide.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/draft/.gitkeep	unchanged	R100-from	customized-shared	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/dashboard_implementation.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/judge_sys_instruction.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/01.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/02.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/03.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/04.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/05.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/06.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/07.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/08.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/09.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/10.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/prompts_for_subject_model/11.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/requirements.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/01.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/02.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/03.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/04.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/05.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/06.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/07.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/08.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/09.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/10.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/rubrics_draft/11.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/draft/ui_rebuild/feature_inventory.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/guide/Core/local-search-tool-use.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/guide/DevOps/windows-portable-zip.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/intent/DevOps/windows-portable-zip-distribution.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/intent/Workflow/lifecycle-self-audit/decision.md	A	unchanged	upstream-owned-unmodified	defer	excluded-template-self-lifecycle-history	Downstream does not inherit upstream implementation history
+_docs/plan/Core/benchmark-execution-performance-optimization.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/grounding-corpus-pipeline.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/llm_benchmark_app.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/lmstudio-local-provider-support/plan.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/local-search-tool-use-runtime.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/model-selection-from-api.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/resource-embedding-packaging.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/streamlit-secrets-api-keys.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Core/strict-mode-leaderboard.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/DevOps/github-release-binary.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/DevOps/windows-local-browser-distribution.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/UI-Feature-15-Ext-dashboard-enhancement.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/UI-Feature-15-dashboard.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/UI/confidence-experience.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/UI/dashboard-roi-and-variability.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/UI/model-selection-ui.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/UI/result-score-indicator-normalization.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/UI/run-progress-kanban.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/plan/Workflow/lifecycle-self-audit/plan.md	A	unchanged	upstream-owned-unmodified	defer	excluded-template-self-lifecycle-history	Downstream does not inherit upstream implementation history
+_docs/qa/.gitkeep	A	unchanged	upstream-owned-unmodified	defer	omitted-populated-directory-placeholder	QA directory contains real migration records
+_docs/qa/Workflow/lifecycle-self-audit/test-plan.md	A	unchanged	upstream-owned-unmodified	defer	excluded-template-self-lifecycle-history	Downstream does not inherit upstream implementation history
+_docs/qa/Workflow/lifecycle-self-audit/verification.md	A	unchanged	upstream-owned-unmodified	defer	excluded-template-self-lifecycle-history	Downstream does not inherit upstream implementation history
+_docs/reference/Core/holistic-evaluation.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/reference/DevOps/windows-portable-runtime.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/reference/UI/frontend-button.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/reference/UI/frontend-container.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+_docs/standards/documentation_guidelines.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/documentation_operations.md	M	unchanged	upstream-owned-unmodified	apply	adapted-to-downstream-provenance	Remove template release-side example workflow
+_docs/standards/jj_workflow.md	D	unchanged	upstream-owned-unmodified	remove	quarantined-nonoperational	U removed stale active guidance; content retained without discovery
+_docs/standards/quality_assurance.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/security_for_agents.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/draft.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/guide.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/intent.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/plan.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/qa-test-plan.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/qa-verification.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/reference.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_docs/standards/templates/survey.md	M	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/README.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/agent-workflow-misbehavior-check.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/archive-flow.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/blocked-verification.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/breaking-change.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/bug-regression-test.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/experimental-baseline.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/high-risk-change-verification.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/historical-prompt-not-operational.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/intentional-omission-risk.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/malformed-todo-heading.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/medium-feature.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/misleading-optimization.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/qa-prep-from-intent.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/qa-status-verdict-mismatch.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/rationale-preserving-change.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/refactor-behavior-preservation.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/small-bug.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/stale-draft-cleanup.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/cases/template-version-migration.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/agent-workflows/expected-invariants.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/README.md	A	unchanged	upstream-owned-unmodified	apply	customized-frontmatter-fixture-contract	Document downstream type-specific frontmatter fixtures
+_evals/validator-fixtures/intent/invalid/missing-why.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/intent/invalid/orphan-invariant.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/intent/valid/decision.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/links/valid-reference-anchor.md	A	unchanged	upstream-owned-unmodified	apply	customized-downstream-quickstart-anchor	Keep link fixture valid against project Quickstart
+_evals/validator-fixtures/qa/invalid/missing-invariant.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/qa/invalid/qa-archive-path.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/qa/invalid/status-verdict-mismatch.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/qa/invalid/v2-missing-decision-scope.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/qa/invalid/verification-in-progress-status.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/qa/invalid/verification-missing-test-plan-reference.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/qa/valid/test-plan.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/qa/valid/verification-pass.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/todo/invalid/malformed-heading.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/todo/invalid/mismatched-heading-id.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/todo/invalid/missing-qa-for-medium.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/todo/invalid/missing-title.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+_evals/validator-fixtures/todo/valid/basic.md	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+adapters/__init__.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+adapters/base.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+adapters/lmstudio_adapter.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+adapters/openrouter_adapter.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/__init__.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/app_paths.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/benchmark_engine.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/cost_estimator.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/grounding_corpus.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/json_parser.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/logging_utils.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/model_catalog.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/openrouter_admin.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/provider_config_store.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/result_aggregator.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/result_storage.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/secrets_store.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/selection_store.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/strict_mode.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+core/tool_runtime.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+docs-template.lock.example.json	A	unchanged	upstream-owned-unmodified	defer	replaced-by-exact-downstream-lock	Legacy bootstrap creates the final tracked lock directly
+frontend/.gitignore	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/README.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/eslint.config.js	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/index.html	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/package-lock.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/package.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/public/fonts/UDEVGothic-LICENSE.txt	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/public/vite.svg	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/App.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/api/client.node.test.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/api/client.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/api/sse.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/components/AppErrorBoundary.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/components/Button.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/components/Layout.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/components/ResultDetail.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/index.css	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/lib/confidence.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/lib/resultRoutes.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/lib/stats.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/lib/strictMode.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/lib/taskTypeStyles.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/main.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/pages/DashboardPage.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/pages/ResultDetailPage.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/pages/ResultsPage.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/pages/RunPage.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/pages/SettingsPage.tsx	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/store/historyStore.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/store/runStore.node.test.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/store/runStore.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/store/settingsStore.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/src/types/index.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/tsconfig.app.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/tsconfig.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/tsconfig.node.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+frontend/vite.config.ts	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+judge_system_prompt.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+launcher.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+models/models.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+package-lock.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+packaging/windows/prism-llm-eval.spec	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/01.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/02.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/03.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/04.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/05.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/06.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/07.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/08.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/09.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/10.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/11.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+prompts/holistic/style.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+pyproject.toml	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/01.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/02.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/03.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/04.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/05.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/06.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/07.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/08.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/09.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/10.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/11.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+rubrics/holistic/style.md	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+scripts/agent-workflow-hook.mjs	A	unchanged	upstream-owned-unmodified	apply	imported-with-stale-anchor-cleanup	Hook behavior retained without excluded lifecycle references
+scripts/build_windows_bundle.ps1	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+scripts/check-docs.sh	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+scripts/create-template-archive.sh	A	unchanged	upstream-owned-unmodified	defer	excluded-template-self-packaging	Application repository does not package the template
+scripts/diagnose_setuptools_discovery.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+scripts/scope.mjs	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+scripts/test-agent-workflow-hook.mjs	A	unchanged	upstream-owned-unmodified	apply	imported-with-self-test-escaping	Avoid hook false positive while testing deletion guard
+scripts/test-agent-workflow-smoke.mjs	A	unchanged	upstream-owned-unmodified	apply	adapted-to-downstream-lock	Verify exact downstream lock rather than example
+scripts/test-validators.mjs	A	unchanged	upstream-owned-unmodified	apply	extended-frontmatter-fixture-runner	Add unknown type duplicate and type-specific marker cases
+scripts/validate-doc-links.mjs	A	unchanged	upstream-owned-unmodified	apply	isolated-invalid-fixture-metadata	Link validation does not duplicate frontmatter fixture validation
+scripts/validate-frontmatter.mjs	M	D	customized-shared	apply	extended-type-specific-frontmatter-contract	Reject unknown wrong-type duplicate and misplaced schema markers
+scripts/validate-intent.mjs	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+scripts/validate-qa.mjs	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+scripts/validate-todo.mjs	A	unchanged	upstream-owned-unmodified	apply	reconciled-from-U	Upstream workflow content adopted
+server.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+task_configs/08.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+task_fixtures/08.json	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_adapters.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_benchmark_engine.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_cost_estimator.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_engine.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_grounding_corpus.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_launcher.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_model_catalog.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_result_storage.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_server_frontend.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_strict_mode.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+tests/test_tool_runtime.py	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope
+uv.lock	unchanged	A	project-only	keep	preserved-from-P	Project-only or project-customized content is out of template scope

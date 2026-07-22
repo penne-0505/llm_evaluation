@@ -39,7 +39,7 @@
 
 ### 3.1 アーキテクチャ
 
-```
+```text
 ui/components.py
 ├── render_dashboard()              # メインエントリ
 │   ├── 📈 スコア比較（既存）
@@ -59,7 +59,7 @@ app.py
 
 ### 3.2 データフロー
 
-```
+```text
 【評価履歴】
 results/*.json → _load_all_results() → DataFrame → ページネーション → カード表示
                                                   ↓
@@ -90,7 +90,7 @@ session_state.compare_model_b = None        # 比較対象B
 
 #### 📋 評価履歴タブ
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │  ←前へ  📋 評価履歴 (ページ 1/3)  次へ→                       │
 ├─────────────────────────────────────────────────────────────┤
@@ -109,7 +109,7 @@ session_state.compare_model_b = None        # 比較対象B
 
 #### 🔍 詳細比較タブ
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │  比較対象を選択:                                             │
 │  [🤖 gemini-3-flash ▼]  vs  [🤖 kimi-k2.5 ▼]              │
@@ -243,7 +243,7 @@ ComparisonTask = {
 
 - **既存**: `plotly`, `pandas`, `streamlit`
 - **新規**: なし
-- **再利用**: 
+- **再利用**:
   - `render_task_result_card()`
   - `render_summary_stats()`
   - `ResultStorage`

@@ -1,0 +1,32 @@
+path	rules	semantics-preserving local fix
+_docs/draft/dashboard_implementation.md	MD040 (2)	Label the component tree and UI wireframe as text
+_docs/draft/judge_sys_instruction.md	MD040 (1)	Label the judge prompt draft as text
+_docs/draft/prompts_for_subject_model/01.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/02.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/03.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/04.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/05.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/06.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/07.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/08.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/09.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/10.md	MD047	Append one final LF
+_docs/draft/prompts_for_subject_model/11.md	MD047	Append one final LF
+_docs/draft/requirements.md	MD040 (3)	Label two file trees and the pseudocode flow as text and the environment example as dotenv
+_docs/draft/rubrics_draft/01.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/02.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/03.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/04.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/05.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/06.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/07.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/08.md	MD028	Keep the blank quote line by marking it as a blockquote line
+_docs/draft/rubrics_draft/09.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/10.md	MD047	Append one final LF
+_docs/draft/rubrics_draft/11.md	MD047	Append one final LF
+_docs/plan/Core/llm_benchmark_app.md	MD040 (2)	Label the file tree and data-flow diagram as text
+_docs/plan/UI-Feature-15-dashboard.md	MD040 (2)	Label the architecture and UI wireframes as text
+_docs/plan/UI-Feature-15-Ext-dashboard-enhancement.md	MD040 (4); MD009	Label four diagrams as text and remove one accidental trailing space
+_docs/reference/Core/holistic-evaluation.md	MD040 (4)	Label two file trees and execution flow as text and the prompt payload as markdown
+
+support_horizon	DD_SCOPE_BASE=d309974a77c736b6d333819a38460edaeb21e57e; DD_SCOPE_DIFF_FILTER=ACMR	Applies to paths added, copied, modified, or renamed from P; remains until an owner-approved repository-wide strict frontmatter/link/intent migration records PASS and explicitly replaces the compatibility policy

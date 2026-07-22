@@ -20,7 +20,7 @@ judgeはGPT系・Claude系・Gemini系それぞれが独立して評価し、結
 
 ## ディレクトリ構成
 
-```
+```text
 benchmark_app/
 ├── app.py                      # Streamlitエントリポイント
 ├── .env                        # APIキー（gitignore対象）
@@ -50,7 +50,7 @@ benchmark_app/
 
 `.env` ファイルで管理する。UIからの入力は不要。
 
-```
+```dotenv
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=...
@@ -122,7 +122,7 @@ class OpenAIAdapter(LLMAdapter):
 
 ### 2. 実行フロー
 
-```
+```text
 for タスク in 選択タスクリスト:
     1. 被験LLMに入力プロンプトを送信 → 回答を取得（1回のみ）
 

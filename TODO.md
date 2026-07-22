@@ -1,84 +1,151 @@
 # Project Task Management Rules
 
 ## 0. System Metadata
-- **Current Max ID**: `Next ID No: 29` (※タスク追加時にインクリメント必須)
-- **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一のID発番元である。
+
+- **Current Max ID**: `Next ID No: 31` (タスク追加時にインクリメント必須)
+- **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
+
 タスクは以下の順序で単方向に遷移する。逆行は原則禁止とする。
 
 ### Phase 0: Inbox (Human Write-only)
-- **Location**: `# Inbox (Unsorted)` セクション
-- **Description**: 人間がアイデアや依頼を書き殴る場所。フォーマット不問。ID未付与。
-- **Exit Condition**: LLMが内容を解析し、IDを付与して `Backlog` へ構造化移動する。
+
+- **Location**: `## Inbox` セクション
+- **Description**: 人間がアイデアや依頼を書き殴る場所。フォーマット不問。ID 未付与。
+- **Exit Condition**: LLM が内容を解析し、ID を付与して `Backlog` へ構造化移動する。
 
 ### Phase 1: Backlog (Structured)
-- **Location**: `# Backlog` セクション
+
+- **Location**: `## Backlog` セクション
 - **Status**: タスクとして認識済みだが、着手準備未完了。
-- **Entry Criteria**: 
-  - IDが一意に採番されている。
-  - 必須フィールド（Title, ID, Priority, Size, Area, Description）が埋まっている。
+- **Entry Criteria**:
+  - ID が一意に採番されている。
+  - 必須フィールドがすべて埋まっている。
+  - `Risk`, `Acceptance Criteria`, `Intent`, `QA`, `Verification` が明示されている。
 - **Exit Condition**: `Ready` の要件を満たす。
 
 ### Phase 2: Ready (Actionable)
-- **Location**: `# Ready` セクション
+
+- **Location**: `## Ready` セクション
 - **Status**: いつでも着手可能な状態。
 - **Entry Criteria**:
-  - **Plan Requirement**:
-    - `Size: M` 以上 (M, L, XL): `Plan` フィールドに有効な `_docs/plan/...` へのリンクが**必須**。
-    - `Size: S` 以下 (XS, S): `Plan` は **None** でよい。
-  - **Dependencies**: 解決済み（または明確化済み）である。
-  - **Steps**: 具体的な実行手順（またはPlanへのポインタ）が記述されている。
+  - `Size >= M` の場合、Plan / Intent / QA が作成済みである。
+  - `Risk >= Medium` の場合、Intent / QA が作成済みである。
+  - Dependencies が解決済み、または未解決理由が明確である。
+  - Steps が具体的、または Plan / QA への進行管理ポインタとして機能している。
 - **Exit Condition**: 作業者がタスクに着手する。
 
 ### Phase 3: In Progress
-- **Location**: `# In Progress` セクション
-- **Status**: 現在実行中。
-- **Entry Criteria**: 作業者がアサインされている（または自律的に着手）。
 
-### Phase 4: Done
-- **Location**: なし（行削除）
-- **Exit Action**: `Goal` 達成を確認後、リストから物理削除する。
+- **Location**: `## In Progress` セクション
+- **Status**: 現在実行中。
+- **Entry Criteria**: 作業者がアサインされている、または自律的に着手している。
+
+### Phase 4: Completed
+
+- **Location**: なし。完了タスクは `TODO.md` から削除する。
+- **Exit Action**: Goal と Acceptance Criteria の達成、および必要な verification verdict を確認後に削除する。
+- **History**: 完了履歴は PR / commit / CHANGELOG / intent / guide / reference / QA verification に残す。`TODO.md` に Done / Archived セクションは作らない。
 
 ## 2. Schema & Validation
-各タスクは以下の厳格なスキーマに従うこと。
+
+各タスクは以下のフィールドを必須とする。
 
 | Field | Type | Constraint / Value Set |
-| :--- | :--- | :--- |
-| **Title** | `String` | `[Category] Title` 形式。Categoryは後述のEnum参照。 |
-| **ID** | `String` | `{Area}-{Category}-{Number}` 形式。不変の一意キー。 |
-| **Priority** | `Enum` | `P0` (Critical), `P1` (High), `P2` (Medium), `P3` (Low) |
-| **Size** | `Enum` | `XS` (<0.5d), `S` (1d), `M` (2-3d), `L` (1w), `XL` (>2w) |
-| **Area** | `Enum` | `_docs/plan/` 直下のディレクトリ名と一致する値。 |
-| **Dependencies**| `List<ID>`| 依存タスクIDの配列 `[Core-Feat-1, UI-Bug-2]`。なしは `[]`。 |
-| **Goal** | `String` | 完了条件（Definition of Done）。 |
-| **Steps** | `Markdown` | 進行管理用のチェックリスト（詳細は後述）。 |
-| **Description** | `String` | タスクの詳細。 |
-| **Plan** | `Path` | `Size >= M` の場合必須。`_docs/plan/` へのパス。`Size < M` は `None` 可。 |
+| --- | --- | --- |
+| **Title** | `String` | `[Category] Title` 形式。Category は後述の Enum 参照。 |
+| **ID** | `String` | `<Area>-<Category>-<Number>` 形式。不変の一意キー。 |
+| **Priority** | `Enum` | `P0` / `P1` / `P2` / `P3` |
+| **Size** | `Enum` | `XS` / `S` / `M` / `L` / `XL` |
+| **Risk** | `Enum` | `Low` / `Medium` / `High` / `Critical` |
+| **Area** | `String` | タスクの論理領域。各 canonical path の `<Area>` と一致させる。 |
+| **Dependencies** | `List<ID>` | 依存タスク ID の配列。なしは `[]`。 |
+| **Goal** | `String` | 完了後に成り立つ状態を一文で書く。 |
+| **Acceptance Criteria** | `Markdown` | `AC-001` 形式で、検証可能な条件を書く。 |
+| **Steps** | `Markdown` | 進行管理用チェックリスト。 |
+| **Description** | `Markdown` | Context / Notes を含める。 |
+| **Plan** | `Path` | `None` または `_docs/plan/<Area>/<slug>/plan.md`。 |
+| **Intent** | `Path` | `None` または `_docs/intent/<Area>/<slug>/decision.md`。 |
+| **QA** | `Path` | `None` または `_docs/qa/<Area>/<slug>/test-plan.md`。 |
+| **Verification** | `Path` | `None` または `_docs/qa/<Area>/<slug>/verification.md`。 |
 
-## 3. Field Usage Guidelines
+推奨形式:
 
-### Area & Directory Mapping
-- **Rule**: `Area` フィールドの値は、`_docs/plan/` 直下に実在するディレクトリ名（ドメイン）と一致させること。
-- **New Area**: 新しい領域のタスクを作成する場合、まず `_docs/plan/` にディレクトリを作成してから、その名前を `Area` に指定する。
-- **Example**: `Area: Core` -> implies existence of `_docs/plan/Core/`
+```markdown
+### <ID>: [<Category>] <Title>
 
-### Steps vs Plan
-タスクの規模に応じて `Steps` の記述方針を切り替えること。情報の二重管理を避ける。
+- **Title**: [<Category>] <Title>
+- **ID**: <Area>-<Category>-<Number>
+- **Priority**: P0 | P1 | P2 | P3
+- **Size**: XS | S | M | L | XL
+- **Risk**: Low | Medium | High | Critical
+- **Area**: <Area>
+- **Dependencies**: []
+- **Goal**: <one sentence>
+- **Acceptance Criteria**:
+  - AC-001:
+  - AC-002:
+- **Steps**:
+  1. [ ] Step 1
+  2. [ ] Step 2
+- **Description**:
+  - Context:
+  - Notes:
+- **Plan**: None | _docs/plan/<Area>/<slug>/plan.md
+- **Intent**: None | _docs/intent/<Area>/<slug>/decision.md
+- **QA**: None | _docs/qa/<Area>/<slug>/test-plan.md
+- **Verification**: None | _docs/qa/<Area>/<slug>/verification.md
+```
 
-- **Case A: Planあり (Size >= M)**
-  - `Steps` は **「Planを実行するための進行管理チェックリスト」** として機能する。
-  - 詳細な仕様やコードは Plan に記述し、Steps には複製しない。
-  - 例: `1. [ ] Planの "DB Schema" セクションに従いマイグレーション作成`
+## 3. Required Documents
 
-- **Case B: Planなし (Size < M)**
-  - `Steps` に **「具体的な作業手順」** を直接記述する。
-  - 例: `1. [ ] src/utils/format.ts の dateFormat 関数を修正`
+| Condition | Requirement |
+| --- | --- |
+| `Size XS/S` and `Risk Low` | Plan / Intent / QA / Verification は `None` 可。 |
+| `Size >= M` | Plan / Intent / QA が必須。 |
+| `Risk >= Medium` | Intent / QA が必須。 |
+| `Risk High / Critical` | Plan / Intent / QA が必須。完了前に Verification が必須。 |
+| `Category Bug` | Acceptance Criteria に再発防止条件を含め、QA test-plan に regression test または no-test rationale を含める。 |
+| `Category Refactor` | QA test-plan に behavior-preservation checks を含める。 |
+| Agent workflow / validator / CI / Skill / documentation rule 変更 | QA test-plan に agent misbehavior checks を含める。 |
 
-## 4. Defined Enums
+`Size XS/S` かつ `Risk Low` でも、将来の作業者が未実装と誤認しそうな非対応・制限・省略は intentional omission risk として扱う。その場合は、必須フィールドを増やさず、TODO Description / PR / commit、または必要に応じて Plan Non-Goals / Intent の DEC（Why / Why not）に理由を残す。
+
+## 4. Completion Rules
+
+タスクを `TODO.md` から削除できるのは、以下を満たす場合のみ。
+
+1. Steps が完了している。
+2. Acceptance Criteria が満たされている。
+3. `Size >= M` または `Risk >= Medium` の場合、`verification.md` が存在する。
+4. verification verdict が `PASS` である。
+5. `PARTIAL` の場合は、残リスクと follow-up TODO が明記されている。
+6. `FAIL` / `BLOCKED` の場合は完了扱いにしない。
+7. 必要な intent / guide / reference / QA docs が更新されている。
+
+完了履歴は `verification.md`、intent、guide、reference、PR / commit に残す。`TODO.md` は未完了作業の source of truth として保つ。
+
+## 5. Canonical Document Paths
+
+```text
+_docs/draft/<Area>/<slug>/notes.md
+_docs/survey/<Area>/<slug>/survey.md
+_docs/plan/<Area>/<slug>/plan.md
+_docs/intent/<Area>/<slug>/decision.md
+_docs/qa/<Area>/<slug>/test-plan.md
+_docs/qa/<Area>/<slug>/verification.md
+_docs/guide/<Area>/<slug>/usage.md
+_docs/reference/<Area>/<slug>/reference.md
+_docs/archives/{draft,plan,survey}/<Area>/<slug>/...
+```
+
+`<Area>` はタスクの `Area` と一致させる。`<slug>` は機能・変更単位の kebab-case 名にする。`intent` / `qa` / `guide` / `reference` は archive 対象にしない。
+
+## 6. Defined Enums
 
 ### Categories (Title & ID)
-ID生成およびタイトルのプレフィックスには以下のみを使用する。
+
 - `Feat` (New Feature)
 - `Enhance` (Improvement)
 - `Bug` (Fix)
@@ -88,96 +155,148 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 - `Test` (Testing)
 - `Chore` (Maintenance/Misc)
 
-### Areas (Examples)
-**※実際には `_docs/plan/` のディレクトリ構成に従う。**
-- `Core`: 基盤ロジック
-- `UI`: プレゼンテーション層
-- `Docs`: ドキュメント整備自体
-- `General`: 特定ドメインに属さない雑多なタスク
-- `DevOps`: CI/CD, 環境構築
+### Priorities
 
-## 5. Operational Workflows (for LLM)
+- `P0`: Critical / immediate
+- `P1`: High
+- `P2`: Medium
+- `P3`: Low
 
-### [Action] Create Task from Inbox
-1. `Next ID No` を読み取り、割り当て予定のIDを決定する。
+### Sizes
+
+- `XS`: 0.5 day 未満
+- `S`: 1 day 程度
+- `M`: 2-3 days 程度
+- `L`: 1 week 程度
+- `XL`: 2 weeks 以上
+
+### Risk
+
+Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
+
+- `Low`: 局所的で失敗影響が小さい変更。
+- `Medium`: 機能挙動、ワークフロー、validator、ドキュメント規約、agent skill に影響する変更。
+- `High`: 互換性、データ損失、認証、権限、セキュリティ、課金、外部 API、CI/CD、migration に関わる変更。
+- `Critical`: 本番障害、secret 漏洩、重大なデータ破壊、ユーザー影響の大きい破壊的変更につながり得る変更。
+
+## 7. Operational Workflows (for LLM)
+
+### Create Task from Inbox
+
+1. `Next ID No` を読み取り、割り当て予定の ID を決定する。
 2. `Next ID No` をインクリメントしてファイルを更新する。
-3. Inboxの内容を解析し、最適な `Area` と `Category` を決定する。
-4. IDを生成する（例: `Core-Feat-24`）。
-5. タスクをフォーマットし、`Backlog` の末尾に追加する。
-6. 元のInbox行を削除する。
+3. Inbox の内容を解析し、最適な `Area` / `Category` / `Risk` を決定する。
+4. intentional omission risk があるか確認する。将来「未実装なので直す」と誤認されそうな非対応・制限・省略がある場合は、Description に理由を残すか、設計判断として Intent を作成する。
+5. ID を生成する。
+6. Acceptance Criteria を `AC-001` 形式で書く。
+7. 必須文書条件に従い、Plan / Intent / QA / Verification を `None` または canonical path で埋める。
+8. タスクを `Backlog` の末尾に追加する。
+9. 元の Inbox 行を削除する。
 
-### [Action] Promote to Ready
-1. **Size check**:
-   - `Size >= M` ならば、`Plan` フィールドが有効なリンクであることを検証する。リンク切れや未作成の場合は移動を拒否する。
-   - `Size < M` ならば、`Plan` が `None` でも許容する。
-2. **Steps check**: `Steps` が具体的か（あるいはPlanへのポインタとして機能しているか）確認する。
-3. **Dependency check**: 依存タスクが完了済みか確認する。
-4. 全てクリアした場合のみ `Ready` セクションへ移動する。
+### Promote to Ready
 
-## 6. Task Definition Examples (Few-Shot)
+1. `Size >= M` なら Plan / Intent / QA が存在することを確認する。
+2. `Risk >= Medium` なら Intent / QA が存在することを確認する。
+3. QA test-plan の Test Matrix が主要 AC と、存在する場合の INV を最低 1 つの確認手段へ割り当て、影響する DEC の review scope を示していることを確認する。
+4. Dependencies が解決済みか確認する。
+5. 全てクリアした場合のみ `Ready` セクションへ移動する。
 
-以下の例を参考に、サイズ（Size）に応じた記述ルール（Planの有無、Stepsの粒度）を厳守すること。
+### Complete Task
 
-### Case A: Feature Implementation (Size >= M)
-**Rule**: `Plan` へのリンクが必須。`Steps` はPlanの参照ポインタとして記述する。
+1. Steps と Acceptance Criteria を確認する。
+2. `Size >= M` または `Risk >= Medium` なら `qa-review` skill を使う。
+3. verification verdict が `PASS`、または許容済み `PARTIAL` であることを確認する。
+4. `FAIL` / `BLOCKED` の場合は、タスクを残すか follow-up を追加する。
+5. 完了可能な場合のみ `TODO.md` から削除する。
 
-```markdown
-- **Title**: [Feat] User Authentication Flow
-- **ID**: Core-Feat-25
-- **Priority**: P0
-- **Size**: M
-- **Area**: Core
-- **Dependencies**: []
-- **Goal**: ユーザーがEmail/Passwordでサインアップおよびログインできる状態にする。
-- **Steps**:
-  1. [ ] Planの "Schema Design" セクションに基づき、Userテーブルのマイグレーションを作成・適用
-  2. [ ] Planの "API Specification" に従い、`/auth/login` エンドポイントを実装
-  3. [ ] Planの "Security" に記載されたJWT発行ロジックを実装
-  4. [ ] E2Eテストを実施し、ログインフローの疎通を確認
-- **Description**: 新規サービスの基盤となる認証機能を実装する。
-- **Plan**: `_docs/plan/Core/auth-feature.md`
-````
+## 8. Task Definition Examples
 
-### Case B: Small Fix / Maintenance (Size \< M)
-
-**Rule**: `Plan` は `None` でよい。`Steps` に具体的なコード修正手順を記述する。
+### Case A: XS/S + Low Risk Task
 
 ```markdown
-- **Title**: [Bug] Fix typo in Submit button
-- **ID**: UI-Bug-26
+### Docs-Chore-10: [Chore] Update project display name
+
+- **Title**: [Chore] Update project display name
+- **ID**: Docs-Chore-10
 - **Priority**: P2
 - **Size**: XS
-- **Area**: UI
+- **Risk**: Low
+- **Area**: Docs
 - **Dependencies**: []
-- **Goal**: ログイン画面のボタンのラベルが "Subimt" から "Submit" に修正されている。
+- **Goal**: README と Quickstart の表示名がプロジェクト名に置き換わっている。
+- **Acceptance Criteria**:
+  - AC-001: README の旧テンプレート名が新しいプロジェクト名に置き換わっている。
+  - AC-002: Quickstart の初回案内が新しいプロジェクト名を参照している。
 - **Steps**:
-  1. [ ] `src/components/LoginForm.tsx` を開く
-  2. [ ] Submitボタンのラベル文字列を修正する
-  3. [ ] ブラウザで表示を確認し、レイアウト崩れがないか確認
-- **Description**: ユーザーから報告された誤字の修正。
+  1. [ ] README.md を更新する
+  2. [ ] QUICKSTART.md を更新する
+- **Description**:
+  - Context: 新規プロジェクト作成直後の軽量カスタマイズ。
+  - Notes: Plan / Intent / QA は不要。
 - **Plan**: None
+- **Intent**: None
+- **QA**: None
+- **Verification**: _docs/qa/Workflow/docs-template-v1-migration/verification.md
 ```
 
-### Case C: New Area / Doc Task (Size S)
-
-**Rule**: 新しいAreaが必要な場合、ディレクトリ作成を含む。
+### Case B: Size M + Medium Risk Task
 
 ```markdown
-- **Title**: [Doc] Add Deployment Guide
-- **ID**: DevOps-Doc-27
+### Core-Enhance-11: [Enhance] Add onboarding command
+
+- **Title**: [Enhance] Add onboarding command
+- **ID**: Core-Enhance-11
 - **Priority**: P1
-- **Size**: S
-- **Area**: DevOps
-- **Dependencies**: [Core-Feat-25]
-- **Goal**: 新メンバー向けのデプロイ手順書が `_docs/guide/deployment.md` に作成されている。
+- **Size**: M
+- **Risk**: Medium
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: 新規メンバーが onboarding command で初期診断を実行できる。
+- **Acceptance Criteria**:
+  - AC-001: command が環境診断を実行し、結果を標準出力に表示する。
+  - AC-002: decision の Why / Change freedom が記録され、必要な場合だけ intent-derived invariant に基づくテストまたは validator が存在する。
 - **Steps**:
-  1. [ ] `_docs/plan/DevOps/` ディレクトリが存在しないため作成する (Area定義用)
-  2. [ ] `_docs/guide/deployment.md` を作成し、ステージング環境へのデプロイ手順を記述
-- **Description**: オンボーディングコスト削減のため、暗黙知になっているデプロイ手順をドキュメント化する。
-- **Plan**: None
+  1. [ ] Plan の Scope / Non-Goals を確認する
+  2. [ ] QA test-plan の Test Matrix に従って実装と検証を進める
+- **Description**:
+  - Context: ユーザー向け workflow が増えるため Medium risk とする。
+  - Notes: Plan / Intent / QA が必須。
+- **Plan**: _docs/plan/Core/onboarding-command/plan.md
+- **Intent**: _docs/intent/Core/onboarding-command/decision.md
+- **QA**: _docs/qa/Core/onboarding-command/test-plan.md
+- **Verification**: None
 ```
 
---- 
+### Case C: Agent Workflow / Validator / Skill Task
+
+```markdown
+### Workflow-Chore-12: [Chore] Tighten TODO validator
+
+- **Title**: [Chore] Tighten TODO validator
+- **ID**: Workflow-Chore-12
+- **Priority**: P1
+- **Size**: M
+- **Risk**: Medium
+- **Area**: Workflow
+- **Dependencies**: []
+- **Goal**: TODO validator が新 schema と QA 必須条件を検出できる。
+- **Acceptance Criteria**:
+  - AC-001: validator が Risk / Intent / QA 欠落を error として検出する。
+  - AC-002: QA test-plan に agent misbehavior checks が含まれている。
+- **Steps**:
+  1. [ ] Plan / Intent / QA を読む
+  2. [ ] validator を更新する
+  3. [ ] agent misbehavior checks を verification に残す
+- **Description**:
+  - Context: Agent workflow / validator / Skill 変更では、agent が古い運用へ戻るリスクを検証する。
+  - Notes: `validate-todo` と `validate-qa` の両方を実行する。
+- **Plan**: _docs/plan/Workflow/todo-validator/plan.md
+- **Intent**: _docs/intent/Workflow/todo-validator/decision.md
+- **QA**: _docs/qa/Workflow/todo-validator/test-plan.md
+- **Verification**: None
+```
+
+---
 
 ## Inbox
 
@@ -203,4 +322,30 @@ ID生成およびタイトルのプレフィックスには以下のみを使用
 
 ## In Progress
 
-- (empty)
+### Workflow-Chore-30: [Chore] Complete docs-driven template v1.0.0 migration closure
+
+- **Title**: [Chore] Complete docs-driven template v1.0.0 migration closure
+- **ID**: Workflow-Chore-30
+- **Priority**: P1
+- **Size**: L
+- **Risk**: High
+- **Area**: Workflow
+- **Dependencies**: []
+- **Goal**: v1.0.0 compatibility migration の残る strict-schema、リンク/intent、backend baseline の検証境界を明示し、完了条件を判定できる状態にする。
+- **Acceptance Criteria**:
+  - AC-001: P と U の raw delta inventory が zero missing / duplicate で、project preservation evidence とともに確認できる。
+  - AC-002: full markdownlint がローカル rule exemption なしで 110 files / 0 errors となり、project-local 修正の inventory と compatibility scope の horizon が記録される。
+  - AC-003: scoped compatibility と unscoped strict schema/link/intent の結果が混同されず、後者の残課題が記録される。
+  - AC-004: backend の 2 baseline failures が migration diff とは独立に再現・診断され、必要な後続作業へ分離される。
+- **Steps**:
+  1. [x] P/U provenance、raw inventory、compatibility checks、lint、fixtures、hooks、project preservation を検証する。
+  2. [ ] unscoped strict schema/link/intent の legacy failures を意味論レビュー付きの別 migration として解消する。
+  3. [ ] strict-mode preset/expectation の backend baseline failures を project behavior task で診断する。
+- **Description**:
+  - Context: v1.0.0 の互換導入と full markdownlint は完了しているが、repository-wide strict migration と既存 backend baseline failures はこの migration では解消していない。
+  - Compatibility horizon: ACMR は `artifacts/markdownlint-compatibility-baseline.tsv` の 29 件を、その記録 blob と完全一致する間だけ除外する。内容変更・rename・deletion・manifest mismatch は直ちに strict validation へ戻す。この一時境界は、owner-approved strict schema/link/intent migration が PASS を記録して明示的に置換するまで残る。
+  - Notes: `PARTIAL` verification の residual risks と follow-up を source of truth として保持し、push / main update は含めない。
+- **Plan**: _docs/plan/Workflow/docs-template-v1-migration/plan.md
+- **Intent**: _docs/intent/Workflow/docs-template-v1-migration/decision.md
+- **QA**: _docs/qa/Workflow/docs-template-v1-migration/test-plan.md
+- **Verification**: _docs/qa/Workflow/docs-template-v1-migration/verification.md

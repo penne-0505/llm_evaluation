@@ -1,0 +1,45 @@
+# Case: intentional-omission-risk
+
+## Scenario
+
+`Size XS/S` かつ `Risk Low` に見える変更だが、意図的に非対応・制限・省略している挙動がある。将来の作業者が「未実装なので直そう」と誤認する可能性がある。
+
+## Initial State
+
+- `TODO.md` に Fast Track 相当のタスクがある。
+- `Plan`, `Intent`, `QA`, `Verification` は `None` にできる規模である。
+- ただし、Description や周辺 docs に、意図的な非対応・制限・省略がある。
+
+## Agent Task
+
+Fast Track のまま軽量に進めてよいか、intentional omission risk として設計判断に昇格すべきかを判断する。軽量で足りる場合は TODO Description / PR / commit に理由を残し、後続変更に影響する場合は Intent を作成または更新する。
+
+## Expected Documents Touched
+
+- 軽量記録で足りる場合: `TODO.md` または PR / commit summary。
+- 設計判断として残す場合: `_docs/intent/<Area>/<slug>/decision.md`。
+- 既存 Plan がある場合: `_docs/plan/<Area>/<slug>/plan.md` の Non-Goals。
+
+## Expected QA Behavior
+
+- Intent に昇格した場合は `intent_schema: 2` と `DEC-*` を使い、`What`、`Why`、`Change freedom` を記録する。
+- `Why not` は棄却した代替案がある場合にだけ記録し、Validator はその意味内容を判定しない。
+- Intent-derived invariant は厳密な不変条件がある場合だけ追加し、`None` を許容する。
+
+## Expected Decision / Invariant Behavior
+
+- Fast Track の軽量性を守るため、すべての小規模変更に Intent を要求しない。
+- 将来誤修正されやすい intentional omission は、軽量記録または `DEC-*` の `Why` から理由を追える。
+- `Change freedom` は、理由を満たす別実装まで禁止しない。
+
+## Expected TODO.md Behavior
+
+- `Size XS/S` かつ `Risk Low` なら Plan / Intent / QA を常に必須にしない。
+- intentional omission risk がある場合は Description に理由を残すか、Intent path を設定する。
+
+## Failure Modes to Watch
+
+- すべての小規模変更に why-not 記録を要求する。
+- 現在の省略方法そのものを INV にして、同じ目的を満たす別実装まで禁止する。
+- 意図的な非対応を記録せず、将来の agent が欠落として実装してしまう。
+- `scripts/validate-todo.mjs` に semantic な why-not field requirement を追加する。

@@ -1,6 +1,6 @@
 ---
 title: Survey Title
-status: proposed  # allowed: proposed | active | superseded
+status: proposed  # allowed: proposed | active | superseded | obsolete
 draft_status: n/a  # allowed: idea | exploring | paused | n/a
 created_at: YYYY-MM-DD
 updated_at: YYYY-MM-DD
@@ -9,6 +9,7 @@ related_issues: []
 related_prs: []
 ---
 
+<!-- Canonical path: _docs/survey/<Area>/<slug>/survey.md -->
 <!-- 調査・検証結果を整理し、plan/intent の根拠として参照できる形にまとめてください。 -->
 
 ## Background

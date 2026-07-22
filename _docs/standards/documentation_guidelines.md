@@ -2,336 +2,263 @@
 
 **ドキュメンテーションでわからないことがあれば、まずこのファイルを確認してください。**
 
-**アーカイブ運用・承認フローは `_docs/standards/documentation_operations.md` に定義されたルールに必ず従ってください。違反はレビューでブロックされます。**
+**アーカイブ運用フローは `_docs/standards/documentation_operations.md` に定義されたルールに必ず従ってください。**
 
 ## 概要
 
-本指針は、このプロジェクトにおけるドキュメント作成・管理・メンテナンスの統一的な方針を定めるものです。運用プロセスや自動化の詳細は `_docs/standards/documentation_operations.md` を参照し、本書では日々の執筆・レビューの実務指針にフォーカスします。
+本指針は、このプロジェクトにおけるドキュメント作成・管理・メンテナンスの統一的な方針を定めるものです。運用プロセスや自動化の詳細は `_docs/standards/documentation_operations.md`、QA の判断基準は `_docs/standards/quality_assurance.md` を参照し、本書では日々の執筆・更新の実務指針にフォーカスします。
 
 ## 関連ドキュメント
-- `_docs/standards/documentation_operations.md`: draft/plan を中心とした運用ルールと自動化ロードマップ
-- `_docs/documentation_guide.md`: ドキュメント執筆者向けの実務ガイドライン
+
+- `_docs/standards/documentation_operations.md`: draft / plan / survey / intent / QA / archive を中心とした運用ルール。
+- `_docs/standards/quality_assurance.md`: intent-derived invariant、risk 分類、QA test-plan、verification verdict の標準。
+- `_docs/standards/security_for_agents.md`: LLM / coding agent の安全な操作標準。
+- `_docs/documentation_guide.md`: ドキュメント執筆者向けのクイックガイド。
 
 ## ドキュメントの目的
 
 1. **新メンバー・対象領域外の人が仕様・用法を理解するため**（主目的）
 2. **実装上の意図を明確にするため**
-3. **汎用的な参考資料として**
+3. **設計判断が守られているかを検証するため**
+4. **汎用的な参考資料として**
 
 ## ディレクトリ構造と役割
 
+```text
+_docs/
+├── guide/<Area>/<slug>/usage.md          # 使用方法・運用指針・ベストプラクティス・トラブルシューティング
+├── reference/<Area>/<slug>/reference.md  # API仕様・詳細リファレンス・簡易的内部実装説明
+├── plan/<Area>/<slug>/plan.md            # 実装計画・仕様書（intentに昇華する原典）
+├── intent/<Area>/<slug>/decision.md      # 実装意図・背景・判断理由（ADR的な用途）
+├── qa/<Area>/<slug>/test-plan.md         # intent / plan / TODO から導いたQA計画
+├── qa/<Area>/<slug>/verification.md      # 実装後の検証証跡
+├── survey/<Area>/<slug>/survey.md        # 機能調査・技術比較・検証レポート
+├── draft/<Area>/<slug>/notes.md          # メモ・草案置き場（正式化前の作業用）
+├── standards/                            # 開発ガイドライン・プロジェクト標準
+├── archives/                             # draft / plan / survey の保管庫
 ```
-\_docs/
-├── guide/(対象)/          \# 使用方法・運用指針・ベストプラクティス・トラブルシューティング
-├── reference/(対象)/      \# API仕様・詳細リファレンス・簡易的内部実装説明
-├── plan/(対象)/          \# 実装計画・仕様書（実装完了後も保持）
-├── intent/(対象)/        \# 実装意図・背景・判断理由（ADR的な用途）
-├── survey/(対象)/         \# 機能調査・技術比較・検証レポート
-├── draft/(対象)/           \# メモ・草案置き場（正式化前の作業用）
-├── standards/              \# 開発ガイドライン・プロジェクト標準（本ファイル含む）
-├── archives/               \# intent 承認後に移送する保管庫
 
+実ファイルは以下の canonical path に従う。
+
+```text
+_docs/draft/<Area>/<slug>/notes.md
+_docs/survey/<Area>/<slug>/survey.md
+_docs/plan/<Area>/<slug>/plan.md
+_docs/intent/<Area>/<slug>/decision.md
+_docs/qa/<Area>/<slug>/test-plan.md
+_docs/qa/<Area>/<slug>/verification.md
+_docs/guide/<Area>/<slug>/usage.md
+_docs/reference/<Area>/<slug>/reference.md
+_docs/archives/{draft,plan,survey}/<Area>/<slug>/...
 ```
 
-### `_docs/guide/(機能名)/` - 使用方法ガイド
+`<Area>` は `TODO.md` の `Area` と一致させる。`<slug>` は機能・変更単位の kebab-case 名にする。references は root-relative canonical path を推奨する。
 
-- **目的**: 実際の開発シナリオでの使い方を学ぶ
-- **読者**: 新メンバー・対象領域外の人（仕様・用法理解が目的）
-- **内容**: 
-  - 基本的な使用方法・操作手順
-  - 運用・開発上の指針
-  - チュートリアル
-  - プロジェクト固有のベストプラクティス
-  - トラブルシューティング
-- **相互参照**: reference への根拠提示として積極的に参照
-  - 例：「詳細な仕様は `reference/logging-api.md` を参照」
+## ドキュメント種別
 
-### `_docs/reference/(対象)/` - API仕様リファレンス
+### `_docs/plan/<Area>/<slug>/plan.md`
 
-- **目的**: 特定のAPI仕様を確認する辞書的用途
-- **読者**: 実装時に詳細な仕様を調べたい開発者
-- **内容**:
-  - クラス・メソッド単位の詳細説明
-  - パラメータ・戻り値・例外の完全仕様
-  - 簡易的な内部実装説明
-- **ステータス**: 実装済み機能のみ記載
-- **相互参照**: guide への実践例誘導として積極的に参照
-  - 例：「実際の使用例は `guide/logging.md` のベストプラクティスを参照」
+- **目的**: 実装計画・技術仕様の単一参照点。
+- **読者**: 実装背景を理解したい開発者・新メンバー。
+- **内容**: Scope / Non-Goals / Requirements / Tasks / QA Plan / Deployment。
+- **QA**: `Size >= M` では `_docs/qa/<Area>/<slug>/test-plan.md` を作成し、Plan から参照する。
+- **ライフサイクル**: intent に昇華する原典として扱い、archive checklist を満たす場合のみ archives へ移送できる。
 
-### `_docs/plan/(対象)/` - 実装計画・仕様書
+### `_docs/intent/<Area>/<slug>/decision.md`
 
-- **目的**: 実装計画・技術仕様書の保管庫
-- **読者**: 実装背景を理解したい開発者・新メンバー
-- **内容**: 詳細仕様、実装計画概要、技術検討資料
-- **ディレクトリ命名規則 (`(対象)`)**:
-  - 本ディレクトリの第一階層名（`(対象)`）は、`TODO.md` における **Area** と1対1で対応する。
-  - 原則として、タスク管理上の Area と一致するディレクトリ名を使用すること。
-  - ディレクトリ名を変更する場合（リネーム）は、`TODO.md` 内の該当タスクの `Area` も同時に一括置換する必要がある。
-- **ライフサイクル**: 実装完了後も削除せず、archiveの形を取ることでintent の原典として活用
-- **特徴**: 計画段階・開発中・実装済み全ての機能を含む
+- **目的**: 将来の変更者が実装上の意図、判断理由、変更可能範囲を再構成するための記録。
+- **読者**: 設計判断の背景を理解したい開発者。
+- **内容**: Context / DEC-ID 付き Decisions（What / Why / Change freedom、必要な Why not / Revisit when）/ Consequences / Quality Implications / 任意の Intent-derived Invariants。
+- **QA**: intent は QA の一次資料であり、変更が影響する DEC を review する。実装方式を越えて守る結果がある場合だけ invariant を抽出する。
+- **ライフサイクル**: 恒久的な設計判断ログとして保持し、archives へ移送しない。テンプレート repo 自身の meta-work に対する例外は `_docs/standards/documentation_operations.md` を参照する。
 
-### `_docs/intent/(対象)/` - 実装意図・設計判断
+### `_docs/qa/<Area>/<slug>/test-plan.md`
 
-- **目的**: 実装上の意図・背景・判断理由の記録（ADR的用途）
-- **読者**: 設計判断の背景を理解したい開発者
-- **内容**: なぜその設計にしたか、検討した代替案、トレードオフ等
-- **特徴**: 現状の事実（reference）と実装意図を分離管理
-- **記録対象**: アーキテクチャ決定、技術選択、設計方針変更等
+- **目的**: intent / plan / TODO から、品質上守るべき条件と確認手段を設計する。
+- **読者**: 実装者、レビュアー、QA 担当、coding agent。
+- **内容**: Source of Intent / Quality Goal / Acceptance Criteria / Decision Review Scope / 任意の Intent-derived Invariants / Risk Assessment / Test Matrix。
+- **作成条件**: `Size >= M` または `Risk >= Medium` で必須。
+- **ライフサイクル**: QA docs は persistent quality records であり、archives へ移送しない。obsolete な場合は `status: obsolete` または `status: superseded` にする。テンプレート repo 自身の meta-work に対する例外は `_docs/standards/documentation_operations.md` を参照する。
 
-### `_docs/survey/(対象)/` - 調査レポート・検証結果
+### `_docs/qa/<Area>/<slug>/verification.md`
 
-- **目的**: 調査・検証・比較検討の結果を体系的に蓄積し、意思決定や後続作業の根拠を共有する
-- **読者**: 調査結果を踏まえて計画・実装を行う開発者、意思決定者
-- **内容**:
-  - 実装前の技術調査、性能計測レポート
-  - 競合機能比較やUI/UXリサーチのまとめ
-  - 検証手順・条件・結論の詳細記録
-- **運用**:
-  - 調査完了後に速報ベースのメモ（draft）から整理して移管
-  - フォーマットは基本的に「背景 → 目的 → 手法 → 結果 → 考察 → 推奨アクション」を推奨
-  - 計画ドキュメント（plan）や意図ドキュメント（intent）から参照し、根拠資料として活用
-  - 調査後に行われた実装が完了したら、archives へ移送
+- **目的**: 実装後の検証証跡を残す。
+- **読者**: レビュアー、運用担当、将来の保守者。
+- **内容**: 実行コマンド、手動 QA、AC coverage、Decision Conformance、該当する INV coverage、Deferred、Residual Risks、Follow-up TODOs、Verification Verdict。
+- **完了条件**: `Size >= M` または `Risk >= Medium` の TODO を完了する前に作成する。`Risk High / Critical` では特に必須。
+- **ライフサイクル**: archive しない。古くなった場合は status を更新し、後継 verification を references で示す。
 
-> **補足**: 一時的・未整理のメモは引き続き `_docs/draft/` に置き、調査が完了したら `_docs/survey/` へ昇格させる。
+### `_docs/guide/<Area>/<slug>/usage.md`
 
-### `_docs/draft/(対象)/` - メモ・草案置き場
+- **目的**: 実際の開発・運用シナリオでの使い方を学ぶ。
+- **読者**: 新メンバー・対象領域外の人。
+- **内容**: 基本的な使用方法、手順、ベストプラクティス、トラブルシューティング。
+- **QA**: ユーザー向け挙動や保証範囲が変わる場合は verification を参照する。
 
-- **目的**: メモ・草案の統一管理（正式ドキュメント化前の作業用）
-- **読者**: 開発者・ドキュメント作成者
-- **内容**: 
-  - コミット時に残す実装意図メモ
-  - 正式化前の草案
-  - 作業中の一時的な資料
-- **運用**: メモと草案を区別せず統一的に管理
-- **ライフサイクル**: 正式ドキュメント化後は移動・削除
+### `_docs/reference/<Area>/<slug>/reference.md`
 
-> **ドキュメント昇格フロー**: draft → survey（調査必要時） → plan → intent → guide/reference（詳細は `_docs/standards/documentation_operations.md` を参照）
+- **目的**: API / 仕様を確認する辞書的用途。
+- **読者**: 実装時に詳細仕様を調べたい開発者。
+- **内容**: クラス・メソッド・データモデル・エラー仕様・例。
+- **QA**: 保証範囲や既知の残リスクがある場合は verification を参照する。
 
-#### draft の TTL と保守
-- 各 draft は、`updated_at` から一定期間（既定30日）更新がない場合、stale と見なされる。
-- 必要に応じて昇格/クローズ/延長の判断を行う。
-  - 延長する場合は front-matter に任意フィールドを追加して記録すること:
-    - `stale_exempt_until: YYYY-MM-DD` — 猶予期限を明記
-    - `stale_exempt_reason: <string>` — 延長理由を簡潔に記載
-    - `stale_extensions: <number>` — 延長回数。延長のたびに+1
-  - intent 未承認のまま archives へ移動することは不可。延長中も意図が固まれば plan/intent への昇格を検討する。
+### `_docs/survey/<Area>/<slug>/survey.md`
 
-### `_docs/standards/` - 開発ガイドライン・標準
+- **目的**: 調査・検証・比較検討の結果を体系的に蓄積する。
+- **ライフサイクル**: plan / intent から参照し、対応 intent 作成後かつ archive checklist を満たす場合のみ archives へ移送する。
 
-- **目的**: プロジェクト全体の開発ガイドライン・標準の管理
-- **読者**: 全プロジェクトメンバー
-- **内容**: 本指針、コーディング規約、その他プロジェクト標準
-- **特徴**: プロジェクト横断的なルール・方針を集約
+### `_docs/draft/<Area>/<slug>/notes.md`
 
-## 必須フィールド一覧（全ドキュメント共通）
+- **目的**: メモ・草案の統一管理。
+- **ライフサイクル**: 正式ドキュメント化後は、対応 intent を作成・関連付けたうえで archives へ移送できる。恒久削除は行わない。
+- **stale 管理**: `updated_at` から 30 日以上更新がない場合、昇格 / クローズ / 延長を判断する。
 
-全てのドキュメントには front-matter を付与し、以下の6つの必須キーのみを管理する。
-詳細なメタデータやドキュメントの内容定義は、後述するMarkdown本文のセクションとして記述する。
+## 必須フィールド
+
+`_docs/standards/` 配下を除く運用対象ドキュメントには front-matter を付与し、以下の必須キーを管理する。
 
 | フィールド | 説明 |
 | --- | --- |
 | `title` | ドキュメントのタイトル |
-| `status` | `proposed` \| `active` \| `superseded` |
-| `draft_status` | ドラフトの進行状態 (`idea` \| `exploring` \| `paused` \| `n/a`) |
+| `status` | `proposed` \| `active` \| `superseded` \| `obsolete` |
+| `draft_status` | `idea` \| `exploring` \| `paused` \| `n/a` |
 | `created_at` | 作成日 (`YYYY-MM-DD`) |
 | `updated_at` | 更新日 (`YYYY-MM-DD`) |
-| `references` | 関連ドキュメントへのリンク配列（ない場合は空配列 `[]`） |
-| `related_issues` | 関連Issueの番号配列 (ない場合は空配列 `[]`) |
-| `related_prs` | 関連PRの番号配列 (ない場合は空配列 `[]`) |
+| `references` | 関連ドキュメントへのリンク配列。root-relative canonical path を推奨。 |
+| `related_issues` | 関連 Issue の番号配列。ない場合は `[]`。 |
+| `related_prs` | 関連 PR の番号配列。ない場合は `[]`。 |
 
-> draft でのみ、stale 管理のために以下の任意フィールドを追加してもよい: `stale_exempt_until: YYYY-MM-DD`, `stale_exempt_reason: <string>`, `stale_extensions: <number>`（延長ごとに+1）。必須フィールド6項目のスキーマは維持すること。
+`_docs/qa/**/*.md` には追加で以下が必須。
+
+| フィールド | 説明 |
+| --- | --- |
+| `qa_status` | `planned` \| `in-progress` \| `verified` \| `partial` \| `failed` \| `blocked` |
+| `risk` | `Low` \| `Medium` \| `High` \| `Critical` |
+
+draft でのみ、stale 管理のために以下の任意フィールドを追加してもよい。
+
+- `stale_exempt_until: YYYY-MM-DD`
+- `stale_exempt_reason: <string>`
+- `stale_extensions: <number>`
 
 ## ドキュメント構造とテンプレート
 
-Front-matterを簡素化する代わりに、ドキュメント種別ごとに推奨されるMarkdownの見出し構造（テンプレート）を定義する。
-執筆者は以下の構造に従って本文を記述することで、必要な情報の網羅性を担保する。
+作成用の雛形は `_docs/standards/templates/` にある。該当する種別をコピーし、`created_at` / `updated_at` / `status` / `draft_status` / `qa_status` / `risk` などを実情に合わせて更新する。
 
-> 作成用の雛形は `_docs/standards/templates/` にあります。該当する種別（draft/plan/intent/guide/reference/survey）のファイルをコピーし、`created_at`/`updated_at`/`status`/`draft_status` などを実情に合わせて更新してください。
+対象テンプレート:
 
-### 共通セクション（全ドキュメント推奨）
-
-注: **担当者名（Owners）の記述は不要。**
-
-### Plan ドキュメントの構造例
-
-計画書には、以前Front-matterで管理していたスコープや要件定義を本文として記述する。
-
-```markdown
-## Overview
-概要を記述。
-
-## Scope
-- 実装する機能範囲
-- 変更の影響範囲
-
-## Non-Goals
-- 今回のスコープに含まれないもの
-
-## Requirements
-- **Functional**: 機能要件
-- **Non-Functional**: 非機能要件
-
-## Tasks
-- 実装タスク一覧
-
-## Test Plan
-- テスト戦略、観点
-
-## Deployment / Rollout
-- デプロイ手順、ロールバック方針
-````
-
-### Draft ドキュメントの構造例
-
-```markdown
-## Hypothesis
-- 検証したい仮説
-
-## Options / Alternatives
-- 検討中の選択肢
-- トレードオフの比較
-```
-
-**ただし、draft はあくまでメモ置き場であるため、必須セクションは特に定めない。趣旨が一致する場合のみセクション名を踏襲すること。**
-
-## 対象読者
-
-  - **主要読者**: 新メンバー・対象領域の実装に関わっていない人
-  - **技術レベル**: 対象となる技術スタックの中級者～上級者を前提
-  - **学習目的ではなく「ドキュメント」としての品質を優先**
-  - **特記事項**: AIエージェントも読者として想定
-
-## 言語・記法ルール
-
-### 言語使用方針
-
-  - **API名・クラス名・メソッド名**: 英語のまま記載
-  - **説明文・本文**: 日本語で記述
-  - **固有名詞**: 原語で記載（Flutter, Dart, Riverpod 等）
-  - **技術用語**: 一般的な基準で記述（明文化しない）
-
-### 専門用語・略語
-
-  - **初出時**: 正式名称+略語併記（例：「NDJSON（Newline Delimited JSON）」）
-  - **2回目以降**: 略語のみ使用可
-  - **プロジェクト固有用語集**: 作成しない
-
-### Markdown記法
-
-  - **見出しレベル**:
-      - `#`: 文書タイトル
-      - `##`: 大セクション
-      - `###`: 中セクション
-      - `####以下`: 小セクション
-  - **コードブロック**: 言語指定を推奨
-  - **表・リスト・引用**: 特定スタイルの指定なし
-
-### コード記載ルール
-
-  - **コード引用**: 現状をそのまま保持
-  - **コード例**:
-      - 変数名: 英語
-      - コメント: 日本語
-  - **API名**: 英語のまま、説明は日本語
-
-## 実装ステータスの扱い
-
-### ステータス表記方針
-
-  - **reference/**: 実装済み機能のみ記載を原則
-  - **実装中機能**: 記載しない (plan/ に記述)
-  - **未実装機能**: 記載しない（plan/ に記述）
-  - **バージョン情報**: 不要
-  - **実装時期**: 明記する
-
-### ドキュメント種別別の扱い
-
-| ドキュメント種別 | 実装済み | 開発中 | 未実装・計画中 |
-|------------------|----------|--------|----------------|
-| guide/           | ✅記載   | ❌記載しない | ❌記載しない |
-| reference/       | ✅記載   | ❌記載しない | ❌記載しない |
-| plan/            | ✅記載   | ✅記載   | ✅記載 |
-| intent/          | ✅記載   | ✅記載   | ✅記載 |
+- `_docs/standards/templates/draft.md`
+- `_docs/standards/templates/survey.md`
+- `_docs/standards/templates/plan.md`
+- `_docs/standards/templates/intent.md`
+- `_docs/standards/templates/qa-test-plan.md`
+- `_docs/standards/templates/qa-verification.md`
+- `_docs/standards/templates/guide.md`
+- `_docs/standards/templates/reference.md`
 
 ## メンテナンス方針
 
 ### 更新フロー
 
-1.  **大規模変更 (Size >= M)**:
-
-      - 実装意図・設計メモを `_docs/draft/(対象)/` に記録してから実装を開始する。
-      - または `_docs/plan/(対象)/` を作成・更新する。
-
-2.  **小規模変更 (Size < M)**:
-
-      - **特例**: `TODO.md` 上でタスク定義が明確（Stepsに手順記載済み）であり、かつ意図が自明な修正（バグ修正や軽微なリファクタリング）の場合、**`draft` の作成を省略できる**。
-      - この場合、コミットメッセージやPRのDescriptionに実装意図を含めることで代替とする。
-
-3.  **定期的**: メモを基に正式ドキュメントへ昇華
-
-4.  **レビュー**: 正式ドキュメント完成時、関与領域更新時、定期的（2\~3ヶ月）
-
-### 更新タイミング
-
-  - **優先度**: 明確に設けないが、暗黙的に「新機能 > リファクタリング」順になる可能性（排除しない）
-  - **時間経過**: 実装時の意図や目的がブレやすいため、コミット時のメモ作成を重視
-
-### 整合性チェック & 自動化
-
-  - **手法**: lint（markdownlint-cli2） / link-check（lychee） / front-matter 検証を使用。
-  - **現状**: markdownlint と front-matter/stale チェックは CI（GitHub Actions: markdownlint-cli2-action + Deno スクリプト）で自動実行。archives 配下は除外。link-check は未導入のため手動確認。
-  - **対応ルール**:
-    1.  **発見時対応**: 問題を見つけた人が修正または Issue 作成。Issue 番号は該当ドキュメントの `front-matter` の `related_issues` に追記。
-    2.  **優先度**: 実害のある不整合 > 表記の不統一 > 軽微な古い情報。
-    3.  **修正範囲**: 関連する `guide/` や `reference/` を同時に確認し、必要なら plan / intent も更新する。
+1. **大規模変更 (`Size >= M`)**:
+   - `_docs/plan/<Area>/<slug>/plan.md` を作成または更新する。
+   - `_docs/intent/<Area>/<slug>/decision.md` を作成または更新する。
+   - `_docs/qa/<Area>/<slug>/test-plan.md` を実装前または実装中に作成する。
+2. **リスクのある変更 (`Risk >= Medium`)**:
+   - Intent と QA test-plan を作成する。
+   - Risk High / Critical では verification を完了前に作成する。
+3. **小規模変更 (`Size XS/S` かつ `Risk Low`)**:
+   - Plan / Intent / QA を省略できる。
+   - TODO の Acceptance Criteria と Steps を明確にする。
+   - 将来の作業者が未実装と誤認しそうな非対応・制限・省略がある場合は、intentional omission risk として TODO Description / PR / commit に理由を残す。後続変更に影響する設計判断なら Intent へ昇格する。
+4. **実装完了後**:
+   - `qa-review` で verification verdict を確認する。
+   - 必要に応じて guide / reference を更新する。
+   - 完了可能な TODO は削除し、履歴を verification / PR / commit に残す。
 
 ### 品質保証
 
-  - **レビュータイミング**:
-      - 正式ドキュメント完成時
-      - 関与領域更新時（簡易レビュー）
-      - 定期棚卸し（Docs Platform WG が四半期ごとに実施）
-  - **古い情報の検出**: lint / link-check と手動レビューを併用。
+- QA は実装後ではなく、実装前または実装中に設計する。
+- Test Matrix は acceptance criteria と、存在する場合の intent-derived invariant を、実行可能なテスト・manual QA・validator・diff review のいずれかへ紐づける。
+- verification は変更が影響した DEC を特定し、実装が `Why` と `Change freedom` に沿うことを Decision Conformance で確認する。
+- 実行可能なテストは `_docs/qa/` ではなく、コードベース側の標準的な場所に置く。
+- 実行していないコマンドを verification に書かない。
+- `PARTIAL` / `FAIL` / `BLOCKED` では、残リスクと次アクションを明記する。
+- verification の `qa_status` は本文 `Verdict` と一致させる。
 
-## 重複・相互参照方針
+### Root Markdown
 
-### 重複について
+- root 直下の Markdown は active project guidance として読まれる前提で管理する。
+- 一回限りの implementation prompt を残す場合は `_evals/prompts/` 等へ移し、historical / non-operational warning を付ける。
 
-  - **基本方針**: 各ドキュメントの目的達成のために必要であれば重複を許容
-  - **制約**: 目的に特化しすぎず、ある程度汎用的に仕上げる
+### 整合性チェック & 自動化
 
-### 相互参照
+- CI では markdownlint、front-matter/stale チェック、TODO チェック、ローカルリンクチェック、QA チェック、validator fixture、agent workflow smoke check を実行する。
+- ローカル検証の正典は `./scripts/check-docs.sh` とする。
+- 個別に切り分ける場合のコマンド:
 
-  - **guide → reference**: ガイドの根拠として参照
-      - 例：「`reference/logging-api.md` の LogLevel 仕様に基づいて...」
-  - **reference → guide**: 補足説明や実践的使用方法の誘導
-      - 例：「実際の使用例は `guide/logging.md` を参照」
-      - 例：「`guide/logging.md` に実例とチュートリアルが記載されています」
-  - **同一ディレクトリ内**: 必要に迫られた場合のみ（基本的には想定しない）
+```bash
+deno fmt --check scripts/*.mjs
+deno run --allow-read --allow-env --allow-run=git scripts/validate-frontmatter.mjs
+deno run --allow-read scripts/validate-todo.mjs
+deno run --allow-read --allow-env --allow-run=git scripts/validate-doc-links.mjs
+deno run --allow-read --allow-env --allow-run=git scripts/validate-intent.mjs
+deno run --allow-read --allow-env --allow-run=git scripts/validate-qa.mjs
+deno run --allow-read --allow-write --allow-env --allow-run scripts/test-validators.mjs
+deno run --allow-read --allow-run=git scripts/test-agent-workflow-hook.mjs
+deno run --allow-read scripts/test-agent-workflow-smoke.mjs
+```
 
 ## 新機能のドキュメント作成手順
 
-1.  **実装開始時**: `_docs/draft/(機能名)/` にメモ・草案を作成
-2.  **調査フェーズ**: 重要な調査・検証結果を `_docs/survey/(機能名)/` に整理して保存
-3.  **実装中**: 重要な設計判断を `_docs/draft/(機能名)/intent_notes.md` に記録
-4.  **実装完了後**:
-      - `_docs/intent/(機能名)/` に設計意図ドキュメント作成
-      - `_docs/reference/(機能名)/` にAPI仕様リファレンス作成
-      - `_docs/guide/(機能名)/` に使用方法ガイド作成
-5.  **レビュー**: 各ドキュメントをレビューし正式化
-6.  **クリーンアップ**: `_docs/draft/(機能名)/` を整理・移動・削除し、必要に応じて survey ドキュメントを更新。
+1. TODO の `Size` と `Risk` を確認する。
+2. `Size >= M` なら Plan / Intent / QA test-plan を作成する。
+3. `Risk >= Medium` なら Intent / QA test-plan を作成する。
+4. `Size XS/S` かつ `Risk Low` でも intentional omission risk がある場合は、軽量な理由を残すか、設計判断として Intent を作成する。
+5. intent に `DEC-xxx` を作り、`What` / `Why` / `Change freedom` と、必要な `Why not` / `Revisit when` を記録する。
+6. active decision 下で実装方式を越えて守る結果がある場合だけ intent-derived invariant を抽出する。
+7. QA test-plan の Test Matrix で AC と該当する INV の確認手段を割り当て、影響する DEC を Decision Review Scope に置く。
+8. 実装中に判断が変わった場合は Plan / Intent / QA を更新する。
+9. 実装後に verification を作成し、Decision Conformance、実行コマンド、manual QA、残リスク、verdict を残す。
+10. 実装済み挙動として共有が必要なら guide / reference を更新する。
+11. draft / survey / plan を archive する場合は、archive checklist を満たすことを確認する。
+
+## アーカイブ方針
+
+- archive 対象は `draft` / `plan` / `survey` のみ。
+- `intent` は恒久的な設計判断ログであり、archive しない。
+- QA docs は persistent quality records であり、archive しない。
+- `_docs/archives/intent` や `_docs/archives/qa` を作らない。
+- `rm` / `git rm` による恒久削除は禁止する。archive checklist を満たす一時ドキュメントの移送に限り `mv` / `git mv` を使える。
+
+## 対象読者
+
+- **主要読者**: 新メンバー・対象領域の実装に関わっていない人。
+- **技術レベル**: 対象となる技術スタックの中級者以上を前提。
+- **AI エージェント**: TODO / Plan / Intent / QA を読み、判断と検証の根拠を追える読者として想定する。
+
+## 言語・記法ルール
+
+- API 名・クラス名・メソッド名は英語のまま記載する。
+- 説明文・本文は日本語で記述する。
+- references は root-relative canonical path を推奨する。
+- 見出しは文書種別ごとのテンプレートを優先する。
+- コードブロックには可能な限り言語指定を付ける。
 
 ## よくある質問
 
-### Q: どのディレクトリに書けばよいか分からない場合は？
+### Q: 小規模なバグ修正でも QA 文書は必要ですか？
 
-A: まず `_docs/draft/` に書き始めてください。内容が固まってから適切な場所に移動します。
+A: `Size XS/S` かつ `Risk Low` なら不要です。ただし Bug では regression test または no-test rationale を、TODO / PR / verification のいずれかに残してください。
 
-### Q: 既存ドキュメントとの整合性が心配な場合は？
+### Q: QA docs は archive しますか？
 
-A: 関連する guide/ と reference/ を同時に確認し、必要に応じて両方を更新してください。
+A: しません。QA docs は persistent quality records です。obsolete になった場合は `status: obsolete` または `status: superseded` にします。
 
-### Q: 実装途中の機能をドキュメント化すべきか？
+### Q: verification が `PARTIAL` でも TODO を削除できますか？
 
-A: plan/ に記述し、実装完了後に guide/ と reference/ 、intent/ を作成してください。
+A: 残リスクと follow-up TODO が明記され、受け入れ可能な場合のみ限定的に可能です。`FAIL` / `BLOCKED` は完了扱いにしません。
 
+### Q: reference や guide はいつ更新しますか？
+
+A: 実装済み挙動として利用者に伝える必要がある場合に更新します。保証範囲や残リスクが重要な場合は QA verification を参照してください。

@@ -1,0 +1,15 @@
+Docs template v1.0.0 migration quarantine
+
+Reason: U removed these active legacy guidance paths. Repository policy forbids
+permanent deletion, so exact P blobs are retained outside agent/docs discovery.
+
+cutoff=d309974a77c736b6d333819a38460edaeb21e57e
+
+source_path	P_blob	destination
+.opencode/skills/debug/SKILL.md	f2f87414d7c535968db5ac63fbfafddcacc2ebc2	.migration-quarantine/docs-template-v1.0.0/.opencode/skills/debug/SKILL.md
+.opencode/skills/docs-cleanup/SKILL.md	a0d218123add8a4022ca85b19fb82781557c8b5b	.migration-quarantine/docs-template-v1.0.0/.opencode/skills/docs-cleanup/SKILL.md
+.opencode/skills/docs-prep/SKILL.md	8746d91ffcba99e723b921f389288881d23f7017	.migration-quarantine/docs-template-v1.0.0/.opencode/skills/docs-prep/SKILL.md
+.opencode/skills/frontend-design/SKILL.md	84c69201c19c41382142093c46a4faed88fca757	.migration-quarantine/docs-template-v1.0.0/.opencode/skills/frontend-design/SKILL.md
+.opencode/skills/implementation-prep/SKILL.md	385dda7d0ee7155a8c53d7e8a10f382747f9e9e3	.migration-quarantine/docs-template-v1.0.0/.opencode/skills/implementation-prep/SKILL.md
+.opencode/skills/post-implementation/SKILL.md	4e78103f250949242fe4c4d77b2f1c91f5aad6b0	.migration-quarantine/docs-template-v1.0.0/.opencode/skills/post-implementation/SKILL.md
+_docs/standards/jj_workflow.md	bbac6ce05990d831a713528502d3a102c8f6eb8b	.migration-quarantine/docs-template-v1.0.0/_docs/standards/jj_workflow.md
