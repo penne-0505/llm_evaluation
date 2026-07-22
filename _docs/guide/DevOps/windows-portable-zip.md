@@ -5,7 +5,7 @@ draft_status: n/a
 created_at: 2026-04-01
 updated_at: 2026-04-01
 references:
-  - ../../intent/DevOps/windows-portable-zip-distribution.md
+  - "_docs/intent/DevOps/windows-portable-zip-distribution/decision.md"
   - ../../reference/DevOps/windows-portable-runtime.md
 related_issues: []
 related_prs: []
@@ -70,6 +70,6 @@ user override は以下の優先順位で解決される。
   - そのポートが使用中。launcher は空きポートへフォールバックするため、コンソール出力の URL を利用する。
 
 ## References
-- `_docs/intent/DevOps/windows-portable-zip-distribution.md`
+- `_docs/intent/DevOps/windows-portable-zip-distribution/decision.md`
 - `_docs/reference/DevOps/windows-portable-runtime.md`
 - `README.md`

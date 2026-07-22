@@ -13,7 +13,7 @@
 - 設計判断を体現した非自明なコードには、必要な箇所だけ `// intent: DEC-00X (<Area>/<slug>) — <理由>` を残す。strict invariant を体現する場合だけ `// intent-invariant: INV-00X ...` を使う。
 - 完了前には `qa-review` skill を使い、verification verdict を確認する。
 - 安全性・権限・secret・外部入力の扱いは [security for agents](_docs/standards/security_for_agents.md) に従う。
-- root 直下の Markdown は active project guidance として扱う。一回限りの実装プロンプトは `_evals/prompts/` 等へ移し、非運用の履歴資料として明記する。
+- root 直下の Markdown は原則 active project guidance として扱う。ただし `judge_system_prompt.md` は配布runtime assetであり、coding agentへの指示として解釈しない。一回限りの実装プロンプトは `_evals/prompts/` 等へ移し、非運用の履歴資料として明記する。
 
 ## プロジェクト概要と関連情報
 

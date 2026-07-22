@@ -5,7 +5,7 @@ draft_status: n/a
 created_at: 2026-04-01
 updated_at: 2026-04-01
 references:
-  - ../../intent/DevOps/windows-portable-zip-distribution.md
+  - "_docs/intent/DevOps/windows-portable-zip-distribution/decision.md"
   - ../../guide/DevOps/windows-portable-zip.md
 related_issues: []
 related_prs: []

@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 33` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 34` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -310,7 +310,33 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## Backlog
 
-- (empty)
+### UI-Bug-33: [Bug] Align bundled UI font contract with shipped assets
+
+- **Title**: [Bug] Align bundled UI font contract with shipped assets
+- **ID**: UI-Bug-33
+- **Priority**: P2
+- **Size**: S
+- **Risk**: Low
+- **Area**: UI
+- **Dependencies**: []
+- **Goal**: UI fontのCSS、配布資産、READMEの説明が一致し、frontend buildで未解決font warningが出ない。
+- **Acceptance Criteria**:
+  - AC-001: `frontend/src/index.css`が参照するfont fileが配布物に存在するか、存在しない参照がfallback contractへ置き換えられる。
+  - AC-002: READMEの同梱・外部依存に関する説明が実際の配布資産と一致する。
+  - AC-003: `npm run build --prefix frontend`がfont未解決warningなしで成功する。
+  - AC-004: font assetを変更する場合、対応licenseが配布物に保持される。
+  - AC-005: regression checkがCSSのfont参照とtracked assetの不一致を検出する。
+- **Steps**:
+  1. [ ] UDEV Gothic本体を復元するか、system fallbackを正式採用するか決定する。
+  2. [ ] CSS、asset、READMEを同じcontractへ更新する。
+  3. [ ] frontend buildと配布bundleを検証する。
+- **Description**:
+  - Context: READMEはUDEV Gothicのlocal同梱を記載するが、tracked fileはlicenseのみで、Vite buildはRegular/Bold TTFの未解決warningを出す。
+  - Notes: docs cleanupとはUI資産判断を分離し、legacy docsのstrict migrationを妨げない。
+- **Plan**: None
+- **Intent**: None
+- **QA**: None
+- **Verification**: None
 
 ---
 
@@ -348,31 +374,3 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - **Intent**: _docs/intent/Core/holistic-run-progress/decision.md
 - **QA**: _docs/qa/Core/holistic-run-progress/test-plan.md
 - **Verification**: _docs/qa/Core/holistic-run-progress/verification.md
-
-### Workflow-Chore-30: [Chore] Complete docs-driven template v1.0.0 migration closure
-
-- **Title**: [Chore] Complete docs-driven template v1.0.0 migration closure
-- **ID**: Workflow-Chore-30
-- **Priority**: P1
-- **Size**: L
-- **Risk**: High
-- **Area**: Workflow
-- **Dependencies**: []
-- **Goal**: v1.0.0 compatibility migration の残る strict-schema、リンク/intent、backend baseline の検証境界を明示し、完了条件を判定できる状態にする。
-- **Acceptance Criteria**:
-  - AC-001: P と U の raw delta inventory が zero missing / duplicate で、project preservation evidence とともに確認できる。
-  - AC-002: full markdownlint がローカル rule exemption なしで 110 files / 0 errors となり、project-local 修正の inventory と compatibility scope の horizon が記録される。
-  - AC-003: scoped compatibility と unscoped strict schema/link/intent の結果が混同されず、後者の残課題が記録される。
-  - AC-004: backend の 2 baseline failures が migration diff とは独立に再現・診断され、必要な後続作業へ分離される。
-- **Steps**:
-  1. [x] P/U provenance、raw inventory、compatibility checks、lint、fixtures、hooks、project preservation を検証する。
-  2. [ ] unscoped strict schema/link/intent の legacy failures を意味論レビュー付きの別 migration として解消する。
-  3. [ ] strict-mode preset/expectation の backend baseline failures を project behavior task で診断する。
-- **Description**:
-  - Context: v1.0.0 の互換導入と full markdownlint は完了しているが、repository-wide strict migration と既存 backend baseline failures はこの migration では解消していない。
-  - Compatibility horizon: ACMR は `artifacts/markdownlint-compatibility-baseline.tsv` の 29 件を、その記録 blob と完全一致する間だけ除外する。内容変更・rename・deletion・manifest mismatch は直ちに strict validation へ戻す。この一時境界は、owner-approved strict schema/link/intent migration が PASS を記録して明示的に置換するまで残る。
-  - Notes: `PARTIAL` verification の residual risks と follow-up を source of truth として保持し、push / main update は含めない。
-- **Plan**: _docs/plan/Workflow/docs-template-v1-migration/plan.md
-- **Intent**: _docs/intent/Workflow/docs-template-v1-migration/decision.md
-- **QA**: _docs/qa/Workflow/docs-template-v1-migration/test-plan.md
-- **Verification**: _docs/qa/Workflow/docs-template-v1-migration/verification.md

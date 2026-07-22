@@ -4,7 +4,8 @@ status: active
 draft_status: n/a
 created_at: 2026-04-17
 updated_at: 2026-04-17
-references: []
+references:
+  - "_docs/reference/UI/frontend-container.md"
 related_issues: []
 related_prs: []
 ---

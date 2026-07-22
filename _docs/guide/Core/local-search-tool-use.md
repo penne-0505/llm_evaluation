@@ -5,7 +5,8 @@ draft_status: n/a
 created_at: 2026-04-07
 updated_at: 2026-06-03
 references:
-  - ../../plan/Core/local-search-tool-use-runtime.md
+  - "_docs/intent/Core/legacy-documentation-retirement/decision.md"
+  - "_docs/archives/plan/Core/legacy-documentation-retirement/local-search-tool-use-runtime.md"
 related_issues: []
 related_prs: []
 ---

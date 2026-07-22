@@ -115,7 +115,8 @@ references:
 
 ## Root Markdown と一回限り prompt
 
-- root 直下の Markdown は、coding agent に active project guidance として読まれる前提で管理する。
+- root 直下の Markdown は、明示されたruntime assetを除き、coding agentにactive project guidanceとして読まれる前提で管理する。
+- `judge_system_prompt.md` はアプリがjudge LLMへ渡す配布runtime assetであり、coding agentへのproject guidanceではない。配置要件はpackaging/reference側で管理する。
 - 一回限りの implementation prompt は root に残さない。
 - 履歴として残す場合は `_evals/prompts/` 等の明確に非運用の場所へ移し、ファイル先頭に historical / non-operational warning を付ける。
 - 現在の作業指示は `AGENTS.md`、`TODO.md`、`_docs/documentation_guide.md`、`_docs/standards/`、関連 Skills を参照する。

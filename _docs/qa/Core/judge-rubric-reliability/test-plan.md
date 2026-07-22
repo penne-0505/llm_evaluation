@@ -9,7 +9,7 @@ created_at: 2026-07-22
 updated_at: 2026-07-22
 references:
   - "_docs/intent/Core/judge-rubric-reliability/decision.md"
-  - "_docs/plan/Core/judge-rubric-reliability/plan.md"
+  - "_docs/archives/plan/Core/legacy-documentation-retirement/judge-rubric-reliability.md"
   - "_docs/reference/Core/holistic-evaluation.md"
 related_issues: []
 related_prs: []
@@ -20,7 +20,7 @@ related_prs: []
 ## Source of Intent
 
 - User request: bundled judge system prompt と全 task rubric の改善、および ZIP 提出。
-- Plan: `_docs/plan/Core/judge-rubric-reliability/plan.md`
+- Plan: `_docs/archives/plan/Core/legacy-documentation-retirement/judge-rubric-reliability.md`
 - Intent: `_docs/intent/Core/judge-rubric-reliability/decision.md`
 
 ## Quality Goal

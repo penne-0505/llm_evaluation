@@ -150,11 +150,13 @@ assert(
 );
 
 assert(
+  // Covers AC-011 / INV-005: project CI is strict while the template still documents staged adoption.
   contains(
     quickstart,
     "Docs-driven workflow",
-    "DD_SCOPE_DIFF_FILTER=ACMR",
-    "strict schema",
+    "unscoped validator",
+    "DD_SCOPE_BASE",
+    "このrepositoryのCIでは使用しません",
   ) &&
     contains(
       documentationOperations,
@@ -164,7 +166,7 @@ assert(
       "strict schema migration",
       "pre-v1.0.0 bootstrap",
     ),
-  "reader docs separate downstream compatibility, template provenance, and strict schema",
+  "reader docs separate project strict CI, template compatibility, and provenance",
 );
 
 assert(

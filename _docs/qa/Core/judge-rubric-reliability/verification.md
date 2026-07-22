@@ -9,7 +9,7 @@ created_at: 2026-07-22
 updated_at: 2026-07-22
 references:
   - "_docs/intent/Core/judge-rubric-reliability/decision.md"
-  - "_docs/plan/Core/judge-rubric-reliability/plan.md"
+  - "_docs/archives/plan/Core/legacy-documentation-retirement/judge-rubric-reliability.md"
   - "_docs/qa/Core/judge-rubric-reliability/test-plan.md"
   - "_docs/reference/Core/judge-prompt-contract/reference.md"
   - "_docs/reference/Core/holistic-evaluation.md"

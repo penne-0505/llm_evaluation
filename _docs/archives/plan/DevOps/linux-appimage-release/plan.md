@@ -7,7 +7,7 @@ updated_at: 2026-07-22
 references:
   - "_docs/intent/DevOps/linux-appimage-release/decision.md"
   - "_docs/qa/DevOps/linux-appimage-release/test-plan.md"
-  - "_docs/intent/DevOps/windows-portable-zip-distribution.md"
+  - "_docs/intent/DevOps/windows-portable-zip-distribution/decision.md"
 related_issues: []
 related_prs: []
 ---

@@ -28,11 +28,9 @@ npx markdownlint-cli2 "_docs/**/*.md" "_evals/**/*.md" "README.md" \
   "!_docs/standards/templates/**/*" --config .markdownlint.jsonc
 ```
 
-CI は legacy compatibility のため、P
-`d309974a77c736b6d333819a38460edaeb21e57e` 以降に追加・copy・変更・rename
-された docs を `DD_SCOPE_DIFF_FILTER=ACMR` で検証します。この scope は
-owner-approved の repository-wide strict schema、frontmatter/link/intent
-migration が PASS を記録して置換するまで有効です。
+CIとローカルwrapperは同じunscoped validatorを実行し、live docsとarchive
+invariantをrepository-wideに検証します。`DD_SCOPE_BASE`等の段階的導入scopeは
+template機能として残りますが、このrepositoryのCIでは使用しません。
 
 ## 3. Project checks
 

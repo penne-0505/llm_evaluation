@@ -9,15 +9,6 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    env:
-      # Legacy compatibility horizon: validate every added/changed/moved/renamed
-      # docs path since the owner-approved v1 migration cutoff, except the
-      # recorded markdownlint-only blobs. Any blob mismatch re-enters scope.
-      # Remove only in a dedicated strict-schema migration after legacy docs
-      # are reviewed.
-      DD_SCOPE_BASE: d309974a77c736b6d333819a38460edaeb21e57e
-      DD_SCOPE_DIFF_FILTER: ACMR
-      DD_SCOPE_COMPATIBILITY_BASELINE: _docs/qa/Workflow/docs-template-v1-migration/artifacts/markdownlint-compatibility-baseline.tsv
     steps:
       - name: Checkout
         uses: actions/checkout@v4

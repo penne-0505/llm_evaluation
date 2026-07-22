@@ -2,14 +2,14 @@
 title: "QA Test Plan: Docs-driven template v1.0.0 migration"
 status: active
 draft_status: n/a
-qa_status: planned
+qa_status: in-progress
 risk: High
 qa_schema: 2
 created_at: 2026-07-22
 updated_at: 2026-07-22
 references:
   - "_docs/intent/Workflow/docs-template-v1-migration/decision.md"
-  - "_docs/plan/Workflow/docs-template-v1-migration/plan.md"
+  - "_docs/archives/plan/Workflow/docs-template-v1-migration/plan.md"
 related_issues: []
 related_prs: []
 ---
@@ -19,7 +19,7 @@ related_prs: []
 ## Source of Intent
 
 - TODO: `Workflow-Chore-30`
-- Plan: `_docs/plan/Workflow/docs-template-v1-migration/plan.md`
+- Plan: `_docs/archives/plan/Workflow/docs-template-v1-migration/plan.md`
 - Intent: `_docs/intent/Workflow/docs-template-v1-migration/decision.md`
 
 ## Quality Goal
@@ -49,6 +49,12 @@ checkpointed application or silently losing project customizations.
   active; any retained obsolete content is quarantined and reported.
 - AC-009: The exact U lock is the final migration write and verifies against the
   upstream tag after reconciliation.
+- AC-010: Only plans required by active TODO work remain live; retired temporary
+  docs are canonical, linked, and not duplicated.
+- AC-011: Unscoped docs validators and docs CI pass without compatibility env or
+  blob exclusions.
+- AC-012: `uv sync && uv run pytest` passes without system pytest, and root
+  guidance identifies the judge prompt as a runtime asset exception.
 
 ## Decision Review Scope
 
@@ -56,12 +62,20 @@ checkpointed application or silently losing project customizations.
 - DEC-002: Verify inventory completeness and project preservation.
 - DEC-003: Verify compatibility and strict-schema verdict separation.
 - DEC-004: Verify exclusions and quarantine stay non-operational.
+- DEC-005: Verify archival preserves historical content without presenting it
+  as current work.
+- DEC-006: Verify compatibility scoping is removed only after strict PASS.
+- DEC-007: Verify documented setup installs canonical checks and separates root
+  runtime prompts from agent guidance.
 
 ## Intent-derived Invariants
 
 - INV-001: Lock tag and full commit match reconciled U.
 - INV-002: Every raw delta path has one resolution and disposition.
 - INV-003: Checkpointed application/runtime content remains unchanged.
+- INV-004: Archived temporary docs are intent-linked and not duplicated live.
+- INV-005: Docs CI has no compatibility exclusion scope.
+- INV-006: `uv sync` makes `uv run pytest` project-local and runnable.
 
 ## Risk Assessment
 
@@ -87,40 +101,47 @@ checkpointed application or silently losing project customizations.
 
 | ID | Source | Requirement / Optional Invariant | Test Type | Command / File | Expected Evidence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC-001 / INV-001 | Intent | Immutable provenance | static | `git show`, `git tag --points-at`, lock review | B trees equal; U tag/SHA match | planned |
-| AC-002 / INV-002 | Intent | Path-complete inventory | script | inventory coverage comparison | zero missing/duplicates | planned |
-| AC-003 / INV-003 | Intent | Runtime preservation | diff/hash/tests | `git diff P --` and project suites | no unintended application diff | planned |
-| AC-004 | Plan | Blob-pinned compatibility/strict split | validator | scoped `check-docs.sh`; `scripts/test-validators.mjs` | Current 29 blobs skip; a changed blob and invalid manifest fail closed | planned |
-| AC-005 | TODO | Schema marker and parser rejection | fixture | `scripts/test-validators.mjs` | all negative fixtures fail as expected | planned |
-| AC-006 | TODO | Workflow tooling integrity | CI/static | markdownlint, hooks, paired diff | lint runs under the U-derived policy with no migration-local exemptions; hook/paired checks pass | planned |
-| AC-007 | TODO | Project regression | test/build/smoke | project commands | available suites pass | planned |
-| AC-008 | Intent | Active guidance boundary | inventory | file/reference scan | excluded or quarantined paths inactive | planned |
-| AC-009 / INV-001 | Intent | Final lock write | diff/provenance | lock and final diff review | lock exact and last write | planned |
+| AC-001 / INV-001 | Intent | Immutable provenance | static | `git show`, `git tag --points-at`, lock review | B trees equal; U tag/SHA match | verified |
+| AC-002 / INV-002 | Intent | Path-complete inventory | script | inventory coverage comparison | zero missing/duplicates | verified |
+| AC-003 / INV-003 | Intent | Runtime preservation | diff/hash/tests | `git diff P --` and project suites | no unintended application diff | verified |
+| AC-004 | Plan | Blob-pinned compatibility/strict split | validator | scoped history plus unscoped `check-docs.sh` | compatibility evidence retained; strict wrapper passes | verified |
+| AC-005 | TODO | Schema marker and parser rejection | fixture | `scripts/test-validators.mjs` | all negative fixtures fail as expected | verified |
+| AC-006 | TODO | Workflow tooling integrity | CI/static | markdownlint, hooks, paired diff | lint and workflow checks pass | verified |
+| AC-007 | TODO | Project regression | test/build/smoke | project commands | backend/frontend/launcher checks pass | verified |
+| AC-008 | Intent | Active guidance boundary | inventory | file/reference scan | retired content is archived and intent-linked | verified |
+| AC-009 / INV-001 | Intent | Final lock write | diff/provenance | lock and final diff review | lock exact and unchanged | verified |
+| AC-010 / INV-004 | Intent | Canonical retirement | validator/inventory | unscoped link validator and live/archive inventory | all archived docs linked; active TODO plans only live | verified |
+| AC-011 / INV-005 | Intent | Repository-wide strict docs | CI/validator | unscoped `./scripts/check-docs.sh` and docs workflow review | PASS without compatibility env | verified |
+| AC-012 / INV-006 | Intent | Reproducible project checks | integration/static | `uv sync`, `uv run pytest`, root guidance review | tests pass from project environment; prompt exception explicit | verified |
 
 ## Manual QA Checklist
 
-- [ ] Review all customized shared root files.
-- [ ] Confirm excluded lifecycle history is absent.
-- [ ] Confirm quarantine contains only exact obsolete paths.
-- [ ] Confirm no post-cutoff or unrelated repository changes are included.
+- [x] Review all customized shared root files.
+- [x] Confirm excluded lifecycle history is absent.
+- [x] Confirm quarantine contains only exact obsolete paths.
+- [x] Confirm no post-cutoff or unrelated repository changes are included.
+- [x] Confirm historical temporary content was not rewritten as current design.
+- [x] Confirm only active TODO plans remain under `_docs/plan`.
+- [x] Confirm compatibility env is absent from docs CI.
 
 ## Regression Checklist
 
-- [ ] `ResultDetail.tsx` matches P byte-for-byte.
-- [ ] Backend/frontend project suites and build pass.
-- [ ] README remains project-specific.
-- [ ] Existing Inbox items remain present.
+- [x] `ResultDetail.tsx` matches P byte-for-byte.
+- [x] Backend/frontend project suites and build pass.
+- [x] README remains project-specific.
+- [x] Existing Inbox items remain present.
 
 ## High-risk Checklist
 
-- [ ] Rollback or recovery path is documented.
-- [ ] Data safety has been checked.
-- [ ] Security / privacy implications have been checked.
-- [ ] Failure mode is understood.
+- [x] Rollback or recovery path is documented.
+- [x] Data safety has been checked.
+- [x] Security / privacy implications have been checked.
+- [x] Failure mode is understood.
 
 ## Out of Scope
 
-- Repository-wide semantic conversion of legacy project docs.
+- Historical body-content modernization.
+- UI font asset remediation (`UI-Bug-33`).
 - Push, main movement, deployment, or application feature changes.
 
 ## Open Questions

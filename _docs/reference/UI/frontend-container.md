@@ -5,7 +5,7 @@ draft_status: n/a
 created_at: 2026-04-17
 updated_at: 2026-04-17
 references:
-  - ./frontend-button.md
+  - "_docs/reference/UI/frontend-button.md"
 related_issues: []
 related_prs: []
 ---

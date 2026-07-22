@@ -6,7 +6,7 @@ intent_schema: 2
 created_at: 2026-07-22
 updated_at: 2026-07-22
 references:
-  - "_docs/plan/Workflow/docs-template-v1-migration/plan.md"
+  - "_docs/archives/plan/Workflow/docs-template-v1-migration/plan.md"
   - "_docs/qa/Workflow/docs-template-v1-migration/test-plan.md"
 related_issues: []
 related_prs: []
@@ -72,16 +72,51 @@ verification boundaries.
 - **Change freedom**: The exact quarantine location may change if content stays
   non-operational, auditable, and outside validator/agent discovery surfaces.
 
+### DEC-005: Retire historical temporary docs without modernizing their content
+
+- **What**: Move legacy, completed, and unscheduled drafts/plans into canonical
+  archives grouped by area-level retirement intents. Add only the metadata and
+  references required to preserve provenance and discoverability.
+- **Why**: Rewriting Streamlit-era or abandoned plans to describe the current
+  React/FastAPI application would manufacture a history that never occurred,
+  while leaving them live causes agents to treat obsolete designs as current
+  work.
+- **Change freedom**: Archive grouping and filenames may change if each document
+  remains recoverable, linked from an intent, and absent from live temporary
+  paths.
+
+### DEC-006: End compatibility scoping only after strict validation passes
+
+- **What**: Treat the blob-pinned compatibility baseline as transitional and
+  remove its CI environment after unscoped frontmatter, link, intent, QA, TODO,
+  markdownlint, fixture, and hook checks pass.
+- **Why**: A permanently scoped green CI can conceal regressions in legacy
+  documents and cannot establish repository-wide documentation health.
+- **Change freedom**: Future repositories may use another staged-adoption
+  mechanism, but this repository must not claim strict readiness while excluding
+  known live documents.
+
+### DEC-007: Canonical project checks are installed by the documented setup
+
+- **What**: Development-only test dependencies required by `uv run pytest` are
+  declared in project metadata, and root guidance explicitly distinguishes the
+  operational `judge_system_prompt.md` runtime asset from coding-agent guidance.
+- **Why**: A documented command that resolves to a system executable is not
+  reproducible, and an operational LLM prompt must not be mistaken for repository
+  instructions merely because packaging requires it at root.
+- **Change freedom**: Dependency groups and prompt placement may change if
+  `uv sync` still makes the canonical checks runnable and the guidance/runtime
+  boundary remains explicit.
+
 ## Consequences / Impact
 
-The project gains pinned provenance, modern docs QA, and lifecycle guardrails.
-Application runtime and user-facing behavior are intentionally unchanged. Some
-legacy project documents remain outside strict schema v2 until reviewed;
-unscoped schema/link/intent failures and pre-existing backend baseline
-failures therefore remain explicit residual work rather than a compatibility
-failure. Full markdownlint is clean under the retained U-derived policy after
-the project-local, semantics-preserving fixes recorded in the migration
-inventory.
+The project has pinned provenance, modern docs QA, lifecycle guardrails, and a
+repository-wide strict validation result. Historical temporary docs remain
+recoverable under retirement intents instead of live planning paths. The
+compatibility baseline remains as historical QA evidence but is no longer an
+input to CI. Application runtime and user-facing behavior are unchanged; only
+development-test dependency metadata was added so the documented backend check
+is reproducible.
 
 ## Quality Implications
 
@@ -98,6 +133,12 @@ inventory.
   resolution and one final disposition.
 - INV-003 (from DEC-002): The checkpointed project runtime and application
   source are unchanged by the template migration.
+- INV-004 (from DEC-005): Every archived temporary document is referenced by a
+  corresponding retirement intent and has no duplicate in its live path.
+- INV-005 (from DEC-006): Docs CI validates the repository without a compatibility
+  scope or blob exclusion manifest.
+- INV-006 (from DEC-007): After `uv sync`, `uv run pytest` resolves the project
+  test environment without relying on a system pytest executable.
 
 ## Enforced in (optional)
 
@@ -107,8 +148,14 @@ inventory.
 - DEC-003: `.github/workflows/docs-ci.yml`,
   `artifacts/markdownlint-compatibility-baseline.tsv`, and verification verdict
   split.
+- DEC-005 / INV-004: `_docs/archives/{draft,plan,survey}/**` and area-level
+  retirement intents.
+- DEC-006 / INV-005: `.github/workflows/docs-ci.yml` and unscoped docs checks.
+- DEC-007 / INV-006: `pyproject.toml`, `uv.lock`, `AGENTS.md`, and documentation
+  standards.
 
 ## Rollback / Follow-ups
 
-The isolated migration commit can be abandoned without moving the original
-checkout or main. Strict schema conversion remains a separate owner decision.
+The compatibility phase can be recovered from git history. The strict closure
+uses recoverable archive moves rather than permanent deletion; restoring a
+temporary document requires an owner-approved TODO and reference update.
