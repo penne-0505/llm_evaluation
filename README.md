@@ -217,7 +217,7 @@ user override の配置先:
 結果JSONには `strict_mode` も保存されます。正式な Strict Mode は Settings で `Strict` を選んだうえで official preset を満たした run だけが `requested: true` / `enforced: true` になり、Dashboard の Strict Mode leaderboard 集計対象になります。
 official preset v2 は `task_ids=01..11`、`judge_models=[openrouter/anthropic/claude-sonnet-5, openrouter/openai/gpt-5.6-terra, openrouter/google/gemini-3.5-flash]`、`judge_runs=3`、`subject_temperature=0.45`、bundled prompt / rubric / judge_system_prompt 固定です。
 Strict Mode の judge 3モデルはすべて OpenRouter 経由で呼び出され、OpenAI / Anthropic / Gemini の native provider へ自動で切り替えることはしません。
-reasoning を明示指定できる被験モデルには effort `medium`、judgeモデルには effort `high` を指定します。モデルカタログ上で reasoning の明示指定に対応しないモデルは、各 provider / model の既定動作を使用します。
+reasoning を明示指定できる被験モデルとjudgeモデルには effort `high` を指定します。モデルカタログ上で reasoning の明示指定に対応しないモデルは、各 provider / model の既定動作を使用します。
 実行時のアプリログは app data 配下の `logs/app.log` にローテーション付きで保存されます。
 保存済み結果は UI から削除でき、削除時は対応する JSON と `index.json` のサマリーが同時に更新されます。
 

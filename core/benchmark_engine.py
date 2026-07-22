@@ -318,7 +318,7 @@ class BenchmarkEngine:
 
         extra_params = None
         if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
-            extra_params = {"reasoning": {"effort": "medium"}}
+            extra_params = {"reasoning": {"effort": "high"}}
 
         for step_index in range(config.max_steps + 1):
             if cancel_checker:
@@ -481,7 +481,7 @@ class BenchmarkEngine:
             cancel_checker()
         extra_params = None
         if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
-            extra_params = {"reasoning": {"effort": "medium"}}
+            extra_params = {"reasoning": {"effort": "high"}}
         return await asyncio.to_thread(
             self.subject_adapter.complete_with_model_result,
             self.subject_model,

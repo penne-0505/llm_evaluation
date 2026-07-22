@@ -33,7 +33,7 @@ related_prs: []
     - `judge_runs`: `3`
     - `subject_temperature`: `0.45`
     - `judge_temperature`: `0.0`
-    - reasoning を明示指定できる場合、`subject_reasoning_effort`: `medium`、`judge_reasoning_effort`: `high`
+    - reasoning を明示指定できる場合、`subject_reasoning_effort`: `high`、`judge_reasoning_effort`: `high`
   - Settings UI では strict 選択時に上記設定を lock 表示すること。
   - backend は strict request を実行前に再検証し、条件を満たさない場合は run を開始しないこと。
   - leaderboard 集計対象には、再現に必要な run metadata を保存すること。

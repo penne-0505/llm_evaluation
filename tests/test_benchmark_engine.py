@@ -90,6 +90,7 @@ class _NativeToolLoopAdapter(_StubAdapter):
         super().__init__(final_responses)
         self._native_responses = list(native_responses)
         self.native_call_count = 0
+        self.native_calls = []
 
     def supports_native_tools(self) -> bool:
         return True
@@ -104,6 +105,7 @@ class _NativeToolLoopAdapter(_StubAdapter):
         extra_params=None,
     ):
         self.native_call_count += 1
+        self.native_calls.append({"extra_params": extra_params})
         if self._native_responses:
             result = self._native_responses.pop(0)
         else:
@@ -119,6 +121,28 @@ class _NativeToolLoopAdapter(_StubAdapter):
 
 
 class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
+    async def test_reasoning_opt_in_subject_uses_high_effort(self):
+        subject_adapter = _StubAdapter(["subject-response"], reasoning_opt_in=True)
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="reasoning-model",
+            judge_adapters={},
+            judge_runs=1,
+        )
+
+        await engine.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+
+        self.assertEqual(
+            subject_adapter.calls[0]["extra_params"],
+            {"reasoning": {"effort": "high"}},
+        )
+
     async def test_fail_fast_skips_remaining_runs_after_threshold(self):
         subject_adapter = _StubAdapter(["subject-response"])
         judge_adapter = _StubAdapter(["not-json", "still-not-json"])
@@ -521,6 +545,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
                 "結論として、収集済みの根拠から回答します。"
             ],
         )
+        subject_adapter._reasoning_opt_in = True
         judge_adapter = _StubAdapter([valid_response])
         engine = BenchmarkEngine(
             subject_adapter=subject_adapter,
@@ -575,6 +600,16 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         self.assertIn("収集済みの根拠", payload["response"])
         self.assertEqual(len(payload["tool_trace"]), 1)
         self.assertEqual(subject_adapter.native_call_count, 2)
+        self.assertTrue(
+            all(
+                call["extra_params"] == {"reasoning": {"effort": "high"}}
+                for call in subject_adapter.native_calls
+            )
+        )
+        self.assertEqual(
+            subject_adapter.calls[0]["extra_params"],
+            {"reasoning": {"effort": "high"}},
+        )
 
 
 if __name__ == "__main__":
