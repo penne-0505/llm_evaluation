@@ -181,25 +181,18 @@ const runGit = async (cwd, args) => {
   return new TextDecoder().decode(output.stdout).trim();
 };
 
-const compatibilityManifest =
-  "_docs/qa/Workflow/docs-template-v1-migration/artifacts/markdownlint-compatibility-baseline.tsv";
-
-const baselineRows = async (path) =>
-  (await Deno.readTextFile(path))
-    .trim()
-    .split(/\r?\n/)
-    .slice(1)
-    .map((row) => row.split("\t"));
-
 const runCompatibilityBaselineCases = async () => {
   const temp = await Deno.makeTempDir({
     dir: Deno.cwd(),
     prefix: ".docs-dd-compatibility-",
   });
   const legacyPath = "_docs/draft/legacy.md";
+  const retiredPath = "_docs/draft/retired.md";
+  const legacyContent = "# Legacy\n\nRemediated lint only.\n";
   try {
     await ensureDir(`${temp}/_docs/draft`);
     await write(`${temp}/${legacyPath}`, "# Legacy\n");
+    await write(`${temp}/${retiredPath}`, "# Retired legacy\n");
     await runGit(temp, ["init", "--quiet"]);
     await runGit(temp, ["config", "user.email", "validator@example.test"]);
     await runGit(temp, ["config", "user.name", "Validator"]);
@@ -207,12 +200,20 @@ const runCompatibilityBaselineCases = async () => {
     await runGit(temp, ["commit", "--quiet", "-m", "base"]);
     const base = await runGit(temp, ["rev-parse", "HEAD"]);
 
-    await write(`${temp}/${legacyPath}`, "# Legacy\n\nRemediated lint only.\n");
+    await write(`${temp}/${legacyPath}`, legacyContent);
     await runGit(temp, ["add", "."]);
     await runGit(temp, ["commit", "--quiet", "-m", "lint remediation"]);
     const blob = await runGit(temp, ["hash-object", "--", legacyPath]);
+    const retiredBlob = await runGit(temp, ["hash-object", "--", retiredPath]);
     const manifest = `${temp}/compatibility.tsv`;
-    await write(manifest, `path\tblob_sha1\n${legacyPath}\t${blob}\n`);
+    const writeManifest = (rows) =>
+      write(
+        manifest,
+        `path\tblob_sha1\n${
+          rows.map(([path, sha]) => `${path}\t${sha}`).join("\n")
+        }\n`,
+      );
+    await writeManifest([[legacyPath, blob], [retiredPath, retiredBlob]]);
     const scopeEnv = {
       DD_SCOPE_BASE: base,
       DD_SCOPE_DIFF_FILTER: "ACMR",
@@ -223,18 +224,28 @@ const runCompatibilityBaselineCases = async () => {
 
     await write(`${temp}/${legacyPath}`, "# Legacy\n\nContent changed.\n");
     if (await runFrontmatterIn(temp, scopeEnv) === 0) return false;
+    await write(`${temp}/${legacyPath}`, legacyContent);
 
-    await write(manifest, `path\tblob_sha1\n_docs/draft/unknown.md\t${blob}\n`);
+    await writeManifest([["_docs/draft/unknown.md", blob]]);
     if (await runFrontmatterIn(temp, scopeEnv) === 0) return false;
 
-    await write(
-      manifest,
-      `path\tblob_sha1\n${legacyPath}\t0000000000000000000000000000000000000000\n`,
-    );
+    await writeManifest([[
+      legacyPath,
+      "0000000000000000000000000000000000000000",
+    ]]);
     if (await runFrontmatterIn(temp, scopeEnv) === 0) return false;
 
     await write(manifest, "path\tblob_sha1\nmalformed-row\n");
-    return (await runFrontmatterIn(temp, scopeEnv)) !== 0;
+    if (await runFrontmatterIn(temp, scopeEnv) === 0) return false;
+
+    await writeManifest([[legacyPath, blob], [retiredPath, retiredBlob]]);
+    await Deno.remove(`${temp}/${retiredPath}`);
+    await runGit(temp, ["add", "-u"]);
+    await runGit(temp, ["commit", "--quiet", "-m", "retire legacy doc"]);
+    if (await runFrontmatterIn(temp, scopeEnv) === 0) return false;
+
+    await writeManifest([[legacyPath, blob]]);
+    return (await runFrontmatterIn(temp, scopeEnv)) === 0;
   } finally {
     await Deno.remove(temp, { recursive: true });
   }
@@ -380,32 +391,15 @@ ok = await (async () => {
 })() && ok;
 
 ok = await (async () => {
-  const rows = await baselineRows(compatibilityManifest);
-  const manifestPaths = new Set(rows.map(([path]) => path));
-  const code = await runFrontmatterWithGitScope({
-    DD_SCOPE_BASE: "d309974a77c736b6d333819a38460edaeb21e57e",
-    DD_SCOPE_DIFF_FILTER: "ACMR",
-    DD_SCOPE_COMPATIBILITY_BASELINE: compatibilityManifest,
-  });
-  const passed = rows.length === 29 && manifestPaths.size === 29 && code === 0;
-  if (passed) {
-    console.log("PASS AC-004 exact 29 compatibility baseline is skipped");
-    return true;
-  }
-  console.error("FAIL AC-004 exact 29 compatibility baseline was not skipped");
-  return false;
-})() && ok;
-
-ok = await (async () => {
   const passed = await runCompatibilityBaselineCases();
   if (passed) {
     console.log(
-      "PASS AC-004 changed baseline re-enters scope; invalid manifests fail closed",
+      "PASS compatibility baseline skips exact blobs, re-enters changed files, and fails closed for invalid or stale rows",
     );
     return true;
   }
   console.error(
-    "FAIL AC-004 compatibility baseline did not re-enter scope or fail closed",
+    "FAIL compatibility baseline did not preserve exact-blob scope or fail-closed validation",
   );
   return false;
 })() && ok;

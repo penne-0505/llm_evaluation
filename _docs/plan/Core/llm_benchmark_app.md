@@ -1,3 +1,16 @@
+---
+title: "Legacy plan: LLM benchmark app"
+status: obsolete
+draft_status: n/a
+created_at: 2026-02-17
+updated_at: 2026-07-22
+references:
+  - "_docs/draft/requirements.md"
+  - "_docs/draft/judge_sys_instruction.md"
+related_issues: []
+related_prs: []
+---
+
 # LLMベンチマークアプリ開発計画
 
 ## 1. 計画概要

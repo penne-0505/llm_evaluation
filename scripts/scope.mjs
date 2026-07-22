@@ -142,7 +142,7 @@ const readCompatibilityBaseline = async (path) => {
     }
     await runGit(
       ["ls-files", "--error-unmatch", "--", entryPath],
-      `compatibility baseline path "${entryPath}" is unknown`,
+      `compatibility baseline path "${entryPath}" is unknown; add it to git, or remove its baseline row only after confirming its retirement`,
     );
     await runGit(
       ["cat-file", "-e", `${blob}^{blob}`],
