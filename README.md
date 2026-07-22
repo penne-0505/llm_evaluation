@@ -219,6 +219,8 @@ official preset v2 は `task_ids=01..11`、`judge_models=[openrouter/anthropic/c
 Strict Mode の judge 3モデルはすべて OpenRouter 経由で呼び出され、OpenAI / Anthropic / Gemini の native provider へ自動で切り替えることはしません。
 reasoning を明示指定できる被験モデルとjudgeモデルには effort `high` を指定します。モデルカタログ上で reasoning の明示指定に対応しないモデルは、各 provider / model の既定動作を使用します。
 judge の temperature は原則 `0.0` です。ただし Gemini 3 系では sampling parameter を送信せず、モデルの既定値を使用します。
+
+Settings の実行プリセットはブラウザの localStorage に保存されます。保存対象は被験モデル、judgeモデル、タスク選択、包括評価の有無、judge評価回数、subject temperatureです。ロード時に現在のカタログに存在しないモデルやタスクは除外し、ブラウザコンソールへwarningを記録します。
 実行時のアプリログは app data 配下の `logs/app.log` にローテーション付きで保存されます。
 保存済み結果は UI から削除でき、削除時は対応する JSON と `index.json` のサマリーが同時に更新されます。
 

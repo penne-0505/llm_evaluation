@@ -9,7 +9,15 @@ import type {
     EvaluationMode,
     StrictModePreset,
     ToolMode,
+    ExecutionPreset,
 } from '../types';
+import {
+    captureExecutionPresetConfig,
+    createExecutionPreset,
+    EXECUTION_PRESET_SCHEMA_VERSION,
+    overwriteExecutionPresetConfig,
+    resolveExecutionPresetConfig,
+} from '../lib/executionPresets';
 import {
     fetchTasks,
     fetchModels,
@@ -73,9 +81,23 @@ interface SettingsState {
     judgeParallel: boolean;
     setSubjectParallel: (v: boolean) => void;
     setJudgeParallel: (v: boolean) => void;
+
+    // Named execution presets
+    executionPresets: ExecutionPreset[];
+    saveExecutionPreset: (name: string) => string | null;
+    overwriteExecutionPreset: (id: string) => boolean;
+    loadExecutionPreset: (id: string) => boolean;
+    deleteExecutionPreset: (id: string) => void;
 }
 
 type CloudProvider = Exclude<Provider, 'lmstudio'>;
+
+function createExecutionPresetId(): string {
+    if (typeof globalThis.crypto?.randomUUID === 'function') {
+        return globalThis.crypto.randomUUID();
+    }
+    return `preset-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export const useSettingsStore = create<SettingsState>()(
     persist(
@@ -289,6 +311,119 @@ export const useSettingsStore = create<SettingsState>()(
             judgeParallel: true,
             setSubjectParallel: (v) => set({ subjectParallel: v }),
             setJudgeParallel: (v) => set({ judgeParallel: v }),
+
+            // --- Named execution presets ---
+            executionPresets: [],
+            saveExecutionPreset: (name) => {
+                const normalizedName = name.trim();
+                if (!normalizedName) return null;
+                if (get().executionPresets.some((preset) => preset.name === normalizedName)) {
+                    return null;
+                }
+
+                const state = get();
+                const timestamp = new Date().toISOString();
+                const id = createExecutionPresetId();
+                const preset = createExecutionPreset(
+                    id,
+                    normalizedName,
+                    timestamp,
+                    captureExecutionPresetConfig({
+                        subjectModelId: state.subjectModelId,
+                        judgeModelIds: state.judgeModelIds,
+                        freeTextSubject: state.freeTextSubject,
+                        freeTextJudges: state.freeTextJudges,
+                        tasks: state.tasks,
+                        selectedTaskIds: state.selectedTaskIds,
+                        runHolistic: state.runHolistic,
+                        judgeRunCount: state.evalParams.judgeRunCount,
+                        subjectTemperature: state.evalParams.subjectTemperature,
+                    }),
+                );
+                set((current) => ({
+                    executionPresets: [...current.executionPresets, preset],
+                }));
+                return id;
+            },
+            overwriteExecutionPreset: (id) => {
+                const state = get();
+                const existing = state.executionPresets.find((preset) => preset.id === id);
+                if (!existing) return false;
+                const config = captureExecutionPresetConfig({
+                    subjectModelId: state.subjectModelId,
+                    judgeModelIds: state.judgeModelIds,
+                    freeTextSubject: state.freeTextSubject,
+                    freeTextJudges: state.freeTextJudges,
+                    tasks: state.tasks,
+                    selectedTaskIds: state.selectedTaskIds,
+                    runHolistic: state.runHolistic,
+                    judgeRunCount: state.evalParams.judgeRunCount,
+                    subjectTemperature: state.evalParams.subjectTemperature,
+                });
+                set((current) => ({
+                    executionPresets: current.executionPresets.map((preset) =>
+                        preset.id === id
+                            ? overwriteExecutionPresetConfig(
+                                preset,
+                                config,
+                                new Date().toISOString(),
+                            )
+                            : preset,
+                    ),
+                }));
+                return true;
+            },
+            loadExecutionPreset: (id) => {
+                const state = get();
+                const preset = state.executionPresets.find((candidate) => candidate.id === id);
+                if (!preset) return false;
+                if (preset.schemaVersion !== EXECUTION_PRESET_SCHEMA_VERSION) {
+                    console.warn('[execution-preset] unsupported schema version', {
+                        presetId: preset.id,
+                        schemaVersion: preset.schemaVersion,
+                    });
+                    return false;
+                }
+
+                const resolved = resolveExecutionPresetConfig(
+                    preset.config,
+                    state.availableModels,
+                    state.tasks,
+                );
+                if (resolved.missingModelIds.length > 0) {
+                    console.warn('[execution-preset] ignored unavailable models', {
+                        presetId: preset.id,
+                        modelIds: resolved.missingModelIds,
+                    });
+                }
+                if (resolved.missingTaskIds.length > 0) {
+                    console.warn('[execution-preset] ignored unavailable tasks', {
+                        presetId: preset.id,
+                        taskIds: resolved.missingTaskIds,
+                    });
+                }
+
+                set((current) => ({
+                    evaluationMode: 'standard',
+                    subjectModelId: resolved.subjectModelId,
+                    judgeModelIds: resolved.judgeModelIds,
+                    freeTextSubject: resolved.freeTextSubject,
+                    freeTextJudges: resolved.freeTextJudges,
+                    selectedTaskIds: resolved.selectedTaskIds,
+                    runHolistic: resolved.runHolistic,
+                    evalParams: {
+                        ...current.evalParams,
+                        judgeRunCount: resolved.judgeRunCount,
+                        subjectTemperature: resolved.subjectTemperature,
+                    },
+                }));
+                return true;
+            },
+            deleteExecutionPreset: (id) => {
+                set((state) => ({
+                    executionPresets: state.executionPresets.filter((preset) => preset.id !== id),
+                }));
+            },
         }),
         {
             name: 'llm-eval-settings',
@@ -305,6 +440,7 @@ export const useSettingsStore = create<SettingsState>()(
                 runHolistic: state.runHolistic,
                 subjectParallel: state.subjectParallel,
                 judgeParallel: state.judgeParallel,
+                executionPresets: state.executionPresets,
             }),
         }
     )

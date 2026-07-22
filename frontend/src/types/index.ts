@@ -57,6 +57,24 @@ export interface StrictModePreset {
     judgeTemperature: number;
 }
 
+export interface ExecutionPresetConfig {
+    subjectModel: string | null;
+    judgeModels: string[];
+    taskSelections: Record<string, boolean>;
+    runHolistic: boolean;
+    judgeRunCount: number;
+    subjectTemperature: number;
+}
+
+export interface ExecutionPreset {
+    id: string;
+    name: string;
+    schemaVersion: 1;
+    createdAt: string;
+    updatedAt: string;
+    config: ExecutionPresetConfig;
+}
+
 // === Scores ===
 export interface AxisScore {
     mean: number;

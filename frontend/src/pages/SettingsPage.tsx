@@ -23,6 +23,8 @@ import {
     ChevronDown,
     Plus,
     X,
+    Save,
+    FolderOpen,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -160,6 +162,7 @@ export default function SettingsPage() {
             </div>
 
             <EvaluationModeSection />
+            <ExecutionPresetSection />
             <ApiKeySection />
             <OpenRouterAdminSection />
             <ModelSelectionSection />
@@ -169,6 +172,133 @@ export default function SettingsPage() {
             <TaskSelectionSection />
             <RunLinkSection />
         </div>
+    );
+}
+
+function ExecutionPresetSection() {
+    const {
+        executionPresets,
+        modelsLoading,
+        tasksLoading,
+        saveExecutionPreset,
+        overwriteExecutionPreset,
+        loadExecutionPreset,
+        deleteExecutionPreset,
+    } = useSettingsStore();
+    const [selectedPresetId, setSelectedPresetId] = useState('');
+    const [presetName, setPresetName] = useState('');
+    const selectedPreset = executionPresets.find((preset) => preset.id === selectedPresetId);
+    const effectiveSelectedPresetId = selectedPreset ? selectedPresetId : '';
+    const normalizedName = presetName.trim();
+    const duplicateName = executionPresets.some((preset) => preset.name === normalizedName);
+    const loadingCatalog = modelsLoading || tasksLoading;
+
+    const handleSave = () => {
+        const id = saveExecutionPreset(normalizedName);
+        if (!id) return;
+        setSelectedPresetId(id);
+        setPresetName('');
+    };
+
+    const handleOverwrite = () => {
+        if (!selectedPreset) return;
+        if (!window.confirm(`「${selectedPreset.name}」を現在の設定で上書きしますか？`)) return;
+        overwriteExecutionPreset(selectedPreset.id);
+    };
+
+    const handleDelete = () => {
+        if (!selectedPreset) return;
+        if (!window.confirm(`「${selectedPreset.name}」を削除しますか？`)) return;
+        deleteExecutionPreset(selectedPreset.id);
+        setSelectedPresetId('');
+    };
+
+    return (
+        <section className="space-y-3 animate-fade-up stagger-2">
+            <div className="flex items-end justify-between gap-4">
+                <div>
+                    <h2 className="section-label">実行プリセット</h2>
+                    <p className="mt-1 text-[11px] text-text-tertiary">
+                        モデル、タスク、包括評価、評価回数、temperatureをブラウザに保存します
+                    </p>
+                </div>
+                <span className="data-display text-[11px] text-text-tertiary tabular-nums">
+                    {executionPresets.length} saved
+                </span>
+            </div>
+
+            <div className="card p-4 space-y-4">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                    <label className="space-y-1.5">
+                        <span className="text-[11px] font-medium text-text-secondary">保存済みプリセット</span>
+                        <select
+                            value={effectiveSelectedPresetId}
+                            onChange={(event) => setSelectedPresetId(event.target.value)}
+                            className="h-10 w-full rounded-md border border-border bg-bg px-3 text-[13px] text-text-primary focus:border-amber/40 focus:outline-none transition-colors duration-150"
+                        >
+                            <option value="">プリセットを選択</option>
+                            {executionPresets.map((preset) => (
+                                <option key={preset.id} value={preset.id}>{preset.name}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <div className="flex flex-wrap items-end gap-2">
+                        <Button
+                            onClick={() => selectedPreset && loadExecutionPreset(selectedPreset.id)}
+                            disabled={!selectedPreset || loadingCatalog}
+                            className="h-10 min-w-24 rounded-md border border-amber/30 px-3 text-[12px] text-amber transition-[color,background-color,border-color,opacity,transform] duration-150 hover:bg-amber-dim active:scale-[0.96] disabled:opacity-40"
+                        >
+                            <span className="flex items-center justify-center gap-1.5">
+                                <FolderOpen size={13} />
+                                読み込み
+                            </span>
+                        </Button>
+                        <Button
+                            onClick={handleOverwrite}
+                            disabled={!selectedPreset}
+                            className="h-10 rounded-md border border-border px-3 text-[12px] text-text-secondary transition-[color,background-color,border-color,opacity,transform] duration-150 hover:border-border-focus hover:text-text-primary active:scale-[0.96] disabled:opacity-40"
+                        >
+                            上書き
+                        </Button>
+                        <Button
+                            onClick={handleDelete}
+                            disabled={!selectedPreset}
+                            aria-label="選択中の実行プリセットを削除"
+                            className="flex h-10 w-10 items-center justify-center rounded-md border border-border text-text-tertiary transition-[color,background-color,border-color,opacity,transform] duration-150 hover:border-score-low/30 hover:text-score-low active:scale-[0.96] disabled:opacity-40"
+                        >
+                            <Trash2 size={14} />
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 border-t border-border pt-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+                    <label className="space-y-1.5">
+                        <span className="text-[11px] font-medium text-text-secondary">新しいプリセット名</span>
+                        <input
+                            value={presetName}
+                            onChange={(event) => setPresetName(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter' && normalizedName && !duplicateName) {
+                                    handleSave();
+                                }
+                            }}
+                            placeholder="例: Strict比較用 / ローカル高速確認"
+                            className="h-10 w-full rounded-md border border-border bg-bg px-3 text-[13px] text-text-primary placeholder-text-tertiary focus:border-amber/40 focus:outline-none transition-colors duration-150"
+                        />
+                    </label>
+                    <Button
+                        onClick={handleSave}
+                        disabled={!normalizedName || duplicateName}
+                        title={duplicateName ? '同名のプリセットが存在します' : undefined}
+                        className="flex h-10 min-w-28 items-center justify-center gap-1.5 self-end rounded-md bg-amber px-4 text-[12px] font-medium text-bg transition-[color,background-color,opacity,transform] duration-150 hover:bg-amber-hover active:scale-[0.96] disabled:opacity-40"
+                    >
+                        <Save size={13} />
+                        現在設定を保存
+                    </Button>
+                </div>
+            </div>
+        </section>
     );
 }
 
