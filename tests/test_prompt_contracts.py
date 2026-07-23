@@ -57,6 +57,8 @@ class TestJudgePromptContract(unittest.TestCase):
         self.assertIn("chain-of-thought を要求", content)
         self.assertIn("可用性・完遂性の問題", content)
         self.assertIn("JSON オブジェクト一つだけ", content)
+        self.assertIn("### 被験試行 #N", content)
+        self.assertIn("1 組の三軸スコアと total", content)
 
     def test_all_rubrics_follow_metadata_and_axis_contract(self):
         rubric_paths = sorted(RUBRICS_DIR.glob("[0-9][0-9].md")) + [

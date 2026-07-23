@@ -3,6 +3,8 @@
 import statistics
 from typing import Any, Dict, List
 
+from core.judge_reliability import HIGH_VARIANCE_STD_THRESHOLD
+
 
 class ResultAggregator:
     """
@@ -172,8 +174,8 @@ class ResultAggregator:
                     "confidence_distribution": agg.get("confidence_distribution", {}),
                 }
 
-                # 分散警告（標準偏差 > 5）
-                if agg.get("total_score_std", 0) > 5:
+                # intent: DEC-002 — threshold from judge_reliability (no local magic number)
+                if agg.get("total_score_std", 0) > HIGH_VARIANCE_STD_THRESHOLD:
                     summary["cross_judge"]["score_variance_warnings"].append(
                         judge_family
                     )

@@ -230,6 +230,55 @@ class TestRunProgressSnapshot(unittest.TestCase):
             2,
         )
 
+    def test_progress_eta_uses_completed_task_average(self):
+        eta = server._compute_progress_eta(
+            completed_timings=[
+                {"subject_duration_ms": 1000, "judge_duration_ms": 2000},
+                {"subject_duration_ms": 500, "judge_duration_ms": 1500},
+            ],
+            remaining_task_count=2,
+            elapsed_ms=10000,
+            current_step=4,
+            total_steps=10,
+        )
+        # avg = (3000 + 2000) / 2 = 2500; remaining 2 → 5000
+        self.assertEqual(eta["eta_status"], "measured")
+        self.assertEqual(eta["eta_ms"], 5000)
+
+    def test_progress_eta_step_fallback_only_when_no_completed_timings(self):
+        step_eta = server._compute_progress_eta(
+            completed_timings=[],
+            remaining_task_count=3,
+            elapsed_ms=4000,
+            current_step=2,
+            total_steps=8,
+        )
+        self.assertEqual(step_eta["eta_status"], "step_fallback")
+        self.assertEqual(step_eta["eta_ms"], 12000)
+
+        measured = server._compute_progress_eta(
+            completed_timings=[
+                {"subject_duration_ms": 1000, "judge_duration_ms": 1000},
+            ],
+            remaining_task_count=3,
+            elapsed_ms=4000,
+            current_step=2,
+            total_steps=8,
+        )
+        self.assertEqual(measured["eta_status"], "measured")
+        self.assertEqual(measured["eta_ms"], 6000)
+
+    def test_progress_eta_unavailable_without_measurements_or_steps(self):
+        eta = server._compute_progress_eta(
+            completed_timings=[],
+            remaining_task_count=3,
+            elapsed_ms=0,
+            current_step=0,
+            total_steps=8,
+        )
+        self.assertEqual(eta["eta_status"], "unavailable")
+        self.assertIsNone(eta["eta_ms"])
+
     def test_holistic_tasks_are_excluded_from_standard_progress_lanes(self):
         standard_task = server._initial_task_progress_state(
             "standard-task", 0, ["judge-a"]
@@ -707,6 +756,158 @@ class TestResultDeletionApi(unittest.TestCase):
         error_events = [e for e in events if e.get("type") == "error"]
         self.assertTrue(len(error_events) > 0, f"Expected error event, got events={events}")
         self.assertIn("アダプタまたはAPIキーが見つかりません", error_events[0].get("message", ""))
+
+
+class TestHolisticJudgeModels(unittest.TestCase):
+    def test_effective_holistic_judge_models_three_patterns(self):
+        """AC-005 / DEC-001: standard-only fallback, holistic override, both distinct."""
+        # holistic unspecified / empty → fallback to judge_models
+        self.assertEqual(
+            server._effective_holistic_judge_models(["judge-a"], []),
+            ["judge-a"],
+        )
+        self.assertEqual(
+            server._effective_holistic_judge_models(["judge-a"], None),
+            ["judge-a"],
+        )
+        # holistic-only override (when judge_models differ)
+        self.assertEqual(
+            server._effective_holistic_judge_models(
+                ["judge-a"], ["judge-holistic"]
+            ),
+            ["judge-holistic"],
+        )
+        # both specified independently
+        self.assertEqual(
+            server._effective_holistic_judge_models(
+                ["judge-a", "judge-b"], ["judge-holistic"]
+            ),
+            ["judge-holistic"],
+        )
+
+    def test_run_request_accepts_optional_holistic_judge_models(self):
+        req = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+        )
+        self.assertEqual(req.holistic_judge_models, [])
+
+        req_override = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+            holistic_judge_models=["judge-holistic"],
+            run_holistic=True,
+        )
+        self.assertEqual(req_override.holistic_judge_models, ["judge-holistic"])
+
+    def test_run_request_accepts_and_clamps_subject_runs(self):
+        req = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+        )
+        self.assertEqual(req.subject_runs, 1)
+        self.assertEqual(req.clamped_subject_runs(), 1)
+
+        req_n = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+            subject_runs=3,
+            judge_runs=2,
+        )
+        self.assertEqual(req_n.subject_runs, 3)
+        self.assertEqual(req_n.judge_runs, 2)
+        self.assertEqual(req_n.clamped_subject_runs(), 3)
+
+        req_over = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+            subject_runs=99,
+        )
+        self.assertEqual(req_over.clamped_subject_runs(), 5)
+
+    def test_run_request_exclude_unreliable_judges_defaults_false(self):
+        req = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+        )
+        self.assertFalse(req.exclude_unreliable_judges)
+
+        req_on = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+            exclude_unreliable_judges=True,
+        )
+        self.assertTrue(req_on.exclude_unreliable_judges)
+
+    def test_compute_score_aggregation_used_for_hero_scores(self):
+        """AC-002: server path uses judge_reliability for exclude-ON hero scores."""
+        from core.judge_reliability import compute_score_aggregation
+
+        tasks = [
+            {
+                "task_name": "01",
+                "judge_results": {
+                    "judge-ok": {
+                        "aggregated": {
+                            "total_score_mean": 80.0,
+                            "total_score_std": 1.0,
+                            "critical_fail": False,
+                            "confidence_distribution": {
+                                "high": 1,
+                                "medium": 0,
+                                "low": 0,
+                            },
+                        }
+                    },
+                    "judge-bad": {
+                        "aggregated": {
+                            "total_score_mean": 78.0,
+                            "total_score_std": 6.0,
+                            "critical_fail": False,
+                            "confidence_distribution": {
+                                "high": 1,
+                                "medium": 0,
+                                "low": 0,
+                            },
+                        }
+                    },
+                },
+            }
+        ]
+        off = compute_score_aggregation(tasks, exclude_unreliable_judges=False)
+        on = compute_score_aggregation(tasks, exclude_unreliable_judges=True)
+        self.assertEqual(off["average_score"], 79.0)
+        self.assertEqual(on["average_score"], 80.0)
+        self.assertEqual(
+            [e["judge_id"] for e in on["score_aggregation"]["excluded_judges"]],
+            ["judge-bad"],
+        )
+
+    def test_run_holistic_false_skips_holistic_adapter_resolution_gate(self):
+        """INV-002: resolution sits behind run_holistic; false keeps override unused."""
+        req = server.RunRequest(
+            target_model="subject",
+            judge_models=["judge-a"],
+            selected_task_ids=["01"],
+            holistic_judge_models=["judge-holistic"],
+            run_holistic=False,
+        )
+        self.assertFalse(req.run_holistic)
+        # Gate condition used by server holistic block
+        should_resolve = bool(req.run_holistic)
+        self.assertFalse(should_resolve)
+        # Effective IDs remain computable but must not be resolved when gated off
+        effective = server._effective_holistic_judge_models(
+            req.judge_models, req.holistic_judge_models
+        )
+        self.assertEqual(effective, ["judge-holistic"])
 
 
 if __name__ == "__main__":

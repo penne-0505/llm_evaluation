@@ -35,6 +35,8 @@ export interface Task {
 // === Evaluation Parameters ===
 export interface EvalParams {
     judgeRunCount: number; // 1-5
+    /** Subject LLM invocations per task (1-5); independent of judgeRunCount. */
+    subjectRunCount: number;
     subjectTemperature: number; // 0.0-1.0
     judgeTemperature: number; // fixed 0.0
 }
@@ -60,9 +62,15 @@ export interface StrictModePreset {
 export interface ExecutionPresetConfig {
     subjectModel: string | null;
     judgeModels: string[];
+    /** Empty means fallback to judgeModels for holistic evaluation. */
+    holisticJudgeModels: string[];
     taskSelections: Record<string, boolean>;
     runHolistic: boolean;
+    /** Exclude unreliable judge lineages from hero average; default false on legacy. */
+    excludeUnreliableJudges?: boolean;
     judgeRunCount: number;
+    /** Subject LLM runs per task; omitted on legacy presets → resolve as 1. */
+    subjectRunCount?: number;
     subjectTemperature: number;
 }
 
@@ -98,6 +106,8 @@ export interface JudgeEvaluation {
         reason?: string;
     };
     reasoningSamples: string[];
+    /** API thinking / model-internal reasoning (not scoring rationale) */
+    apiReasoningSamples: string[];
 }
 
 export interface ToolTraceStep {
@@ -107,6 +117,15 @@ export interface ToolTraceStep {
     resultSummary: string;
     resultDetail: string;
     ok: boolean;
+}
+
+/** Per subject-LLM attempt within a task (list-eval multi-run). */
+export interface SubjectRunRecord {
+    runIndex: number;
+    response: string;
+    subjectUsage: SubjectUsage | null;
+    toolTrace: ToolTraceStep[];
+    error: string | null;
 }
 
 export interface UsageSummaryCall {
@@ -152,6 +171,19 @@ export interface SubjectUsage {
     estimatedCostUsd?: number | null;
 }
 
+/** Per-task subject / judge processing time (usage duration_ms aggregate). */
+export interface TaskTiming {
+    subjectDurationMs: number;
+    judgeDurationMs: number;
+}
+
+/** Run-level sum of usual-task task_timing (DEC-002 Core/time-roi-task-timing). */
+export interface TimingSummary {
+    subjectDurationMs: number;
+    judgeDurationMs: number;
+    totalDurationMs: number;
+}
+
 // === Results ===
 export interface TaskResult {
     taskId: string;
@@ -160,8 +192,15 @@ export interface TaskResult {
     subjectPrompt: string;
     subjectResponse: string;
     subjectUsage: SubjectUsage | null;
+    /** Multi-run subject attempts; empty/absent on legacy single-response results. */
+    subjectRuns?: SubjectRunRecord[];
+    subjectRunCount?: number;
     judgeEvaluations: JudgeEvaluation[];
     toolTrace: ToolTraceStep[];
+    /** Subject tools were configured for this task (even if unused). */
+    hasSubjectTools: boolean;
+    /** Per-task duration breakdown; absent on legacy saved results. */
+    taskTiming?: TaskTiming;
 }
 
 export interface StrictModeInfo {
@@ -176,13 +215,34 @@ export interface StrictModeInfo {
     reasons?: string[];
 }
 
+/** Backend score_aggregation payload (DEC-003/004). */
+export interface ExcludedJudgeInfo {
+    judgeId: string;
+    reasons: string[];
+}
+
+export interface ScoreAggregation {
+    averageScoreBefore: number | null;
+    averageScoreAfter: number | null;
+    bestScoreBefore: number | null;
+    bestScoreAfter: number | null;
+    excludedJudges: ExcludedJudgeInfo[];
+    includedJudges: string[];
+    allExcluded: boolean;
+    unreliableCandidates: ExcludedJudgeInfo[];
+}
+
 export interface EvaluationRun {
     id: string;
     subjectModelId: string;
     subjectModelName: string;
     judgeModels: { id: string; name: string }[];
+    /** Judges used for holistic phase; empty when holistic did not run. */
+    holisticJudgeModels?: { id: string; name: string }[];
     timestamp: string;
     executionDurationMs?: number;
+    /** Usual-task task_timing totals; absent on legacy runs → time ROI N/A. */
+    timingSummary?: TimingSummary;
     estimatedCostUsd?: number;
     costEstimateStatus?: 'available' | 'partial' | 'unavailable';
     subjectTotalTokens?: number;
@@ -191,8 +251,12 @@ export interface EvaluationRun {
     strictMode?: StrictModeInfo;
     taskResults: TaskResult[];
     holisticTaskResults: TaskResult[];
-    averageScore: number;
-    bestScore: number;
+    /** Hero average; null when exclude-ON and all judges excluded (INV-001). */
+    averageScore: number | null;
+    bestScore: number | null;
+    /** Run-time toggle; absent/false on legacy JSON. */
+    excludeUnreliableJudges?: boolean;
+    scoreAggregation?: ScoreAggregation;
     taskCount: number;
     usageSummary?: UsageSummary;
     usageSummarySubject?: UsageSummary;
@@ -233,6 +297,8 @@ export interface HolisticRunProgress {
     message: string;
 }
 
+export type EtaStatus = 'measured' | 'step_fallback' | 'unavailable';
+
 export interface RunProgress {
     startedAtMs?: number;
     currentStep: number;
@@ -247,6 +313,10 @@ export interface RunProgress {
     completedTasks: ActiveRunTask[];
     activeTasks: ActiveRunTask[];
     queuedTasks: ActiveRunTask[];
+    /** Remaining-time estimate in ms; null when unavailable. */
+    etaMs?: number | null;
+    /** intent: DEC-003 — distinguish measured vs step fallback vs unavailable. */
+    etaStatus?: EtaStatus;
 }
 
 // === Cross-task summary ===

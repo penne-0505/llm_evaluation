@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import Button from '../components/Button';
 import { getSelectedTasksInCanonicalOrder } from './runPageTaskSelection';
+import { formatEtaDisplay } from '../lib/taskTiming';
 
 function formatTime(ms: number): string {
     const s = Math.floor(ms / 1000);
@@ -27,13 +28,15 @@ function formatTime(ms: number): string {
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-function scoreColor(score: number): string {
+function scoreColor(score: number | null | undefined): string {
+    if (score === null || score === undefined) return 'text-text-tertiary';
     if (score >= 80) return 'text-score-high';
     if (score >= 60) return 'text-score-mid';
     return 'text-score-low';
 }
 
-function scoreGlow(score: number): string {
+function scoreGlow(score: number | null | undefined): string {
+    if (score === null || score === undefined) return '';
     if (score >= 80) return 'glow-high';
     if (score >= 60) return 'glow-mid';
     return 'glow-low';
@@ -46,6 +49,8 @@ export default function RunPage() {
         availableModels, subjectModelId, judgeModelIds, freeTextSubject,
         freeTextJudges, selectedTaskIds, tasks, evalParams, taskToolModeOverrides,
         runHolistic, setRunHolistic,
+        excludeUnreliableJudges, setExcludeUnreliableJudges,
+        holisticJudgeModelIds, freeTextHolisticJudges,
         subjectParallel, setSubjectParallel,
         judgeParallel, setJudgeParallel,
     } = useSettingsStore();
@@ -68,9 +73,16 @@ export default function RunPage() {
     const effectiveSubjectName = subjectModel?.name || freeTextSubject || '未選択';
     const effectiveJudgeNames = judgeModels.length > 0 ? judgeModels.map((m) => m.name) : freeTextJudges;
     const effectiveJudgeIds = judgeModels.length > 0 ? judgeModels.map((m) => m.id) : freeTextJudges;
+    const holisticJudgeModels = availableModels.filter((m) => holisticJudgeModelIds.includes(m.id));
+    const effectiveHolisticJudgeIds = holisticJudgeModels.length > 0
+        ? holisticJudgeModels.map((m) => m.id)
+        : freeTextHolisticJudges;
     const selectedTasks = getSelectedTasksInCanonicalOrder(tasks, selectedTaskIds);
     const canonicalSelectedTaskIds = selectedTasks.map((task) => task.id);
-    const totalSteps = selectedTasks.length * Math.max(effectiveJudgeNames.length, 1) * evalParams.judgeRunCount;
+    const judgeCount = Math.max(effectiveJudgeNames.length, 1);
+    const totalSteps =
+        selectedTasks.length *
+        (evalParams.subjectRunCount + judgeCount * (evalParams.judgeRunCount + 2));
     const isStrict = evaluationMode === 'strict';
     const strictIssues = getStrictModeIssues({
         strictPreset,
@@ -141,13 +153,16 @@ export default function RunPage() {
         sseRef.current = startBenchmarkSSE({
             targetModel,
             judgeModels: effectiveJudgeIds,
+            holisticJudgeModels: effectiveHolisticJudgeIds,
             selectedTaskIds: canonicalSelectedTaskIds,
             judgeRuns: evalParams.judgeRunCount,
+            subjectRuns: evalParams.subjectRunCount,
             subjectTemp: evalParams.subjectTemperature,
             strictMode: isStrict,
             strictPresetId: strictPreset?.id ?? null,
             taskToolModeOverrides,
             runHolistic: runHolistic,
+            excludeUnreliableJudges,
             subjectParallel,
             judgeParallel,
         });
@@ -247,6 +262,22 @@ export default function RunPage() {
                         </div>
                     </button>
 
+                    {/* Exclude unreliable judges */}
+                    <button
+                        onClick={() => setExcludeUnreliableJudges(!excludeUnreliableJudges)}
+                        className="card p-5 w-full text-left cursor-pointer hover:border-border-focus transition-colors duration-150"
+                    >
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <p className="section-label mb-1">信頼できない評価モデルを除外</p>
+                                <p className="text-[12px] text-text-secondary">ばらつき・低信頼・重大失敗・judge間乖離がある系統を総合点から外します</p>
+                            </div>
+                            <div className={`relative shrink-0 inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${excludeUnreliableJudges ? 'bg-amber' : 'bg-border'}`}>
+                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${excludeUnreliableJudges ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                            </div>
+                        </div>
+                    </button>
+
                     {/* Parallel execution toggles */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         <button
@@ -283,9 +314,9 @@ export default function RunPage() {
                     <div className="card p-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <Stat label="総ステップ" value={String(totalSteps)} highlight />
+                            <Stat label="被験回数" value={String(evalParams.subjectRunCount)} />
                             <Stat label="評価回数" value={String(evalParams.judgeRunCount)} />
                             <Stat label="Subject Temperature" value={evalParams.subjectTemperature.toFixed(2)} />
-                            <Stat label="Judge Temperature" value="0.00" muted />
                         </div>
                     </div>
 
@@ -330,11 +361,15 @@ export default function RunPage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                             <RunSummaryStat label="完了" value={String(progress.completedTaskCount)} />
                             <RunSummaryStat label="実行中" value={String(progress.activeTaskCount)} highlight />
                             <RunSummaryStat label="待機中" value={String(progress.queuedTaskCount)} />
                             <RunSummaryStat label="経過時間" value={formatTime(liveElapsedMs)} />
+                            <RunEtaStat
+                                etaMs={progress.etaMs}
+                                etaStatus={progress.etaStatus}
+                            />
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 items-stretch">
@@ -382,14 +417,28 @@ export default function RunPage() {
                             <CountUpScore value={result.averageScore} />
                         </div>
 
+                        {result.scoreAggregation?.allExcluded && (
+                            <p className="text-[12px] text-score-low">
+                                すべての評価モデルが除外されたため、総合点は N/A です
+                            </p>
+                        )}
+
                         {resultFilePath && (
                             <p className="data-display text-[11px] text-text-tertiary">{resultFilePath}</p>
                         )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
-                        <Stat label="平均点" value={String(result.averageScore)} color={scoreColor(result.averageScore)} />
-                        <Stat label="最高点" value={String(result.bestScore)} color={scoreColor(result.bestScore)} />
+                        <Stat
+                            label="平均点"
+                            value={result.averageScore === null || result.averageScore === undefined ? 'N/A' : String(result.averageScore)}
+                            color={scoreColor(result.averageScore)}
+                        />
+                        <Stat
+                            label="最高点"
+                            value={result.bestScore === null || result.bestScore === undefined ? 'N/A' : String(result.bestScore)}
+                            color={scoreColor(result.bestScore)}
+                        />
                         <Stat label="タスク数" value={String(result.taskResults.length)} />
                     </div>
 
@@ -676,11 +725,13 @@ function getTaskPhaseMeta(phase: NonNullable<ReturnType<typeof useRunStore.getSt
 }
 
 /* ======= Count-Up Score ======= */
-function CountUpScore({ value }: { value: number }) {
+function CountUpScore({ value }: { value: number | null }) {
     const [display, setDisplay] = useState(0);
     const ref = useRef<number | null>(null);
+    const available = value !== null && value !== undefined;
 
     useEffect(() => {
+        if (!available) return;
         const start = Date.now();
         const duration = 800;
         const tick = () => {
@@ -692,7 +743,11 @@ function CountUpScore({ value }: { value: number }) {
         };
         ref.current = requestAnimationFrame(tick);
         return () => { if (ref.current) cancelAnimationFrame(ref.current); };
-    }, [value]);
+    }, [value, available]);
+
+    if (!available) {
+        return <span className="data-display text-4xl text-text-tertiary">N/A</span>;
+    }
 
     return (
         <span className={`data-display text-4xl ${scoreColor(value)}`}>
@@ -718,6 +773,25 @@ function RunSummaryStat({ label, value, highlight }: { label: string; value: str
         <div className="text-center">
             <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">{label}</p>
             <p className={`data-display text-lg ${highlight ? 'text-amber' : 'text-text-primary'}`}>{value}</p>
+        </div>
+    );
+}
+
+function RunEtaStat({
+    etaMs,
+    etaStatus,
+}: {
+    etaMs: number | null | undefined;
+    etaStatus: import('../types').EtaStatus | undefined;
+}) {
+    const display = formatEtaDisplay(etaMs, etaStatus);
+    return (
+        <div className="text-center">
+            <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">残り時間</p>
+            <p className={`data-display text-lg ${etaStatus === 'unavailable' ? 'text-text-tertiary' : 'text-text-primary'}`}>
+                {display.value}
+            </p>
+            <p className="mt-0.5 text-[9px] text-text-tertiary">{display.label}</p>
         </div>
     );
 }

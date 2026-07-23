@@ -263,6 +263,8 @@ def test_extra_body_passed_to_openrouter():
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = '{"task_name":"test","task_type":"fact","score":{},"total_score":0}'
+    mock_response.choices[0].message.reasoning = None
+    mock_response.choices[0].message.reasoning_details = None
     mock_response.usage = None
     mock_client.chat.completions.create.return_value = mock_response
     adapter._client = mock_client
@@ -294,6 +296,241 @@ def test_extra_body_passed_to_openrouter():
     print("✓ complete_with_model_native_tools: extra_body として渡される")
 
     print("OpenRouter extra_body テスト完了")
+
+
+def _make_openrouter_adapter_with_message(
+    *,
+    content: str,
+    reasoning=None,
+    reasoning_details=None,
+):
+    adapter = OpenRouterAdapter(api_key="sk-or-v1-test12345678901234567890")
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    message = MagicMock()
+    message.content = content
+    message.reasoning = reasoning
+    message.reasoning_details = reasoning_details
+    message.model_extra = None
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message = message
+    mock_response.usage = None
+    mock_client.chat.completions.create.return_value = mock_response
+    adapter._client = mock_client
+    return adapter
+
+
+def test_openrouter_extracts_message_reasoning():
+    """AC-001 / DEC-002: message.reasoning を CompletionResult.api_reasoning へ"""
+    print("\n=== OpenRouter message.reasoning 抽出 ===")
+    judge_json = (
+        '{"task_name":"test","task_type":"fact","score":{},'
+        '"total_score":0,"confidence":"high"}'
+    )
+    adapter = _make_openrouter_adapter_with_message(
+        content=judge_json,
+        reasoning="  internal chain of thought  ",
+    )
+    result = adapter.complete_with_model_result(
+        model="openai/o3-mini",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+    assert result.text == judge_json
+    assert result.api_reasoning == "internal chain of thought"
+    print("✓ message.reasoning → api_reasoning")
+
+
+def test_openrouter_extracts_reasoning_details_when_reasoning_empty():
+    """AC-001: reasoning 空時は reasoning_details を結合"""
+    print("\n=== OpenRouter reasoning_details 抽出 ===")
+    judge_json = '{"task_name":"test","total_score":0}'
+    adapter = _make_openrouter_adapter_with_message(
+        content=judge_json,
+        reasoning="",
+        reasoning_details=[
+            {"type": "reasoning.text", "text": "step one"},
+            {"type": "reasoning.text", "text": "step two"},
+        ],
+    )
+    result = adapter.complete_with_model_result(
+        model="deepseek/deepseek-r1",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+    assert result.text == judge_json
+    assert result.api_reasoning == "step one\n\nstep two"
+    print("✓ reasoning_details → api_reasoning")
+
+
+def test_openrouter_thinking_tag_fallback_and_strip():
+    """AC-001 / DEC-003: 正規フィールド空時は <thinking> fallback、content から strip"""
+    print("\n=== OpenRouter <thinking> fallback ===")
+    from adapters.base import strip_thinking_tags
+
+    cleaned, extracted = strip_thinking_tags(
+        "<thinking>hidden plan</thinking>\n"
+        '{"task_name":"test","total_score":1,"confidence":"high"}'
+    )
+    assert extracted == "hidden plan"
+    assert cleaned == '{"task_name":"test","total_score":1,"confidence":"high"}'
+
+    adapter = _make_openrouter_adapter_with_message(
+        content=(
+            "<thinking>tag only path</thinking>\n"
+            '{"task_name":"test","total_score":1,"confidence":"high"}'
+        ),
+        reasoning=None,
+        reasoning_details=None,
+    )
+    result = adapter.complete_with_model_result(
+        model="some/reasoning-model",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+    assert result.api_reasoning == "tag only path"
+    assert "<thinking>" not in result.text
+    assert '"total_score":1' in result.text
+    print("✓ tag fallback + strip")
+
+
+def test_openrouter_prefers_message_reasoning_over_thinking_tags():
+    """DEC-003: フィールドがあるときはタグを api_reasoning に使わない（strip はする）"""
+    print("\n=== OpenRouter reasoning 優先 ===")
+    adapter = _make_openrouter_adapter_with_message(
+        content=(
+            "<thinking>ignored tag</thinking>"
+            '{"task_name":"test","total_score":0}'
+        ),
+        reasoning="field wins",
+    )
+    result = adapter.complete_with_model_result(
+        model="openai/o4-mini",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+    assert result.api_reasoning == "field wins"
+    assert "<thinking>" not in result.text
+    print("✓ field preferred over tags")
+
+
+def test_openrouter_missing_thinking_still_returns_text():
+    """AC-004: thinking 欠落でも text は返り、api_reasoning は None"""
+    print("\n=== OpenRouter thinking 欠落 ===")
+    judge_json = '{"task_name":"test","total_score":50,"confidence":"medium"}'
+    adapter = _make_openrouter_adapter_with_message(content=judge_json)
+    result = adapter.complete_with_model_result(
+        model="openai/gpt-4o",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+    assert result.text == judge_json
+    assert result.api_reasoning is None
+    print("✓ graceful empty api_reasoning")
+
+
+def test_openrouter_claude_thinking_suffix_extracts_reasoning_without_extra_params():
+    """AC-001 / AC-004 / DEC-003: :thinking は effort 未送信でも reasoning を抽出"""
+    print("\n=== Claude :thinking suffix 抽出 ===")
+    judge_json = '{"task_name":"test","total_score":80,"confidence":"high"}'
+    adapter = _make_openrouter_adapter_with_message(
+        content=judge_json,
+        reasoning="claude always-on internal plan",
+        reasoning_details=[
+            {
+                "type": "reasoning.text",
+                "text": "claude always-on internal plan",
+                "format": "anthropic-claude-v1",
+            }
+        ],
+    )
+    result = adapter.complete_with_model_result(
+        model="anthropic/claude-3.7-sonnet:thinking",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+    call_kwargs = adapter._client.chat.completions.create.call_args.kwargs
+    assert "extra_body" not in call_kwargs
+    assert result.text == judge_json
+    assert result.api_reasoning == "claude always-on internal plan"
+    print("✓ :thinking suffix → api_reasoning, no extra_body")
+
+
+def test_openrouter_claude_opt_in_extracts_anthropic_reasoning_details():
+    """AC-001 / AC-004: opt-in Claude + anthropic-claude-v1 reasoning_details"""
+    print("\n=== Claude opt-in reasoning_details 抽出 ===")
+    judge_json = '{"task_name":"test","total_score":90,"confidence":"high"}'
+    adapter = _make_openrouter_adapter_with_message(
+        content=judge_json,
+        reasoning="",
+        reasoning_details=[
+            {
+                "type": "reasoning.text",
+                "text": "step A",
+                "format": "anthropic-claude-v1",
+            },
+            {
+                "type": "reasoning.text",
+                "thinking": "native thinking leak",
+                "format": "anthropic-claude-v1",
+            },
+        ],
+    )
+    result = adapter.complete_with_model_result(
+        model="anthropic/claude-3.7-sonnet",
+        system_prompt="sys",
+        user_prompt="user",
+        extra_params={"reasoning": {"effort": "high"}},
+    )
+    call_kwargs = adapter._client.chat.completions.create.call_args.kwargs
+    assert call_kwargs.get("extra_body") == {"reasoning": {"effort": "high"}}
+    assert result.api_reasoning == "step A\n\nnative thinking leak"
+    print("✓ Claude opt-in + reasoning_details (incl. thinking key)")
+
+
+def test_openrouter_gemini_thinking_model_extracts_reasoning():
+    """AC-002: Gemini thinking モデルは OpenRouter 正規化フィールドから抽出"""
+    print("\n=== Gemini thinking モデル抽出 ===")
+    judge_json = '{"task_name":"test","total_score":70,"confidence":"medium"}'
+    adapter = _make_openrouter_adapter_with_message(
+        content=judge_json,
+        reasoning="gemini chain of thought",
+        reasoning_details=[
+            {
+                "type": "reasoning.text",
+                "text": "gemini chain of thought",
+                "format": "google-gemini-v1",
+            }
+        ],
+    )
+    result = adapter.complete_with_model_result(
+        model="google/gemini-2.5-flash-preview:thinking",
+        system_prompt="sys",
+        user_prompt="user",
+        extra_params={"reasoning": {"effort": "high"}},
+    )
+    assert result.text == judge_json
+    assert result.api_reasoning == "gemini chain of thought"
+    print("✓ Gemini thinking → api_reasoning")
+
+
+def test_openrouter_gemini_non_thinking_empty_api_reasoning():
+    """AC-002 / DEC-002: 非 thinking Gemini は空 api_reasoning、text は返す"""
+    print("\n=== Gemini 非 thinking no-support ===")
+    judge_json = '{"task_name":"test","total_score":55,"confidence":"low"}'
+    adapter = _make_openrouter_adapter_with_message(
+        content=judge_json,
+        reasoning=None,
+        reasoning_details=None,
+    )
+    result = adapter.complete_with_model_result(
+        model="google/gemini-2.0-flash-001",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+    assert result.text == judge_json
+    assert result.api_reasoning is None
+    print("✓ Gemini non-thinking → empty api_reasoning")
 
 
 def test_openrouter_omits_none_or_unsupported_temperature():
@@ -449,6 +686,90 @@ def test_extra_body_passed_to_lmstudio():
     print("LM Studio extra_body テスト完了")
 
 
+def test_lmstudio_effort_passthrough_by_capability():
+    """代表3種の capability と extra_body 付与の対応を固定する（Core-Chore-45）。"""
+    print("\n=== LM Studio effort passthrough by capability ===")
+
+    with patch(
+        "adapters.lmstudio_adapter.ProviderConfigStore.load_provider",
+        return_value={"base_url": "http://127.0.0.1:1234/v1"},
+    ):
+        adapter = LMStudioAdapter()
+
+    LMStudioAdapter._models_cache = None
+    mock_data = {
+        "models": [
+            {
+                "key": "opt-in-model",
+                "capabilities": {
+                    "reasoning": {
+                        "default": "off",
+                        "allowed_options": ["off", "on"],
+                    }
+                },
+            },
+            {
+                "key": "default-on-model",
+                "capabilities": {
+                    "reasoning": {
+                        "default": "on",
+                        "allowed_options": ["off", "on"],
+                    }
+                },
+            },
+            {
+                "key": "no-reasoning-model",
+                "capabilities": {"chat": True},
+            },
+        ]
+    }
+
+    with patch("adapters.lmstudio_adapter.requests.get") as mock_get:
+        mock_get.return_value.json.return_value = mock_data
+        mock_get.return_value.raise_for_status = MagicMock()
+
+        assert adapter.is_reasoning_opt_in("opt-in-model") is True
+        assert adapter.is_reasoning_opt_in("default-on-model") is False
+        assert adapter.is_reasoning_opt_in("no-reasoning-model") is False
+
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "ok"
+    mock_response.usage = None
+    mock_client.chat.completions.create.return_value = mock_response
+    adapter._client = mock_client
+
+    # Engine と同型: opt-in 時のみ {"reasoning": {"effort": "high"}}
+    for model_key, expect_opt_in in [
+        ("opt-in-model", True),
+        ("default-on-model", False),
+        ("no-reasoning-model", False),
+    ]:
+        mock_client.chat.completions.create.reset_mock()
+        extra = {"reasoning": {"effort": "high"}} if expect_opt_in else None
+        adapter.complete_with_model_result(
+            model=model_key,
+            system_prompt="sys",
+            user_prompt="user",
+            extra_params=extra,
+        )
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        if expect_opt_in:
+            assert call_kwargs.get("extra_body") == {
+                "reasoning": {"effort": "high"}
+            }, model_key
+        else:
+            assert "extra_body" not in call_kwargs, model_key
+        print(
+            f"✓ {model_key}: opt_in={expect_opt_in}, "
+            f"extra_body={'yes' if expect_opt_in else 'no'}"
+        )
+
+    LMStudioAdapter._models_cache = None
+    print("LM Studio effort passthrough by capability テスト完了")
+
+
 def run_all_tests():
     """全テストを実行"""
     print("=" * 50)
@@ -465,9 +786,19 @@ def run_all_tests():
         test_is_reasoning_opt_in_openrouter()
         test_is_reasoning_opt_in_lmstudio()
         test_extra_body_passed_to_openrouter()
+        test_openrouter_extracts_message_reasoning()
+        test_openrouter_extracts_reasoning_details_when_reasoning_empty()
+        test_openrouter_thinking_tag_fallback_and_strip()
+        test_openrouter_prefers_message_reasoning_over_thinking_tags()
+        test_openrouter_missing_thinking_still_returns_text()
+        test_openrouter_claude_thinking_suffix_extracts_reasoning_without_extra_params()
+        test_openrouter_claude_opt_in_extracts_anthropic_reasoning_details()
+        test_openrouter_gemini_thinking_model_extracts_reasoning()
+        test_openrouter_gemini_non_thinking_empty_api_reasoning()
         test_openrouter_omits_none_or_unsupported_temperature()
         test_lmstudio_omits_none_temperature()
         test_extra_body_passed_to_lmstudio()
+        test_lmstudio_effort_passthrough_by_capability()
 
         print("\n" + "=" * 50)
         print("✅ 全テスト完了")

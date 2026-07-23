@@ -52,8 +52,10 @@ export const useHistoryStore = create<HistoryState>()((set, get) => ({
                 subjectModelId: s.targetModel,
                 subjectModelName: s.targetModel,
                 judgeModels: [],  // サマリーにはjudge名が含まれない → 詳細ロード時に埋まる
+                holisticJudgeModels: [],
                 timestamp: s.executedAt,
                 executionDurationMs: s.executionDurationMs,
+                timingSummary: s.timingSummary,
                 estimatedCostUsd: s.estimatedCostUsd,
                 costEstimateStatus: s.costEstimateStatus,
                 subjectTotalTokens: s.subjectTotalTokens,
@@ -71,8 +73,9 @@ export const useHistoryStore = create<HistoryState>()((set, get) => ({
                 },
                 taskResults: [],  // 詳細ロード時に埋まる
                 holisticTaskResults: [],  // 詳細ロード時に埋まる
-                averageScore: Math.round((s.avgScore ?? 0) * 10) / 10,
-                bestScore: Math.round((s.maxScore ?? 0) * 10) / 10,
+                averageScore: s.avgScore == null ? null : Math.round(s.avgScore * 10) / 10,
+                bestScore: s.maxScore == null ? null : Math.round(s.maxScore * 10) / 10,
+                excludeUnreliableJudges: Boolean(s.excludeUnreliableJudges),
                 taskCount: s.taskCount,
                 judgeCount: s.judgeCount ?? 0,
             }));

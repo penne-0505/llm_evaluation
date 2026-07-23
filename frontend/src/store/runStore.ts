@@ -54,6 +54,8 @@ export const useRunStore = create<RunState>((set) => ({
                 completedTasks: [],
                 activeTasks: [],
                 queuedTasks: [],
+                etaMs: null,
+                etaStatus: 'unavailable',
             },
             holisticProgress: null,
             result: null,
@@ -80,6 +82,8 @@ export const useRunStore = create<RunState>((set) => ({
                     completedTasks: update.completedTasks ?? [],
                     activeTasks: update.activeTasks ?? [],
                     queuedTasks: update.queuedTasks ?? [],
+                    etaMs: update.etaMs ?? null,
+                    etaStatus: update.etaStatus ?? 'unavailable',
                 },
         })),
 

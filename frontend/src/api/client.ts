@@ -256,12 +256,19 @@ export async function fetchStrictModePreset(): Promise<StrictModePreset> {
 // Results — list summaries
 // ---------------------------------------------------------------------------
 
+interface RawTimingSummary {
+    subject_duration_ms?: number;
+    judge_duration_ms?: number;
+    total_duration_ms?: number;
+}
+
 interface RawResultSummary {
     filename: string;
     filepath: string;
     target_model: string;
     executed_at: string;
     execution_duration_ms?: number;
+    timing_summary?: RawTimingSummary | null;
     estimated_cost_usd?: number;
     cost_estimate_status?: 'available' | 'partial' | 'unavailable';
     subject_total_tokens?: number;
@@ -276,10 +283,11 @@ interface RawResultSummary {
     strict_mode_profile_label?: string | null;
     task_count: number;
     judge_count: number;
-    avg_score: number;
-    max_score: number;
+    avg_score: number | null;
+    max_score: number | null;
     min_score: number;
     run_id: string;
+    exclude_unreliable_judges?: boolean;
 }
 
 export interface ResultSummary {
@@ -287,6 +295,7 @@ export interface ResultSummary {
     targetModel: string;
     executedAt: string;
     executionDurationMs?: number;
+    timingSummary?: import('../types').TimingSummary;
     estimatedCostUsd?: number;
     costEstimateStatus?: 'available' | 'partial' | 'unavailable';
     subjectTotalTokens?: number;
@@ -301,10 +310,26 @@ export interface ResultSummary {
     strictModeProfileLabel?: string | null;
     taskCount: number;
     judgeCount: number;
-    avgScore: number;
-    maxScore: number;
+    avgScore: number | null;
+    maxScore: number | null;
     minScore: number;
     runId: string;
+    excludeUnreliableJudges?: boolean;
+}
+
+function convertTimingSummary(
+    raw: RawTimingSummary | null | undefined,
+): import('../types').TimingSummary | undefined {
+    if (!raw || typeof raw !== 'object') {
+        return undefined;
+    }
+    const subjectDurationMs = Number(raw.subject_duration_ms || 0);
+    const judgeDurationMs = Number(raw.judge_duration_ms || 0);
+    const totalDurationMs =
+        raw.total_duration_ms != null
+            ? Number(raw.total_duration_ms)
+            : subjectDurationMs + judgeDurationMs;
+    return { subjectDurationMs, judgeDurationMs, totalDurationMs };
 }
 
 export async function fetchResultSummaries(): Promise<ResultSummary[]> {
@@ -314,6 +339,7 @@ export async function fetchResultSummaries(): Promise<ResultSummary[]> {
         targetModel: r.target_model,
         executedAt: r.executed_at,
         executionDurationMs: r.execution_duration_ms,
+        timingSummary: convertTimingSummary(r.timing_summary),
         estimatedCostUsd: r.estimated_cost_usd,
         costEstimateStatus: r.cost_estimate_status,
         subjectTotalTokens: r.subject_total_tokens,
@@ -332,6 +358,7 @@ export async function fetchResultSummaries(): Promise<ResultSummary[]> {
         maxScore: r.max_score,
         minScore: r.min_score,
         runId: r.run_id,
+        excludeUnreliableJudges: Boolean(r.exclude_unreliable_judges),
     }));
 }
 
@@ -388,9 +415,11 @@ interface RawBenchmarkResult {
     run_id: string;
     target_model: string;
     judge_models: string[];
+    holistic_judge_models?: string[];
     judge_runs: number;
     executed_at: string;
     execution_duration_ms?: number;
+    timing_summary?: RawTimingSummary | null;
     estimated_cost_usd?: number;
     cost_estimate_status?: 'available' | 'partial' | 'unavailable';
     strict_mode?: {
@@ -412,8 +441,19 @@ interface RawBenchmarkResult {
     cancelled: boolean;
     completed_tasks: number;
     total_tasks: number;
-    average_score: number;
-    best_score: number;
+    average_score: number | null;
+    best_score: number | null;
+    exclude_unreliable_judges?: boolean;
+    score_aggregation?: {
+        average_score_before?: number | null;
+        average_score_after?: number | null;
+        best_score_before?: number | null;
+        best_score_after?: number | null;
+        excluded_judges?: Array<{ judge_id: string; reasons: string[] }>;
+        included_judges?: string[];
+        all_excluded?: boolean;
+        unreliable_candidates?: Array<{ judge_id: string; reasons: string[] }>;
+    };
 }
 
 interface RawTaskData {
@@ -429,6 +469,7 @@ interface RawTaskData {
         input_tokens?: number;
         output_tokens?: number;
         estimated_cost_usd?: number;
+        duration_ms?: number;
     };
     tool_trace?: Array<{
         step_index: number;
@@ -438,6 +479,19 @@ interface RawTaskData {
         result_detail?: string;
         ok: boolean;
     }>;
+    subject_runs?: Array<{
+        run_index?: number;
+        response?: string;
+        subject_usage?: RawTaskData['subject_usage'];
+        tool_trace?: RawTaskData['tool_trace'];
+        error?: string | null;
+    }>;
+    subject_run_count?: number;
+    has_subject_tools?: boolean;
+    task_timing?: {
+        subject_duration_ms?: number;
+        judge_duration_ms?: number;
+    };
     judge_results: Record<string, RawJudgeResult>;
 }
 
@@ -447,6 +501,8 @@ interface RawJudgeRun {
     confidence: string;
     critical_fail: boolean;
     reasoning: unknown;
+    /** API thinking; distinct from scoring `reasoning` (DEC-001) */
+    api_reasoning?: unknown;
 }
 
 interface RawAggregated {
@@ -505,6 +561,10 @@ function convertJudgeResult(judgeModel: string, raw: RawJudgeResult): JudgeEvalu
         reasoningSamples: (raw.runs || [])
             .map((r) => normalizeReasoning(r.reasoning))
             .filter((value): value is string => Boolean(value)),
+        // intent: DEC-001 (Core/openai-judge-thinking) — separate from scoring rationale
+        apiReasoningSamples: (raw.runs || [])
+            .map((r) => normalizeReasoning(r.api_reasoning))
+            .filter((value): value is string => Boolean(value)),
     };
 }
 
@@ -524,16 +584,36 @@ function convertTask(raw: RawTaskData): TaskResult {
         resultDetail: step.result_detail || '',
         ok: step.ok,
     }));
-    const subjectUsage: import('../types').SubjectUsage | null = raw.subject_usage
-        ? {
-              provider: raw.subject_usage.provider || 'unknown',
-              model: raw.subject_usage.model || 'unknown',
-              inputTokens: raw.subject_usage.input_tokens || 0,
-              outputTokens: raw.subject_usage.output_tokens || 0,
-              totalTokens: raw.subject_usage.total_tokens || 0,
-              estimatedCostUsd: raw.subject_usage.estimated_cost_usd ?? null,
-          }
-        : null;
+    const convertUsage = (
+        usage: RawTaskData['subject_usage'] | undefined,
+    ): import('../types').SubjectUsage | null =>
+        usage
+            ? {
+                  provider: usage.provider || 'unknown',
+                  model: usage.model || 'unknown',
+                  inputTokens: usage.input_tokens || 0,
+                  outputTokens: usage.output_tokens || 0,
+                  totalTokens: usage.total_tokens || 0,
+                  estimatedCostUsd: usage.estimated_cost_usd ?? null,
+              }
+            : null;
+    const subjectUsage = convertUsage(raw.subject_usage);
+    const subjectRuns: import('../types').SubjectRunRecord[] = (raw.subject_runs || []).map(
+        (run, index) => ({
+            runIndex: run.run_index ?? index + 1,
+            response: run.response || '',
+            subjectUsage: convertUsage(run.subject_usage),
+            toolTrace: (run.tool_trace || []).map((step) => ({
+                stepIndex: step.step_index,
+                toolName: step.tool_name,
+                arguments: step.arguments,
+                resultSummary: step.result_summary,
+                resultDetail: step.result_detail || '',
+                ok: step.ok,
+            })),
+            error: run.error ?? null,
+        }),
+    );
     return {
         taskId: raw.task_name,
         taskType: (raw.task_type || 'fact') as TaskType,
@@ -541,8 +621,18 @@ function convertTask(raw: RawTaskData): TaskResult {
         subjectPrompt: raw.subject_prompt || '',
         subjectResponse: raw.response || '',
         subjectUsage,
+        subjectRuns,
+        subjectRunCount: raw.subject_run_count ?? (subjectRuns.length || 1),
         judgeEvaluations: evaluations,
         toolTrace,
+        // Old saved results may omit this; treat missing as false (legacy toolTrace still displays).
+        hasSubjectTools: Boolean(raw.has_subject_tools),
+        taskTiming: raw.task_timing
+            ? {
+                  subjectDurationMs: Number(raw.task_timing.subject_duration_ms || 0),
+                  judgeDurationMs: Number(raw.task_timing.judge_duration_ms || 0),
+              }
+            : undefined,
     };
 }
 
@@ -598,6 +688,31 @@ function convertUsageSummary(raw: RawBenchmarkResult['usage_summary']): import('
     };
 }
 
+function convertExcludedJudges(
+    entries: Array<{ judge_id: string; reasons: string[] }> | undefined,
+): import('../types').ExcludedJudgeInfo[] {
+    return (entries || []).map((entry) => ({
+        judgeId: entry.judge_id,
+        reasons: [...(entry.reasons || [])],
+    }));
+}
+
+function convertScoreAggregation(
+    raw: RawBenchmarkResult['score_aggregation'],
+): import('../types').ScoreAggregation | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    return {
+        averageScoreBefore: raw.average_score_before ?? null,
+        averageScoreAfter: raw.average_score_after ?? null,
+        bestScoreBefore: raw.best_score_before ?? null,
+        bestScoreAfter: raw.best_score_after ?? null,
+        excludedJudges: convertExcludedJudges(raw.excluded_judges),
+        includedJudges: [...(raw.included_judges || [])],
+        allExcluded: Boolean(raw.all_excluded),
+        unreliableCandidates: convertExcludedJudges(raw.unreliable_candidates),
+    };
+}
+
 export function convertBenchmarkResult(raw: RawBenchmarkResult): EvaluationRun {
     const subjectTotalTokens = (raw.tasks || []).reduce(
         (sum, task) => sum + Number(task.subject_usage?.total_tokens || 0),
@@ -611,13 +726,20 @@ export function convertBenchmarkResult(raw: RawBenchmarkResult): EvaluationRun {
         ? Number(((subjectEstimatedCostUsd / subjectTotalTokens) * 1_000_000).toFixed(6))
         : undefined;
 
+    // intent: DEC-004 / INV-001 — null は N/A（0 に落とさない）。undefined のみ legacy 0。
+    const averageScore = raw.average_score === undefined ? 0 : raw.average_score;
+    const bestScore = raw.best_score === undefined ? 0 : raw.best_score;
+
     return {
         id: raw.run_id,
         subjectModelId: raw.target_model,
         subjectModelName: raw.target_model,
         judgeModels: (raw.judge_models || []).map((m) => ({ id: m, name: m })),
+        // intent: DEC-003 (Core/holistic-judge-model) — 通常 judge と別キーで map
+        holisticJudgeModels: (raw.holistic_judge_models || []).map((m) => ({ id: m, name: m })),
         timestamp: raw.executed_at,
         executionDurationMs: raw.execution_duration_ms,
+        timingSummary: convertTimingSummary(raw.timing_summary),
         estimatedCostUsd: raw.estimated_cost_usd,
         costEstimateStatus: raw.cost_estimate_status,
         subjectTotalTokens,
@@ -636,8 +758,10 @@ export function convertBenchmarkResult(raw: RawBenchmarkResult): EvaluationRun {
         } : undefined,
         taskResults: (raw.tasks || []).map(convertTask),
         holisticTaskResults: (raw.holistic_tasks || []).map(convertTask),
-        averageScore: raw.average_score ?? 0,
-        bestScore: raw.best_score ?? 0,
+        averageScore,
+        bestScore,
+        excludeUnreliableJudges: Boolean(raw.exclude_unreliable_judges),
+        scoreAggregation: convertScoreAggregation(raw.score_aggregation),
         taskCount: raw.completed_tasks ?? raw.tasks?.length ?? 0,
         usageSummary: convertUsageSummary(raw.usage_summary),
         usageSummarySubject: convertUsageSummary(raw.usage_summary_subject),
@@ -663,13 +787,18 @@ export async function deleteResult(filename: string): Promise<{ status: string; 
 export interface RunParams {
     targetModel: string;
     judgeModels: string[];
+    /** Empty / omitted → backend falls back to judgeModels for holistic. */
+    holisticJudgeModels?: string[];
     selectedTaskIds: string[];
     judgeRuns: number;
+    subjectRuns?: number;
     subjectTemp: number;
     strictMode: boolean;
     strictPresetId?: string | null;
     taskToolModeOverrides?: Record<string, string>;
     runHolistic?: boolean;
+    /** Exclude unreliable judges from hero average; default false. */
+    excludeUnreliableJudges?: boolean;
     subjectParallel?: boolean;
     judgeParallel?: boolean;
 }
@@ -678,13 +807,18 @@ export function buildRunRequestBody(params: RunParams): string {
     const body = JSON.stringify({
         target_model: params.targetModel,
         judge_models: params.judgeModels,
+        // intent: DEC-001 (Core/holistic-judge-model) — optional; empty = fallback
+        holistic_judge_models: params.holisticJudgeModels ?? [],
         selected_task_ids: params.selectedTaskIds,
         judge_runs: params.judgeRuns,
+        subject_runs: params.subjectRuns ?? 1,
         subject_temp: params.subjectTemp,
         strict_mode: params.strictMode,
         strict_preset_id: params.strictPresetId ?? null,
         task_tool_mode_overrides: params.taskToolModeOverrides ?? {},
         run_holistic: params.runHolistic ?? true,
+        // intent: DEC-003 (Core/exclude-unreliable-judges) — default OFF
+        exclude_unreliable_judges: params.excludeUnreliableJudges ?? false,
         subject_parallel: params.subjectParallel ?? true,
         judge_parallel: params.judgeParallel ?? true,
     });

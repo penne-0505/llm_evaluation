@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core.app_paths import AppPaths
-from core.cost_estimator import summarize_usage_records
+from core.cost_estimator import summarize_task_timing, summarize_usage_records
 
 
 class ResultStorage:
@@ -192,21 +192,38 @@ class ResultStorage:
                 6,
             )
 
-        total_scores = []
+        # Prefer saved hero scores (may be null when exclude-ON + all excluded).
+        # Legacy JSON without average_score falls back to all-judge recompute.
+        total_scores: List[float] = []
         for task in tasks:
             judge_results = task.get("judge_results", {})
             for result in judge_results.values():
                 agg = result.get("aggregated")
-                if agg:
-                    total_scores.append(agg.get("total_score_mean", 0))
+                if agg and agg.get("total_score_mean") is not None:
+                    total_scores.append(float(agg.get("total_score_mean", 0)))
 
-        avg_score = sum(total_scores) / len(total_scores) if total_scores else 0
-        max_score = max(total_scores) if total_scores else 0
+        if "average_score" in benchmark_result:
+            avg_score = benchmark_result.get("average_score")
+        else:
+            avg_score = (
+                sum(total_scores) / len(total_scores) if total_scores else 0
+            )
+
+        if "best_score" in benchmark_result:
+            max_score = benchmark_result.get("best_score")
+        else:
+            max_score = max(total_scores) if total_scores else 0
+
         min_score = min(total_scores) if total_scores else 0
 
         executed_at = benchmark_result.get("executed_at")
         if not executed_at:
             executed_at = datetime.fromtimestamp(filepath.stat().st_mtime).isoformat()
+
+        # intent: DEC-002 (Core/time-roi-task-timing) — summary index にも同一合算を載せる
+        timing_summary = benchmark_result.get("timing_summary")
+        if not isinstance(timing_summary, dict):
+            timing_summary = summarize_task_timing(tasks)
 
         return {
             "filename": filepath.name,
@@ -215,6 +232,7 @@ class ResultStorage:
             "target_model": benchmark_result.get("target_model", "unknown"),
             "executed_at": executed_at,
             "execution_duration_ms": benchmark_result.get("execution_duration_ms"),
+            "timing_summary": timing_summary,
             "estimated_cost_usd": benchmark_result.get("estimated_cost_usd"),
             "cost_estimate_status": benchmark_result.get("cost_estimate_status"),
             "subject_total_tokens": subject_total_tokens,
@@ -246,6 +264,10 @@ class ResultStorage:
             "avg_score": avg_score,
             "max_score": max_score,
             "min_score": min_score,
+            # intent: DEC-003 — list/history でも run 時 toggle を再現
+            "exclude_unreliable_judges": bool(
+                benchmark_result.get("exclude_unreliable_judges", False)
+            ),
         }
 
     @classmethod

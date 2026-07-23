@@ -16,7 +16,7 @@
 import { buildRunRequestBody, convertBenchmarkResult, type RunParams } from './client';
 import { useRunStore } from '../store/runStore';
 import { useHistoryStore } from '../store/historyStore';
-import type { ActiveRunTask } from '../types';
+import type { ActiveRunTask, EtaStatus } from '../types';
 
 export interface SSEConnection {
     abort: () => void;
@@ -129,13 +129,17 @@ function handleSSEEvent(
                 currentTaskIndex: event.task_index as number,
                 currentTaskId: (event.task_id as string) || '',
                 currentJudgeModel: (event.judge_model as string) || '',
-                elapsedMs: Date.now() - startTime,
+                elapsedMs: typeof event.elapsed_ms === 'number'
+                    ? event.elapsed_ms
+                    : Date.now() - startTime,
                 completedTaskCount: (event.completed_task_count as number) || 0,
                 activeTaskCount: (event.active_task_count as number) || 0,
                 queuedTaskCount: (event.queued_task_count as number) || 0,
                 completedTasks: normalizeActiveTasks(event.completed_tasks),
                 activeTasks: normalizeActiveTasks(event.active_tasks),
                 queuedTasks: normalizeActiveTasks(event.queued_tasks),
+                etaMs: typeof event.eta_ms === 'number' ? event.eta_ms : null,
+                etaStatus: normalizeEtaStatus(event.eta_status),
             });
             break;
 
@@ -201,4 +205,11 @@ function normalizeHolisticStatus(status: unknown): 'started' | 'running' | 'comp
         return status;
     }
     return 'started';
+}
+
+function normalizeEtaStatus(status: unknown): EtaStatus {
+    if (status === 'measured' || status === 'step_fallback' || status === 'unavailable') {
+        return status;
+    }
+    return 'unavailable';
 }

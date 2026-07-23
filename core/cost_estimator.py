@@ -12,9 +12,7 @@ def summarize_benchmark_usage(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     usage_records: List[Dict[str, Any]] = []
 
     for task in tasks:
-        subject_usage = task.get("subject_usage")
-        if isinstance(subject_usage, dict):
-            usage_records.append(subject_usage)
+        usage_records.extend(_subject_usage_records_from_task(task))
 
         for judge_result in task.get("judge_results", {}).values():
             for run in judge_result.get("runs", []):
@@ -30,11 +28,33 @@ def summarize_subject_usage(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     usage_records: List[Dict[str, Any]] = []
 
     for task in tasks:
-        subject_usage = task.get("subject_usage")
-        if isinstance(subject_usage, dict):
-            usage_records.append(subject_usage)
+        usage_records.extend(_subject_usage_records_from_task(task))
 
     return summarize_usage_records(usage_records)
+
+
+def _subject_usage_records_from_task(task: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """task から subject usage レコードを取り出す。
+
+    intent: DEC-003 (Core/subject-multi-run-judge-batch) — subject_runs[] がある場合は
+    run 単位を優先し、合算済み subject_usage との二重計上を避ける。
+    """
+    runs = task.get("subject_runs")
+    if isinstance(runs, list) and runs:
+        records: List[Dict[str, Any]] = []
+        for run in runs:
+            if not isinstance(run, dict):
+                continue
+            usage = run.get("subject_usage")
+            if isinstance(usage, dict):
+                records.append(usage)
+        if records:
+            return records
+
+    subject_usage = task.get("subject_usage")
+    if isinstance(subject_usage, dict):
+        return [subject_usage]
+    return []
 
 
 def summarize_judge_usage(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -49,6 +69,36 @@ def summarize_judge_usage(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
                     usage_records.append(usage)
 
     return summarize_usage_records(usage_records)
+
+
+def summarize_task_timing(tasks: List[Dict[str, Any]]) -> Optional[Dict[str, int]]:
+    """通常タスクの task_timing を合算する。
+
+    intent: DEC-001/002 (Core/time-roi-task-timing) — ROI 分母は wall-clock ではなく
+    タスク単位 subject+judge 合算。いずれかのタスクに task_timing が無い場合は None
+    （AC-003: 暗黙フォールバック禁止）。
+    """
+    if not tasks:
+        return {
+            "subject_duration_ms": 0,
+            "judge_duration_ms": 0,
+            "total_duration_ms": 0,
+        }
+
+    subject_duration_ms = 0
+    judge_duration_ms = 0
+    for task in tasks:
+        timing = task.get("task_timing")
+        if not isinstance(timing, dict):
+            return None
+        subject_duration_ms += _coerce_int(timing.get("subject_duration_ms"))
+        judge_duration_ms += _coerce_int(timing.get("judge_duration_ms"))
+
+    return {
+        "subject_duration_ms": subject_duration_ms,
+        "judge_duration_ms": judge_duration_ms,
+        "total_duration_ms": subject_duration_ms + judge_duration_ms,
+    }
 
 
 def summarize_usage_records(usage_records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:

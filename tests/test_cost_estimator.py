@@ -9,6 +9,7 @@ from core.cost_estimator import (
     summarize_benchmark_usage,
     summarize_judge_usage,
     summarize_subject_usage,
+    summarize_task_timing,
 )
 from core.model_catalog import ModelCatalog
 
@@ -207,6 +208,46 @@ class TestCostEstimator(unittest.TestCase):
         self.assertEqual(len(subject_summary["calls"]), 1)
         self.assertEqual(subject_summary["calls"][0]["provider"], "openai")
 
+    def test_summarize_subject_usage_prefers_subject_runs_array(self):
+        tasks = [
+            {
+                "subject_usage": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "input_tokens": 999,
+                    "output_tokens": 999,
+                    "total_tokens": 1998,
+                },
+                "subject_runs": [
+                    {
+                        "run_index": 1,
+                        "subject_usage": {
+                            "provider": "openai",
+                            "model": "gpt-4o",
+                            "input_tokens": 100,
+                            "output_tokens": 50,
+                            "total_tokens": 150,
+                        },
+                    },
+                    {
+                        "run_index": 2,
+                        "subject_usage": {
+                            "provider": "openai",
+                            "model": "gpt-4o",
+                            "input_tokens": 200,
+                            "output_tokens": 80,
+                            "total_tokens": 280,
+                        },
+                    },
+                ],
+                "judge_results": {},
+            }
+        ]
+        subject_summary = summarize_subject_usage(tasks)
+        self.assertEqual(subject_summary["totals"]["call_count"], 2)
+        self.assertEqual(subject_summary["totals"]["input_tokens"], 300)
+        self.assertEqual(subject_summary["totals"]["output_tokens"], 130)
+
     def test_summarize_judge_usage_isolates_judge_calls(self):
         """summarize_judge_usage は judge モデルの usage のみを集計する"""
         tasks = [
@@ -309,6 +350,139 @@ class TestCostEstimator(unittest.TestCase):
             total["totals"]["call_count"],
             subject["totals"]["call_count"] + judge["totals"]["call_count"],
         )
+
+    def test_task_timing_matches_usage_total_duration(self):
+        from core.benchmark_engine import TaskResult
+
+        tasks = [
+            {
+                "subject_usage": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15,
+                    "duration_ms": 1200,
+                },
+                "judge_results": {
+                    "judge-a": {
+                        "runs": [
+                            {
+                                "usage": {
+                                    "provider": "anthropic",
+                                    "model": "claude-3",
+                                    "input_tokens": 20,
+                                    "output_tokens": 10,
+                                    "total_tokens": 30,
+                                    "duration_ms": 800,
+                                }
+                            },
+                            {
+                                "usage": {
+                                    "provider": "anthropic",
+                                    "model": "claude-3",
+                                    "input_tokens": 20,
+                                    "output_tokens": 10,
+                                    "total_tokens": 30,
+                                    "duration_ms": 700,
+                                }
+                            },
+                        ]
+                    }
+                },
+            }
+        ]
+        timing = TaskResult.build_task_timing(
+            tasks[0]["subject_usage"], tasks[0]["judge_results"]
+        )
+        summary = summarize_benchmark_usage(tasks)
+        self.assertEqual(
+            timing["subject_duration_ms"] + timing["judge_duration_ms"],
+            summary["totals"]["total_duration_ms"],
+        )
+
+    def test_summarize_task_timing_matches_usage_and_rejects_partial(self):
+        """AC-004: timing_summary と usage total_duration_ms が一致する。"""
+        tasks = [
+            {
+                "subject_usage": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15,
+                    "duration_ms": 1000,
+                },
+                "judge_results": {
+                    "judge-a": {
+                        "runs": [
+                            {
+                                "usage": {
+                                    "provider": "anthropic",
+                                    "model": "claude-3",
+                                    "input_tokens": 20,
+                                    "output_tokens": 10,
+                                    "total_tokens": 30,
+                                    "duration_ms": 2000,
+                                }
+                            }
+                        ]
+                    }
+                },
+                "task_timing": {
+                    "subject_duration_ms": 1000,
+                    "judge_duration_ms": 2000,
+                },
+            },
+            {
+                "subject_usage": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15,
+                    "duration_ms": 500,
+                },
+                "judge_results": {
+                    "judge-a": {
+                        "runs": [
+                            {
+                                "usage": {
+                                    "provider": "anthropic",
+                                    "model": "claude-3",
+                                    "input_tokens": 20,
+                                    "output_tokens": 10,
+                                    "total_tokens": 30,
+                                    "duration_ms": 1500,
+                                }
+                            }
+                        ]
+                    }
+                },
+                "task_timing": {
+                    "subject_duration_ms": 500,
+                    "judge_duration_ms": 1500,
+                },
+            },
+        ]
+
+        timing_summary = summarize_task_timing(tasks)
+        usage_summary = summarize_benchmark_usage(tasks)
+        self.assertEqual(
+            timing_summary,
+            {
+                "subject_duration_ms": 1500,
+                "judge_duration_ms": 3500,
+                "total_duration_ms": 5000,
+            },
+        )
+        self.assertEqual(
+            timing_summary["total_duration_ms"],
+            usage_summary["totals"]["total_duration_ms"],
+        )
+
+        partial = [tasks[0], {**tasks[1], "task_timing": None}]
+        self.assertIsNone(summarize_task_timing(partial))
 
 
 if __name__ == "__main__":

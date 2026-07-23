@@ -29,7 +29,9 @@ from core.cost_estimator import (
     summarize_benchmark_usage,
     summarize_judge_usage,
     summarize_subject_usage,
+    summarize_task_timing,
 )
+from core.judge_reliability import compute_score_aggregation
 from core.logging_utils import configure_logging
 from core.model_catalog import ModelCatalog
 from core.openrouter_admin import OpenRouterAdminError, fetch_credits
@@ -472,6 +474,51 @@ def _apply_progress_message(
         task_state["judge_states"][judge_model] = "running"
 
 
+def _compute_progress_eta(
+    *,
+    completed_timings: List[Dict[str, Any]],
+    remaining_task_count: int,
+    elapsed_ms: int,
+    current_step: int,
+    total_steps: int,
+) -> Dict[str, Any]:
+    """同一 run 内の完了タスク実測を優先し、不足時のみ step 比率へフォールバックする。
+
+    intent: DEC-002 (Core/task-duration-eta) — 履歴平均は使わず、本 run の実測 / step のみ。
+    """
+    if completed_timings:
+        totals = []
+        for timing in completed_timings:
+            if not isinstance(timing, dict):
+                continue
+            subject_ms = int(timing.get("subject_duration_ms") or 0)
+            judge_ms = int(timing.get("judge_duration_ms") or 0)
+            totals.append(subject_ms + judge_ms)
+        if totals:
+            if remaining_task_count <= 0:
+                return {"eta_ms": 0, "eta_status": "measured"}
+            average_ms = sum(totals) / len(totals)
+            return {
+                "eta_ms": int(average_ms * remaining_task_count),
+                "eta_status": "measured",
+            }
+
+    # intent: DEC-002/003 — 完了 0 件のときだけ step 比率。確定値風に見せないため status を分離する。
+    if (
+        not completed_timings
+        and current_step > 0
+        and total_steps > current_step
+        and elapsed_ms > 0
+    ):
+        remaining_steps = total_steps - current_step
+        return {
+            "eta_ms": int((elapsed_ms / current_step) * remaining_steps),
+            "eta_status": "step_fallback",
+        }
+
+    return {"eta_ms": None, "eta_status": "unavailable"}
+
+
 def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any]:
     # intent: DEC-001 (Core/holistic-run-progress) — 通常 task の lane と post-processing phase を混同させない。
     standard_task_states = [
@@ -643,13 +690,33 @@ class RunRequest(BaseModel):
     judge_models: List[str]
     selected_task_ids: List[str]
     judge_runs: int = 3
+    # intent: DEC-002/005 (Core/subject-multi-run-judge-batch) — judge_runs と独立、1–5 clamp
+    subject_runs: int = 1
     subject_temp: float = 0.6
     strict_mode: bool = False
     strict_preset_id: Optional[str] = None
     task_tool_mode_overrides: Dict[str, str] = {}
     run_holistic: bool = True
+    # intent: DEC-001 (Core/holistic-judge-model) — 空は judge_models へ fallback（後方互換）
+    holistic_judge_models: List[str] = []
+    # intent: DEC-003 (Core/exclude-unreliable-judges) — run 時固定、default OFF
+    exclude_unreliable_judges: bool = False
     subject_parallel: bool = True
     judge_parallel: bool = True
+
+    def clamped_subject_runs(self) -> int:
+        return BenchmarkEngine.clamp_subject_runs(self.subject_runs)
+
+
+def _effective_holistic_judge_models(
+    judge_models: List[str],
+    holistic_judge_models: Optional[List[str]] = None,
+) -> List[str]:
+    """Resolve holistic judge IDs; empty/unspecified falls back to judge_models."""
+    # intent: DEC-001 (Core/holistic-judge-model) — optional override with judge_models fallback
+    if holistic_judge_models:
+        return list(holistic_judge_models)
+    return list(judge_models)
 
 
 class ClientErrorRequest(BaseModel):
@@ -1061,6 +1128,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 )
                 return
 
+            subject_runs = req.clamped_subject_runs()
             engine = BenchmarkEngine(
                 subject_adapter=subject_adapter,
                 subject_model=req.target_model,
@@ -1072,21 +1140,24 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 judge_dispatch_min_interval_sec=0.25,
                 judge_dispatch_jitter_sec=0.15,
                 judge_parallel=req.judge_parallel,
+                subject_runs=subject_runs,
             )
             logger.info(
-                "run started run_id=%s target_model=%s tasks=%d judges=%d judge_runs=%d log_file=%s",
+                "run started run_id=%s target_model=%s tasks=%d judges=%d "
+                "judge_runs=%d subject_runs=%d log_file=%s",
                 run_id,
                 req.target_model,
                 len(selected),
                 len(judge_adapters),
                 req.judge_runs,
+                subject_runs,
                 LOG_FILE_PATH,
             )
 
             total_tasks = len(selected)
             holistic_tasks_meta = _load_holistic_tasks()
             holistic_task_count = len(holistic_tasks_meta)
-            steps_per_task = 1 + len(judge_adapters) * (req.judge_runs + 2)
+            steps_per_task = subject_runs + len(judge_adapters) * (req.judge_runs + 2)
             total_steps = (total_tasks + holistic_task_count) * steps_per_task
             progress_current = 0
             task_states = [
@@ -1112,6 +1183,24 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 if increment_step:
                     progress_current += 1
                 snapshot = _build_progress_snapshot(task_states)
+                completed_timings = [
+                    state["task_timing"]
+                    for state in task_states
+                    if state.get("task_kind", "standard") == "standard"
+                    and state.get("phase") == "completed"
+                    and isinstance(state.get("task_timing"), dict)
+                ]
+                remaining_task_count = (
+                    snapshot["active_task_count"] + snapshot["queued_task_count"]
+                )
+                elapsed_ms = int((time.perf_counter() - run_started_at) * 1000)
+                eta = _compute_progress_eta(
+                    completed_timings=completed_timings,
+                    remaining_task_count=remaining_task_count,
+                    elapsed_ms=elapsed_ms,
+                    current_step=progress_current,
+                    total_steps=total_steps,
+                )
                 progress_queue.put_nowait(
                     {
                         "type": "progress",
@@ -1122,7 +1211,9 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                         "task_id": task_id,
                         "judge_model": judge_model,
                         "task_kind": task_kind,
+                        "elapsed_ms": elapsed_ms,
                         **snapshot,
+                        **eta,
                     }
                 )
 
@@ -1226,6 +1317,9 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                         task_states[idx]["phase"] = "completed"
                         task_states[idx]["subject_done"] = True
                         task_states[idx]["message"] = "Completed"
+                        task_states[idx]["task_timing"] = task_results[idx].get(
+                            "task_timing"
+                        )
                         for judge_model_name, phase in list(
                             task_states[idx]["judge_states"].items()
                         ):
@@ -1309,7 +1403,33 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
 
             # --- 包括評価フェーズ ---
             holistic_results: List[Dict[str, Any]] = []
+            # intent: DEC-003 (Core/holistic-judge-model) — 未実行時は空、実行時は実効モデルを記録
+            effective_holistic_judge_models: List[str] = []
             if not cancelled and holistic_tasks_meta and req.run_holistic:
+                # intent: DEC-002/INV-002 (Core/holistic-judge-model) — holistic 開始時だけ別解決
+                holistic_judge_model_ids = _effective_holistic_judge_models(
+                    req.judge_models, req.holistic_judge_models
+                )
+                holistic_judge_adapters = get_available_judge_adapters(
+                    holistic_judge_model_ids, api_keys=api_keys
+                )
+                if not holistic_judge_adapters:
+                    logger.warning(
+                        "holistic aborted: no judge adapters run_id=%s "
+                        "holistic_judge_models=%s",
+                        run_id,
+                        holistic_judge_model_ids,
+                    )
+                    yield _sse_event(
+                        {
+                            "type": "error",
+                            "message": "包括評価用 judgeモデルに対応するAPIキーがありません",
+                            "traceback": "",
+                        }
+                    )
+                    return
+                effective_holistic_judge_models = list(holistic_judge_adapters.keys())
+
                 failed_holistic_task_count = 0
                 non_creative_responses = [
                     {
@@ -1340,7 +1460,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                     h_state = _initial_task_progress_state(
                         h_task["id"],
                         h_state_index,
-                        list(judge_adapters.keys()),
+                        list(holistic_judge_adapters.keys()),
                         task_kind="holistic",
                     )
                     task_states.append(h_state)
@@ -1383,6 +1503,8 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                                 )
                             ),
                             cancel_checker=cancel_checker,
+                            # intent: DEC-002 (Core/holistic-judge-model) — 共有 engine を差し替えず override 注入
+                            judge_adapters=holistic_judge_adapters,
                         )
                     )
                     try:
@@ -1482,7 +1604,10 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 "run_id": run_id,
                 "target_model": req.target_model,
                 "judge_models": req.judge_models,
+                # intent: DEC-003 (Core/holistic-judge-model) — judge_models を上書きせず別キーで記録
+                "holistic_judge_models": effective_holistic_judge_models,
                 "judge_runs": req.judge_runs,
+                "subject_runs": subject_runs,
                 "executed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "execution_duration_ms": round(
                     (time.perf_counter() - run_started_at) * 1000
@@ -1507,25 +1632,23 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
             benchmark_result["cost_estimate_status"] = usage_summary["totals"].get(
                 "pricing_status"
             )
+            # intent: DEC-001/002 (Core/time-roi-task-timing) — 通常タスク task_timing 合算のみ
+            # （holistic 除外・wall-clock 非使用）。欠落時はキー自体を付けず N/A 表示へ。
+            timing_summary = summarize_task_timing(completed)
+            if timing_summary is not None:
+                benchmark_result["timing_summary"] = timing_summary
 
-            # average_score / best_score を計算して付与
-            all_total_scores: List[float] = []
-            for task_data in completed:
-                jr = task_data.get("judge_results", {})
-                for judge_result in jr.values():
-                    agg = judge_result.get("aggregated")
-                    if agg:
-                        ts = agg.get("total_score_mean", 0)
-                        if ts:
-                            all_total_scores.append(float(ts))
-            benchmark_result["average_score"] = (
-                round(sum(all_total_scores) / len(all_total_scores), 1)
-                if all_total_scores
-                else 0
+            # intent: DEC-003/004 — toggle 確定値を保存し、全除外時は null（0 禁止）
+            score_meta = compute_score_aggregation(
+                completed,
+                exclude_unreliable_judges=req.exclude_unreliable_judges,
             )
-            benchmark_result["best_score"] = (
-                round(max(all_total_scores), 1) if all_total_scores else 0
-            )
+            benchmark_result["exclude_unreliable_judges"] = score_meta[
+                "exclude_unreliable_judges"
+            ]
+            benchmark_result["average_score"] = score_meta["average_score"]
+            benchmark_result["best_score"] = score_meta["best_score"]
+            benchmark_result["score_aggregation"] = score_meta["score_aggregation"]
 
             saved_path = ResultStorage.save(benchmark_result)
             logger.info(

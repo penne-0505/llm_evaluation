@@ -2,16 +2,19 @@
 
 import asyncio
 import json
+import logging
 import random
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from adapters import CompletionResult, LLMAdapter, LLMError
-from adapters.base import NativeToolCall, NativeToolsNotSupportedError
+from adapters.base import NativeToolCall, NativeToolsNotSupportedError, strip_thinking_tags
 from core.json_parser import JudgeResponseParser, ParseError
 from core.result_aggregator import ResultAggregator
 from core.tool_runtime import LocalToolRuntime, ToolCall, ToolRuntimeConfig, parse_tool_call
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -34,6 +37,10 @@ class TaskResult:
         subject_usage: Optional[Dict[str, Any]] = None,
         tool_trace: Optional[List[Dict[str, Any]]] = None,
         subject_prompt: Optional[str] = None,
+        has_subject_tools: bool = False,
+        bundling_metadata: Optional[Dict[str, Any]] = None,
+        subject_runs: Optional[List[Dict[str, Any]]] = None,
+        subject_run_count: int = 1,
     ):
         self.task_name = task_name
         self.task_type = task_type
@@ -43,10 +50,15 @@ class TaskResult:
         self.subject_usage = subject_usage
         self.tool_trace = tool_trace or []
         self.subject_prompt = subject_prompt or ""
+        self.has_subject_tools = has_subject_tools
+        self.bundling_metadata = bundling_metadata
+        # intent: DEC-003 (Core/subject-multi-run-judge-batch) — run 配列 + 代表 response を併用
+        self.subject_runs = subject_runs or []
+        self.subject_run_count = subject_run_count
 
     def to_dict(self) -> Dict[str, Any]:
         """辞書形式に変換"""
-        return {
+        payload = {
             "task_name": self.task_name,
             "task_type": self.task_type,
             "input_prompt": self.input_prompt,
@@ -55,6 +67,47 @@ class TaskResult:
             "judge_results": self.judge_results,
             "subject_usage": self.subject_usage,
             "tool_trace": self.tool_trace,
+            "has_subject_tools": self.has_subject_tools,
+            # intent: DEC-001 (Core/task-duration-eta) — usage ネスト再集計ではなくタスク粒度 timing を正典化
+            "task_timing": self.build_task_timing(
+                self.subject_usage, self.judge_results
+            ),
+            "subject_runs": self.subject_runs,
+            "subject_run_count": self.subject_run_count,
+        }
+        if self.bundling_metadata is not None:
+            payload["bundling_metadata"] = self.bundling_metadata
+        return payload
+
+    @staticmethod
+    def build_task_timing(
+        subject_usage: Optional[Dict[str, Any]],
+        judge_results: Optional[Dict[str, Dict[str, Any]]],
+    ) -> Dict[str, int]:
+        """subject / judge usage からタスク単位 duration を集計する。"""
+        subject_duration_ms = 0
+        if isinstance(subject_usage, dict):
+            raw_subject = subject_usage.get("duration_ms")
+            if raw_subject is not None:
+                subject_duration_ms = int(raw_subject)
+
+        judge_duration_ms = 0
+        for judge_result in (judge_results or {}).values():
+            if not isinstance(judge_result, dict):
+                continue
+            for run in judge_result.get("runs") or []:
+                if not isinstance(run, dict):
+                    continue
+                usage = run.get("usage")
+                if not isinstance(usage, dict):
+                    continue
+                raw_judge = usage.get("duration_ms")
+                if raw_judge is not None:
+                    judge_duration_ms += int(raw_judge)
+
+        return {
+            "subject_duration_ms": subject_duration_ms,
+            "judge_duration_ms": judge_duration_ms,
         }
 
 
@@ -108,6 +161,27 @@ class BenchmarkEngine:
         "untrusted_tool_trace",
     )
 
+    # intent: DEC-001 (Core/holistic-context-overflow) — tokenizer 未導入のため chars≈4/token で見積もり、未解決 model は小さめ default で API 拒否を避ける
+    _CHARS_PER_TOKEN = 4
+    _DEFAULT_CONTEXT_LIMIT_TOKENS = 32_768
+    _JUDGE_OUTPUT_RESERVE_TOKENS = 4096
+    _CONTEXT_SAFETY_MARGIN_RATIO = 0.05
+    _RESPONSE_TRUNCATE_MARKER = "\n...[truncated]"
+    # より具体的な識別子を先に置く（部分一致）
+    _MODEL_CONTEXT_LIMIT_TOKENS: Tuple[Tuple[str, int], ...] = (
+        ("claude", 200_000),
+        ("gpt-5", 128_000),
+        ("gpt-4o", 128_000),
+        ("gpt-4.1", 128_000),
+        ("gpt-4", 128_000),
+        ("o1", 200_000),
+        ("o3", 200_000),
+        ("gemini", 128_000),
+        ("gemma", 128_000),
+    )
+
+    MAX_SUBJECT_RUNS = 5
+
     def __init__(
         self,
         subject_adapter: LLMAdapter,
@@ -120,6 +194,7 @@ class BenchmarkEngine:
         judge_dispatch_min_interval_sec: float = 0.25,
         judge_dispatch_jitter_sec: float = 0.15,
         judge_parallel: bool = True,
+        subject_runs: int = 1,
     ):
         """
         Args:
@@ -133,6 +208,7 @@ class BenchmarkEngine:
             judge_dispatch_min_interval_sec: 同一judgeモデル内の最小投入間隔(秒)
             judge_dispatch_jitter_sec: 同一judgeモデル内の投入ジッター最大値(秒)
             judge_parallel: judge評価を並列実行するか
+            subject_runs: 被験LLM呼び出し回数（1–5、judge_runs とは独立）
         """
         self.subject_adapter = subject_adapter
         self.subject_model = subject_model
@@ -143,6 +219,16 @@ class BenchmarkEngine:
         self.max_parallel_runs_per_judge = max_parallel_runs_per_judge if judge_parallel else 1
         self.judge_dispatch_min_interval_sec = max(0.0, judge_dispatch_min_interval_sec)
         self.judge_dispatch_jitter_sec = max(0.0, judge_dispatch_jitter_sec)
+        # intent: DEC-002/005 (Core/subject-multi-run-judge-batch) — judge_runs と独立、上限 5
+        self.subject_runs = self.clamp_subject_runs(subject_runs)
+
+    @classmethod
+    def clamp_subject_runs(cls, value: int) -> int:
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            n = 1
+        return max(1, min(cls.MAX_SUBJECT_RUNS, n))
 
     async def run_task(
         self,
@@ -171,34 +257,104 @@ class BenchmarkEngine:
         Returns:
             TaskResult: タスク実行結果
         """
-        # 1. 被験LLM呼び出し
-        if progress_callback:
-            progress_callback(f"タスク '{task_name}': 被験LLM出力待ち...")
+        # 1. 被験LLM呼び出し（subject_runs 回。list-eval 用に束ねて judge へ渡す）
+        # intent: DEC-001/002 (Core/subject-multi-run-judge-batch) — N 被験 → 1 judge 入力、judge_runs 独立
+        subject_run_records: List[Dict[str, Any]] = []
+        subject_completions: List[CompletionResult] = []
+        success_count = 0
+        representative_run: Optional[SubjectRunResult] = None
+        representative_response = ""
 
-        if cancel_checker:
-            cancel_checker()
+        for run_index in range(1, self.subject_runs + 1):
+            if cancel_checker:
+                cancel_checker()
 
-        try:
-            subject_run = await self._call_subject_llm(
-                input_prompt,
-                temperature=subject_temp,
-                progress_callback=progress_callback,
-                cancel_checker=cancel_checker,
-                subject_tools=subject_tools,
-            )
-            subject_result = subject_run.result
-            subject_response = subject_result.text
-        except LLMError as e:
-            subject_response = f"[ERROR] {str(e)}"
-            subject_result = CompletionResult(text=subject_response, usage=None)
-            subject_run = SubjectRunResult(result=subject_result, tool_trace=[])
             if progress_callback:
-                progress_callback(f"タスク '{task_name}': 被験LLMエラー - {e}")
+                if self.subject_runs == 1:
+                    progress_callback(f"タスク '{task_name}': 被験LLM出力待ち...")
+                else:
+                    progress_callback(
+                        f"タスク '{task_name}': 被験LLM {run_index}/{self.subject_runs} 出力待ち..."
+                    )
+
+            run_error: Optional[str] = None
+            try:
+                subject_run = await self._call_subject_llm(
+                    input_prompt,
+                    temperature=subject_temp,
+                    progress_callback=progress_callback,
+                    cancel_checker=cancel_checker,
+                    subject_tools=subject_tools,
+                )
+                run_response = subject_run.result.text
+                success_count += 1
+                if representative_run is None:
+                    representative_run = subject_run
+                    representative_response = run_response
+            except LLMError as e:
+                run_error = str(e)
+                run_response = f"[ERROR] {run_error}"
+                subject_run = SubjectRunResult(
+                    result=CompletionResult(text=run_response, usage=None),
+                    tool_trace=[],
+                )
+                if progress_callback:
+                    progress_callback(
+                        f"タスク '{task_name}': 被験LLM {run_index}/{self.subject_runs} エラー - {e}"
+                    )
+
+            subject_completions.append(subject_run.result)
+            subject_run_records.append(
+                {
+                    "run_index": run_index,
+                    "response": run_response,
+                    "subject_usage": (
+                        subject_run.result.usage.to_dict()
+                        if subject_run.result.usage
+                        else None
+                    ),
+                    "tool_trace": subject_run.tool_trace,
+                    "error": run_error,
+                    "subject_prompt": subject_run.subject_prompt,
+                }
+            )
+
+        # intent: DEC-004 — 全失敗は task fail。N=1 は従来どおり [ERROR] を judge へ渡す
+        if success_count == 0 and self.subject_runs > 1:
+            raise LLMError(
+                f"被験LLMが全 {self.subject_runs} 回失敗しました: "
+                + "; ".join(
+                    str(r.get("error") or "unknown") for r in subject_run_records
+                )
+            )
+
+        if representative_run is None:
+            # N=1 全失敗（または全 ERROR）— 先頭 run を代表にする
+            first = subject_run_records[0]
+            representative_response = str(first.get("response", ""))
+            representative_run = SubjectRunResult(
+                result=CompletionResult(
+                    text=representative_response,
+                    usage=None,
+                ),
+                tool_trace=list(first.get("tool_trace") or []),
+                subject_prompt=str(first.get("subject_prompt") or ""),
+            )
+
+        # intent: DEC-001 — list-eval bundled（N=1 は単一回答のまま）
+        bundled_subject_response = self._build_bundled_subject_runs(subject_run_records)
+        merged_subject = self._merge_subject_usage(
+            representative_response, subject_completions
+        )
+        # N=1 は既存の tool_trace envelope。N>1 は run 別 trace を bundle 本文に含め envelope は空
+        judge_tool_trace = (
+            representative_run.tool_trace if self.subject_runs == 1 else []
+        )
 
         if cancel_checker:
             cancel_checker()
 
-        # 2. 各judgeで評価（並列）
+        # 2. 各judgeで評価（並列）— 呼び出し回数は judge_runs × judges（INV-001）
         judge_results = {}
         semaphore = asyncio.Semaphore(self.max_parallel_judges)
 
@@ -222,11 +378,11 @@ class BenchmarkEngine:
                     result = await self._run_judge_evaluation(
                         adapter=adapter,
                         model_name=model_name,
-                        subject_response=subject_response,
+                        subject_response=bundled_subject_response,
                         input_prompt=input_prompt,
                         rubric_content=rubric_content,
                         system_prompt=system_prompt,
-                        tool_trace=subject_run.tool_trace,
+                        tool_trace=judge_tool_trace,
                         progress_callback=progress_callback,
                         cancel_checker=cancel_checker,
                     )
@@ -261,13 +417,16 @@ class BenchmarkEngine:
             task_name=task_name,
             task_type=task_type,
             input_prompt=input_prompt,
-            response=subject_response,
+            response=representative_response,
             judge_results=judge_results,
-            subject_usage=subject_result.usage.to_dict()
-            if subject_result.usage
+            subject_usage=merged_subject.usage.to_dict()
+            if merged_subject.usage
             else None,
-            tool_trace=subject_run.tool_trace,
-            subject_prompt=subject_run.subject_prompt,
+            tool_trace=representative_run.tool_trace,
+            subject_prompt=representative_run.subject_prompt,
+            has_subject_tools=ToolRuntimeConfig.from_dict(subject_tools) is not None,
+            subject_runs=subject_run_records,
+            subject_run_count=self.subject_runs,
         )
 
     async def _call_subject_llm(
@@ -587,6 +746,9 @@ class BenchmarkEngine:
             return CompletionResult(text=text, usage=None)
 
         first = usage_payloads[0]
+        duration_values = [
+            item.duration_ms for item in usage_payloads if item.duration_ms is not None
+        ]
         return CompletionResult(
             text=text,
             usage=type(first)(
@@ -601,6 +763,8 @@ class BenchmarkEngine:
                 cache_read_input_tokens=sum(
                     item.cache_read_input_tokens or 0 for item in usage_payloads
                 ),
+                # intent: DEC-001 (Core/task-duration-eta) — multi-turn subject の duration も合算する
+                duration_ms=sum(duration_values) if duration_values else None,
             ),
         )
 
@@ -749,11 +913,19 @@ class BenchmarkEngine:
                         )
                         last_response = response
                         try:
+                            # intent: DEC-003 — strip <thinking> before judge JSON parse
+                            text_for_parse, tag_reasoning = strip_thinking_tags(
+                                response.text
+                            )
                             parsed = JudgeResponseParser.parse_with_retry(
-                                response.text, max_retries=1
+                                text_for_parse, max_retries=1
                             )
                             if response.usage is not None:
                                 parsed["usage"] = response.usage.to_dict()
+                            # intent: DEC-001 — api_reasoning ≠ scoring JSON reasoning
+                            api_reasoning = response.api_reasoning or tag_reasoning
+                            if api_reasoning:
+                                parsed["api_reasoning"] = api_reasoning
                             runs_by_index[run_index] = parsed
                             break
                         except ParseError as e:
@@ -763,7 +935,7 @@ class BenchmarkEngine:
 
                     if runs_by_index[run_index] is None:
                         failures = await _register_failure()
-                        runs_by_index[run_index] = {
+                        failure_run: Dict[str, Any] = {
                             "error": f"パース失敗: {str(last_parse_error)}",
                             "raw_response": last_response.text
                             if last_response is not None
@@ -775,6 +947,9 @@ class BenchmarkEngine:
                             and last_response.usage is not None
                             else None,
                         }
+                        if last_response is not None and last_response.api_reasoning:
+                            failure_run["api_reasoning"] = last_response.api_reasoning
+                        runs_by_index[run_index] = failure_run
                 except asyncio.CancelledError:
                     cancelled_during_judge = True
                     runs_by_index[run_index] = {
@@ -878,6 +1053,7 @@ class BenchmarkEngine:
         system_prompt: str,
         progress_callback: Optional[Callable[[str], None]] = None,
         cancel_checker: Optional[Callable[[], None]] = None,
+        judge_adapters: Optional[Dict[str, LLMAdapter]] = None,
     ) -> "TaskResult":
         """
         包括評価タスクを実行する。
@@ -894,11 +1070,52 @@ class BenchmarkEngine:
             system_prompt: judge のシステムプロンプト
             progress_callback: 進捗コールバック
             cancel_checker: キャンセルチェック関数
+            judge_adapters: holistic 専用 adapter セット。未指定時は engine 既定を使う。
         """
         if cancel_checker:
             cancel_checker()
 
-        bundled_subject_response = self._build_bundled_responses(bundled_responses)
+        # intent: DEC-002 (Core/holistic-judge-model) — holistic のみ override、standard path を汚さない
+        active_judge_adapters = (
+            judge_adapters if judge_adapters is not None else self.judge_adapters
+        )
+
+        # intent: DEC-001/002 (Core/holistic-context-overflow) — 共有 bundled を単一呼び出し内で予算に収め、split しない
+        context_limit_tokens, binding_model = self._resolve_holistic_context_limit(
+            judge_adapters=active_judge_adapters
+        )
+        answer_budget_chars, overhead_chars = self._estimate_holistic_answer_budget_chars(
+            system_prompt=system_prompt,
+            eval_prompt=eval_prompt,
+            rubric_content=rubric_content,
+            context_limit_tokens=context_limit_tokens,
+        )
+        bundled_subject_response, bundling_metadata = (
+            self._fit_bundled_responses_to_budget(
+                bundled_responses,
+                max_chars=answer_budget_chars,
+                context_limit_tokens=context_limit_tokens,
+                overhead_chars=overhead_chars,
+                binding_model=binding_model,
+            )
+        )
+        if bundling_metadata.get("truncated"):
+            logger.warning(
+                "Holistic bundling truncated task=%s action=%s dropped=%s "
+                "chars=%s->%s budget_chars=%s limit_tokens=%s",
+                task_name,
+                bundling_metadata.get("action"),
+                bundling_metadata.get("dropped_tasks"),
+                bundling_metadata.get("estimated_chars_before"),
+                bundling_metadata.get("estimated_chars_after"),
+                bundling_metadata.get("answer_budget_chars"),
+                bundling_metadata.get("context_limit_tokens"),
+            )
+            if progress_callback:
+                progress_callback(
+                    f"タスク '{task_name}': bundled_responses を切り詰めました"
+                    f" ({bundling_metadata.get('action')})"
+                )
 
         judge_results: Dict[str, Any] = {}
         semaphore = asyncio.Semaphore(self.max_parallel_judges)
@@ -938,7 +1155,7 @@ class BenchmarkEngine:
 
         tasks = [
             _evaluate_judge(model_name, adapter)
-            for model_name, adapter in self.judge_adapters.items()
+            for model_name, adapter in active_judge_adapters.items()
         ]
         if tasks:
             results = await asyncio.gather(*tasks)
@@ -950,27 +1167,237 @@ class BenchmarkEngine:
             task_name=task_name,
             task_type="holistic",
             input_prompt=eval_prompt,
+            # intent: Core-Bug-36 — holistic は被験 LLM を呼ばないため subject_prompt は空文字が意図的
+            subject_prompt="",
             response="",
             judge_results=judge_results,
             subject_usage=None,
             tool_trace=[],
+            # intent: DEC-004 (Core/holistic-context-overflow) — overflow 処理を結果 JSON で追跡可能にする
+            bundling_metadata=bundling_metadata,
         )
+
+    @classmethod
+    def _estimate_tokens_from_text(cls, text: str) -> int:
+        return (len(text) + cls._CHARS_PER_TOKEN - 1) // cls._CHARS_PER_TOKEN
+
+    @classmethod
+    def _chars_from_tokens(cls, token_count: int) -> int:
+        return max(0, int(token_count)) * cls._CHARS_PER_TOKEN
+
+    @classmethod
+    def resolve_judge_context_limit_tokens(cls, model_name: str) -> int:
+        """judge モデル名から入力コンテキスト上限（token）を解決する。"""
+        lowered = (model_name or "").lower()
+        for needle, limit in cls._MODEL_CONTEXT_LIMIT_TOKENS:
+            if needle in lowered:
+                return limit
+        return cls._DEFAULT_CONTEXT_LIMIT_TOKENS
+
+    def _resolve_holistic_context_limit(
+        self,
+        judge_adapters: Optional[Dict[str, LLMAdapter]] = None,
+    ) -> Tuple[int, str]:
+        """利用可能な judge のうち最も厳しい context limit を採用する。"""
+        adapters = judge_adapters if judge_adapters is not None else self.judge_adapters
+        available = [
+            model_name
+            for model_name, adapter in adapters.items()
+            if adapter.is_available()
+        ]
+        if not available:
+            return self._DEFAULT_CONTEXT_LIMIT_TOKENS, ""
+
+        limits = [
+            (self.resolve_judge_context_limit_tokens(model_name), model_name)
+            for model_name in available
+        ]
+        limit_tokens, binding_model = min(limits, key=lambda item: item[0])
+        return limit_tokens, binding_model
+
+    def _estimate_holistic_answer_budget_chars(
+        self,
+        system_prompt: str,
+        eval_prompt: str,
+        rubric_content: str,
+        context_limit_tokens: int,
+    ) -> Tuple[int, int]:
+        """
+        固定 overhead を差し引いた bundled answer 用文字予算を返す。
+
+        Returns:
+            (answer_budget_chars, overhead_chars)
+        """
+        empty_user_prompt = self._build_judge_user_prompt(
+            input_prompt=eval_prompt,
+            subject_response="",
+            rubric_content=rubric_content,
+            tool_trace=[],
+        )
+        safety_margin_tokens = max(
+            256,
+            int(context_limit_tokens * self._CONTEXT_SAFETY_MARGIN_RATIO),
+        )
+        # intent: DEC-001 — 出力予約は実 window を超えないよう cap し、answer 予算を負にしない
+        output_reserve_tokens = min(
+            self._JUDGE_OUTPUT_RESERVE_TOKENS,
+            max(256, context_limit_tokens // 4),
+        )
+        overhead_chars = (
+            len(system_prompt)
+            + len(empty_user_prompt)
+            + self._chars_from_tokens(safety_margin_tokens)
+            + self._chars_from_tokens(output_reserve_tokens)
+        )
+        context_limit_chars = self._chars_from_tokens(context_limit_tokens)
+        answer_budget_chars = max(0, context_limit_chars - overhead_chars)
+        return answer_budget_chars, overhead_chars
+
+    @classmethod
+    def _format_bundled_task_part(
+        cls,
+        item: Dict[str, Any],
+        response_override: Optional[str] = None,
+    ) -> str:
+        task_id = item.get("task_name", "")
+        task_type = item.get("task_type", "")
+        input_prompt = item.get("input_prompt", "")
+        response = (
+            item.get("response", "")
+            if response_override is None
+            else response_override
+        )
+        return (
+            f"### タスク: {task_id}（{task_type}）\n\n"
+            f"#### 入力プロンプト\n{input_prompt}\n\n"
+            f"#### 被験LLMの回答\n{response}"
+        )
+
+    @staticmethod
+    def _build_bundled_subject_runs(runs: List[Dict[str, Any]]) -> str:
+        """同一 task の複数被験 run を list-eval 用に束ねる。
+
+        intent-invariant: INV-002 (Core/subject-multi-run-judge-batch) —
+        holistic の `_build_bundled_responses`（複数 task 横断）とは別 builder。
+        N=1 は見出しなしの単一回答（後方互換）。
+        """
+        if not runs:
+            return ""
+        if len(runs) == 1:
+            return str(runs[0].get("response", ""))
+
+        parts: List[str] = []
+        for run in runs:
+            run_index = run.get("run_index", len(parts) + 1)
+            response = str(run.get("response", ""))
+            section = f"### 被験試行 #{run_index}\n{response}"
+            tool_trace = run.get("tool_trace") or []
+            if tool_trace:
+                # N>1 では envelope の tool_trace を使わず、run 単位で本文へ埋める
+                summary = BenchmarkEngine._build_judge_tool_trace_summary(tool_trace)
+                if summary:
+                    section = f"{section}\n\n#### tool_trace\n{summary}"
+            parts.append(section)
+        return "\n\n---\n\n".join(parts)
 
     @staticmethod
     def _build_bundled_responses(responses: List[Dict[str, Any]]) -> str:
         """包括評価用に複数タスクの出力を1つのテキストへまとめる。"""
-        parts = []
-        for item in responses:
-            task_id = item.get("task_name", "")
-            task_type = item.get("task_type", "")
-            input_prompt = item.get("input_prompt", "")
-            response = item.get("response", "")
-            parts.append(
-                f"### タスク: {task_id}（{task_type}）\n\n"
-                f"#### 入力プロンプト\n{input_prompt}\n\n"
-                f"#### 被験LLMの回答\n{response}"
-            )
+        # intent-invariant: INV-001 (Core/holistic-context-overflow) — 非超過時の見出し/区切り形式を変えない
+        parts = [
+            BenchmarkEngine._format_bundled_task_part(item) for item in responses
+        ]
         return "\n\n---\n\n".join(parts)
+
+    @classmethod
+    def _fit_bundled_responses_to_budget(
+        cls,
+        responses: List[Dict[str, Any]],
+        max_chars: int,
+        context_limit_tokens: int,
+        overhead_chars: int,
+        binding_model: str = "",
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        bundled subject answer を予算内へ収める。
+
+        intent: DEC-003 (Core/holistic-context-overflow) — 末尾 task から drop し、
+        それでも足りなければ残 task の回答本文だけ末尾 truncate する。
+        """
+        original_text = cls._build_bundled_responses(responses)
+        estimated_chars_before = len(original_text)
+        estimated_tokens_before = cls._estimate_tokens_from_text(original_text)
+
+        def _metadata(
+            *,
+            text: str,
+            truncated: bool,
+            action: str,
+            dropped_tasks: List[str],
+        ) -> Dict[str, Any]:
+            return {
+                "truncated": truncated,
+                "action": action,
+                "dropped_tasks": list(dropped_tasks),
+                "estimated_chars_before": estimated_chars_before,
+                "estimated_chars_after": len(text),
+                "estimated_tokens_before": estimated_tokens_before,
+                "estimated_tokens_after": cls._estimate_tokens_from_text(text),
+                "answer_budget_chars": max_chars,
+                "context_limit_tokens": context_limit_tokens,
+                "overhead_chars": overhead_chars,
+                "binding_model": binding_model,
+            }
+
+        if estimated_chars_before <= max_chars:
+            return original_text, _metadata(
+                text=original_text,
+                truncated=False,
+                action="none",
+                dropped_tasks=[],
+            )
+
+        working = list(responses)
+        dropped_tasks: List[str] = []
+        action = "none"
+
+        # intent: DEC-003 — 末尾 task を優先して完全除外する
+        while len(working) > 1 and len(cls._build_bundled_responses(working)) > max_chars:
+            removed = working.pop()
+            dropped_tasks.append(str(removed.get("task_name", "")))
+            action = "task_drop"
+
+        text = cls._build_bundled_responses(working)
+        if len(text) <= max_chars:
+            return text, _metadata(
+                text=text,
+                truncated=True,
+                action=action,
+                dropped_tasks=dropped_tasks,
+            )
+
+        # 残った単一 task（または唯一の巨大 task）の回答本文を末尾から truncate
+        item = working[0]
+        header = cls._format_bundled_task_part(item, response_override="")
+        marker = cls._RESPONSE_TRUNCATE_MARKER
+        available = max_chars - len(header) - len(marker)
+        if available < 0:
+            available = 0
+        original_response = str(item.get("response", ""))
+        truncated_body = original_response[:available]
+        if len(original_response) > available:
+            truncated_body = truncated_body + marker
+        text = cls._format_bundled_task_part(item, response_override=truncated_body)
+        # 万一 header 自体が予算超過でも、強制的に max_chars で切る（見出し維持を優先しつつ破綻回避）
+        if len(text) > max_chars:
+            text = text[:max_chars]
+        action = "response_truncate"
+        return text, _metadata(
+            text=text,
+            truncated=True,
+            action=action,
+            dropped_tasks=dropped_tasks,
+        )
 
     def _build_judge_user_prompt(
         self,

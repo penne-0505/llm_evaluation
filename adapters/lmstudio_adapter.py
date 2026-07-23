@@ -254,6 +254,11 @@ class LMStudioAdapter(LLMAdapter):
             return None
 
     def is_reasoning_opt_in(self, model: str) -> bool:
+        """capabilities.reasoning.default が off のときのみ True。
+
+        default が on、または capability なしの場合は False。
+        False のとき engine は reasoning.effort を送らず、LM Studio 側デフォルトに委ねる。
+        """
         models = self._fetch_models_cache()
         if models is None:
             return False

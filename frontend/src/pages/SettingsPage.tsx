@@ -1035,10 +1035,26 @@ function ModelSelectionSection() {
 
 /* ===================== HOLISTIC SECTION ===================== */
 function HolisticSection() {
-    const { runHolistic, setRunHolistic } = useSettingsStore();
+    const {
+        runHolistic,
+        setRunHolistic,
+        availableModels,
+        holisticJudgeModelIds,
+        toggleHolisticJudgeModel,
+        freeTextHolisticJudges,
+        addFreeTextHolisticJudge,
+        removeFreeTextHolisticJudge,
+    } = useSettingsStore();
+    const [holisticJudgeOpen, setHolisticJudgeOpen] = useState(false);
+    const [holisticJudgeInput, setHolisticJudgeInput] = useState('');
+    const hasCatalogModels = availableModels.length > 0;
+    const holisticJudgeCount = holisticJudgeModelIds.length + freeTextHolisticJudges.length;
+    const holisticJudgeLabel = holisticJudgeModelIds.length > 0
+        ? `${holisticJudgeModelIds.length}件選択中`
+        : '';
 
     return (
-        <section className="space-y-3 animate-fade-up stagger-5">
+        <section className={`space-y-3 animate-fade-up stagger-5 relative ${holisticJudgeOpen ? 'z-50' : 'z-0'}`}>
             <h2 className="section-label">包括評価</h2>
             <button
                 onClick={() => setRunHolistic(!runHolistic)}
@@ -1054,6 +1070,88 @@ function HolisticSection() {
                     </div>
                 </div>
             </button>
+
+            {runHolistic && (
+                <div className="card p-4 space-y-2 accent-bar-ice">
+                    <label className="section-label text-[9px]">
+                        包括評価モデル
+                        <span className="ml-1.5 font-mono text-text-tertiary">
+                            ({holisticJudgeCount || '通常と同じ'})
+                        </span>
+                    </label>
+                    <p className="text-[11px] text-text-tertiary leading-5">
+                        未選択時は通常の評価モデルと同じセットを使います。Strict Mode でもここは自由に選べます。
+                    </p>
+                    {hasCatalogModels ? (
+                        <div className="space-y-2">
+                            <ModelPicker
+                                availableModels={availableModels}
+                                open={holisticJudgeOpen}
+                                onOpenChange={setHolisticJudgeOpen}
+                                placeholder="包括評価モデルを選択（任意）"
+                                selectedLabel={holisticJudgeLabel}
+                                onSelect={(id) => toggleHolisticJudgeModel(id)}
+                                isSelected={(id) => holisticJudgeModelIds.includes(id)}
+                                multi
+                            />
+                            {holisticJudgeModelIds.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {holisticJudgeModelIds.map((id) => {
+                                        const model = availableModels.find((m) => m.id === id);
+                                        const label = model?.name || id;
+                                        return (
+                                            <Button
+                                                key={id}
+                                                onClick={() => toggleHolisticJudgeModel(id)}
+                                                className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber hover:text-score-low transition-colors duration-150"
+                                            >
+                                                <span>{label}</span>
+                                                <X size={10} />
+                                            </Button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-1.5">
+                            <div className="flex gap-2">
+                                <input
+                                    value={holisticJudgeInput}
+                                    onChange={(e) => setHolisticJudgeInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            addFreeTextHolisticJudge(holisticJudgeInput);
+                                            setHolisticJudgeInput('');
+                                        }
+                                    }}
+                                    placeholder="例: claude-3.5-sonnet（任意）"
+                                    className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
+                                />
+                                <Button
+                                    onClick={() => {
+                                        addFreeTextHolisticJudge(holisticJudgeInput);
+                                        setHolisticJudgeInput('');
+                                    }}
+                                    className="px-2.5 py-1.5 bg-amber text-bg rounded hover:bg-amber-hover transition-colors duration-150"
+                                >
+                                    <Plus size={14} />
+                                </Button>
+                            </div>
+                            {freeTextHolisticJudges.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                    {freeTextHolisticJudges.map((j) => (
+                                        <span key={j} className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber">
+                                            {j}
+                                            <Button onClick={() => removeFreeTextHolisticJudge(j)} className="hover:text-score-low"><X size={10} /></Button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </section>
     );
 }
@@ -1100,14 +1198,39 @@ function ParallelSection() {
 }
 
 function EvalParamsSection() {
-    const { evaluationMode, strictPreset, evalParams, setJudgeRunCount, setSubjectTemperature } = useSettingsStore();
+    const {
+        evaluationMode,
+        strictPreset,
+        evalParams,
+        setJudgeRunCount,
+        setSubjectRunCount,
+        setSubjectTemperature,
+    } = useSettingsStore();
     const isStrict = evaluationMode === 'strict' && !!strictPreset;
 
     return (
         <section className="space-y-3 animate-fade-up stagger-5">
             <h2 className="section-label">パラメータ</h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+                <div className="card p-4 space-y-2 accent-bar-amber">
+                    <label className="text-[11px] font-medium text-text-secondary">被験回数</label>
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="range" min={1} max={5}
+                            value={evalParams.subjectRunCount}
+                            onChange={(e) => setSubjectRunCount(Number(e.target.value))}
+                            className="flex-1 accent-amber h-1"
+                        />
+                        <span className="data-display text-lg text-text-primary w-6 text-center">
+                            {evalParams.subjectRunCount}
+                        </span>
+                    </div>
+                    <p className="text-[11px] text-text-tertiary">
+                        被験モデルの実行回数（1-5）。複数回は1回の judge 入力に束ねます
+                    </p>
+                </div>
+
                 <div className="card p-4 space-y-2 accent-bar-amber">
                     <label className="text-[11px] font-medium text-text-secondary">評価回数</label>
                     <div className="flex items-center gap-3">

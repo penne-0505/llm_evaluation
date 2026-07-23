@@ -1,8 +1,9 @@
 """LLMアダプタの基底クラスと例外定義"""
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class LLMError(Exception):
@@ -15,6 +16,30 @@ class NativeToolsNotSupportedError(LLMError):
     """モデルまたはアダプタがネイティブtool callingに非対応"""
 
     pass
+
+
+# intent: DEC-003 (Core/openai-judge-thinking) — shared strip for parse safety
+_THINKING_TAG_RE = re.compile(
+    r"<thinking\b[^>]*>(.*?)</thinking>",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def strip_thinking_tags(text: str) -> Tuple[str, Optional[str]]:
+    """content から <thinking> ブロックを除去し、(cleaned, extracted) を返す。"""
+    if not text:
+        return text, None
+    extracted_parts: List[str] = []
+
+    def _collect(match: re.Match[str]) -> str:
+        body = (match.group(1) or "").strip()
+        if body:
+            extracted_parts.append(body)
+        return ""
+
+    cleaned = _THINKING_TAG_RE.sub(_collect, text).strip()
+    extracted = "\n\n".join(extracted_parts) if extracted_parts else None
+    return cleaned, extracted
 
 
 @dataclass
@@ -45,6 +70,9 @@ class UsageMetrics:
 class CompletionResult:
     text: str
     usage: UsageMetrics | None = None
+    # intent: DEC-004 (Core/openai-judge-thinking) — provider-agnostic optional
+    # so Feat-38 can reuse the same engine/frontend contract
+    api_reasoning: str | None = None
 
 
 @dataclass

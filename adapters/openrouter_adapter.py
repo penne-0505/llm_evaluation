@@ -3,7 +3,7 @@
 import json
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from openai import OpenAI, OpenAIError
@@ -16,7 +16,90 @@ from .base import (
     NativeToolCall,
     NativeToolsNotSupportedError,
     UsageMetrics,
+    strip_thinking_tags,
 )
+
+
+def _coerce_message_field(message: Any, name: str) -> Any:
+    if message is None:
+        return None
+    if isinstance(message, dict):
+        return message.get(name)
+    value = getattr(message, name, None)
+    if value is not None:
+        return value
+    model_extra = getattr(message, "model_extra", None)
+    if isinstance(model_extra, dict):
+        return model_extra.get(name)
+    return None
+
+
+# intent: DEC-001 (Core/claude-gemini-judge-thinking) — Anthropic native leaks
+# may use `thinking`; OpenRouter CC uses text/summary (same keys as OpenAI path).
+_REASONING_DETAIL_TEXT_KEYS = ("text", "summary", "content", "reasoning", "thinking")
+
+
+def _format_reasoning_details(details: Any) -> Optional[str]:
+    if not details:
+        return None
+    if isinstance(details, str):
+        return details.strip() or None
+
+    texts: List[str] = []
+    items = details if isinstance(details, list) else [details]
+    for item in items:
+        if isinstance(item, str):
+            if item.strip():
+                texts.append(item.strip())
+            continue
+        if isinstance(item, dict):
+            for key in _REASONING_DETAIL_TEXT_KEYS:
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    texts.append(value.strip())
+                    break
+            continue
+        for key in _REASONING_DETAIL_TEXT_KEYS:
+            value = getattr(item, key, None)
+            if isinstance(value, str) and value.strip():
+                texts.append(value.strip())
+                break
+    if texts:
+        return "\n\n".join(texts)
+    try:
+        serialized = json.dumps(details, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        serialized = str(details)
+    return serialized.strip() or None
+
+
+def extract_api_reasoning_from_message(
+    message: Any, content: str
+) -> Tuple[str, Optional[str]]:
+    """
+    Chat Completions message から API thinking を抽出し、パース用 text を正規化する。
+
+    intent: DEC-002 / DEC-003 (Core/openai-judge-thinking) — CC fields first,
+    <thinking> tag fallback only when fields are empty; always strip tags for parse.
+    intent: DEC-001 (Core/claude-gemini-judge-thinking) — same helper for Anthropic /
+    Gemini via OpenRouter-normalized reasoning / reasoning_details (no native SDK).
+    """
+    cleaned_content, tag_reasoning = strip_thinking_tags(content or "")
+
+    reasoning = _coerce_message_field(message, "reasoning")
+    api_reasoning: Optional[str] = None
+    if isinstance(reasoning, str) and reasoning.strip():
+        api_reasoning = reasoning.strip()
+    else:
+        details = _coerce_message_field(message, "reasoning_details")
+        if isinstance(details, (list, dict, str)):
+            api_reasoning = _format_reasoning_details(details)
+
+    # intent: DEC-003 — tag extract only when normalized CC fields are empty
+    if not api_reasoning:
+        api_reasoning = tag_reasoning
+
+    return cleaned_content, api_reasoning
 
 
 class OpenRouterAdapter(LLMAdapter):
@@ -140,9 +223,16 @@ class OpenRouterAdapter(LLMAdapter):
             response = self._client.chat.completions.create(**kwargs)
             duration_ms = int((time.perf_counter() - start) * 1000)
 
+            message = response.choices[0].message
+            raw_content = message.content or ""
+            # intent: DEC-002 (Core/openai-judge-thinking) — stay on Chat Completions;
+            # extract message.reasoning / reasoning_details (Responses API deferred)
+            text, api_reasoning = extract_api_reasoning_from_message(
+                message, raw_content
+            )
             usage = getattr(response, "usage", None)
             return CompletionResult(
-                text=response.choices[0].message.content or "",
+                text=text,
                 usage=UsageMetrics(
                     provider=self.PROVIDER,
                     model=model,
@@ -153,6 +243,7 @@ class OpenRouterAdapter(LLMAdapter):
                 )
                 if usage is not None
                 else None,
+                api_reasoning=api_reasoning,
             )
 
         except OpenAIError as e:

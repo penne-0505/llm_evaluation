@@ -9,6 +9,7 @@ import {
 const initialConfig = {
     subjectModel: 'openrouter/subject',
     judgeModels: ['openrouter/judge'],
+    holisticJudgeModels: [],
     taskSelections: { '01': true, '02': false },
     runHolistic: false,
     judgeRunCount: 4,

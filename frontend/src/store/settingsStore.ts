@@ -51,6 +51,13 @@ interface SettingsState {
     addFreeTextJudge: (v: string) => void;
     removeFreeTextJudge: (v: string) => void;
 
+    // Holistic judge models (empty = fallback to judgeModelIds)
+    holisticJudgeModelIds: string[];
+    freeTextHolisticJudges: string[];
+    toggleHolisticJudgeModel: (id: string) => void;
+    addFreeTextHolisticJudge: (v: string) => void;
+    removeFreeTextHolisticJudge: (v: string) => void;
+
     // Parameters
     evaluationMode: EvaluationMode;
     strictPreset: StrictModePreset | null;
@@ -59,6 +66,7 @@ interface SettingsState {
     refreshStrictPreset: () => Promise<void>;
     evalParams: EvalParams;
     setJudgeRunCount: (n: number) => void;
+    setSubjectRunCount: (n: number) => void;
     setSubjectTemperature: (t: number) => void;
 
     // Tasks
@@ -75,6 +83,10 @@ interface SettingsState {
     // Holistic
     runHolistic: boolean;
     setRunHolistic: (v: boolean) => void;
+
+    // Exclude unreliable judges from hero average
+    excludeUnreliableJudges: boolean;
+    setExcludeUnreliableJudges: (v: boolean) => void;
 
     // Parallel execution
     subjectParallel: boolean;
@@ -204,6 +216,30 @@ export const useSettingsStore = create<SettingsState>()(
                 set((s) => ({ freeTextJudges: s.freeTextJudges.filter((x) => x !== v) }));
             },
 
+            // --- Holistic judges (DEC-005: not locked by strict mode) ---
+            holisticJudgeModelIds: [],
+            freeTextHolisticJudges: [],
+            toggleHolisticJudgeModel: (id) => {
+                const ids = get().holisticJudgeModelIds;
+                set({
+                    holisticJudgeModelIds: ids.includes(id)
+                        ? ids.filter((x) => x !== id)
+                        : [...ids, id],
+                });
+            },
+            addFreeTextHolisticJudge: (v) => {
+                if (v.trim() && !get().freeTextHolisticJudges.includes(v.trim())) {
+                    set((s) => ({
+                        freeTextHolisticJudges: [...s.freeTextHolisticJudges, v.trim()],
+                    }));
+                }
+            },
+            removeFreeTextHolisticJudge: (v) => {
+                set((s) => ({
+                    freeTextHolisticJudges: s.freeTextHolisticJudges.filter((x) => x !== v),
+                }));
+            },
+
             // --- Parameters ---
             evaluationMode: 'standard',
             strictPreset: null,
@@ -254,6 +290,7 @@ export const useSettingsStore = create<SettingsState>()(
             },
             evalParams: {
                 judgeRunCount: 3,
+                subjectRunCount: 1,
                 subjectTemperature: 0.7,
                 judgeTemperature: 0.0,
             },
@@ -261,6 +298,13 @@ export const useSettingsStore = create<SettingsState>()(
                 evalParams: {
                     ...s.evalParams,
                     judgeRunCount: s.evaluationMode === 'strict' && s.strictPreset ? s.strictPreset.judgeRuns : n,
+                },
+            })),
+            setSubjectRunCount: (n) => set((s) => ({
+                evalParams: {
+                    ...s.evalParams,
+                    // intent: DEC-005 — clamp 1–5（strict でも独立ノブ）
+                    subjectRunCount: Math.min(5, Math.max(1, Math.round(n))),
                 },
             })),
             setSubjectTemperature: (t) => set((s) => ({
@@ -306,6 +350,11 @@ export const useSettingsStore = create<SettingsState>()(
             runHolistic: true,
             setRunHolistic: (v) => set({ runHolistic: v }),
 
+            // --- Exclude unreliable judges ---
+            // intent: DEC-003 (Core/exclude-unreliable-judges) — default OFF
+            excludeUnreliableJudges: false,
+            setExcludeUnreliableJudges: (v) => set({ excludeUnreliableJudges: v }),
+
             // --- Parallel execution ---
             subjectParallel: true,
             judgeParallel: true,
@@ -333,10 +382,14 @@ export const useSettingsStore = create<SettingsState>()(
                         judgeModelIds: state.judgeModelIds,
                         freeTextSubject: state.freeTextSubject,
                         freeTextJudges: state.freeTextJudges,
+                        holisticJudgeModelIds: state.holisticJudgeModelIds,
+                        freeTextHolisticJudges: state.freeTextHolisticJudges,
                         tasks: state.tasks,
                         selectedTaskIds: state.selectedTaskIds,
                         runHolistic: state.runHolistic,
+                        excludeUnreliableJudges: state.excludeUnreliableJudges,
                         judgeRunCount: state.evalParams.judgeRunCount,
+                        subjectRunCount: state.evalParams.subjectRunCount,
                         subjectTemperature: state.evalParams.subjectTemperature,
                     }),
                 );
@@ -354,10 +407,14 @@ export const useSettingsStore = create<SettingsState>()(
                     judgeModelIds: state.judgeModelIds,
                     freeTextSubject: state.freeTextSubject,
                     freeTextJudges: state.freeTextJudges,
+                    holisticJudgeModelIds: state.holisticJudgeModelIds,
+                    freeTextHolisticJudges: state.freeTextHolisticJudges,
                     tasks: state.tasks,
                     selectedTaskIds: state.selectedTaskIds,
                     runHolistic: state.runHolistic,
+                    excludeUnreliableJudges: state.excludeUnreliableJudges,
                     judgeRunCount: state.evalParams.judgeRunCount,
+                    subjectRunCount: state.evalParams.subjectRunCount,
                     subjectTemperature: state.evalParams.subjectTemperature,
                 });
                 set((current) => ({
@@ -409,11 +466,15 @@ export const useSettingsStore = create<SettingsState>()(
                     judgeModelIds: resolved.judgeModelIds,
                     freeTextSubject: resolved.freeTextSubject,
                     freeTextJudges: resolved.freeTextJudges,
+                    holisticJudgeModelIds: resolved.holisticJudgeModelIds,
+                    freeTextHolisticJudges: resolved.freeTextHolisticJudges,
                     selectedTaskIds: resolved.selectedTaskIds,
                     runHolistic: resolved.runHolistic,
+                    excludeUnreliableJudges: resolved.excludeUnreliableJudges,
                     evalParams: {
                         ...current.evalParams,
                         judgeRunCount: resolved.judgeRunCount,
+                        subjectRunCount: resolved.subjectRunCount,
                         subjectTemperature: resolved.subjectTemperature,
                     },
                 }));
@@ -433,15 +494,34 @@ export const useSettingsStore = create<SettingsState>()(
                 judgeModelIds: state.judgeModelIds,
                 freeTextSubject: state.freeTextSubject,
                 freeTextJudges: state.freeTextJudges,
+                holisticJudgeModelIds: state.holisticJudgeModelIds,
+                freeTextHolisticJudges: state.freeTextHolisticJudges,
                 evaluationMode: state.evaluationMode,
                 evalParams: state.evalParams,
                 selectedTaskIds: state.selectedTaskIds,
                 taskToolModeOverrides: state.taskToolModeOverrides,
                 runHolistic: state.runHolistic,
+                excludeUnreliableJudges: state.excludeUnreliableJudges,
                 subjectParallel: state.subjectParallel,
                 judgeParallel: state.judgeParallel,
                 executionPresets: state.executionPresets,
             }),
+            merge: (persisted, current) => {
+                const p = (persisted || {}) as Partial<SettingsState>;
+                const evalParams = {
+                    ...current.evalParams,
+                    ...(p.evalParams || {}),
+                    subjectRunCount: Math.min(
+                        5,
+                        Math.max(1, Math.round(p.evalParams?.subjectRunCount ?? 1)),
+                    ),
+                };
+                return {
+                    ...current,
+                    ...p,
+                    evalParams,
+                };
+            },
         }
     )
 );
