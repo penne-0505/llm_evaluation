@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 60` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 62` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -362,6 +362,36 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 ---
 
 ## Ready
+
+### UI-Feat-61: [Feat] Run presence observation on active evaluation cards
+
+- **Title**: [Feat] Run presence observation on active evaluation cards
+- **ID**: UI-Feat-61
+- **Priority**: P2
+- **Size**: M
+- **Risk**: Medium
+- **Area**: UI
+- **Dependencies**: []
+- **Goal**: 実行中の active 評価まわりに、緊張（滞留）と変化の向き（直近差分）の二チャンネル観察層を置き、異常時だけ数値で割込み、途中点や raw ログなしで待ちの観察体験を成立させる。
+- **Acceptance Criteria**:
+  - AC-001: active な評価カードに緊張ステージが滞留時間に応じて変わり、score-low 色相や opacity 点滅の高速化へ寄せて点の良し悪し／障害を暗示しない。
+  - AC-002: 採点確定の拍で rising / falling / unsettled のいずれかが専用 motif 上に短く表現され、具体点・暫定平均・絶対帯ラベルは出ない。カード全体は平行移動しない。
+  - AC-003: 実行失敗と、settled における 0 点過半（または Intent で許した同等閾値）のときだけ数値付きの率直表示が出る。
+  - AC-004: subject フェーズでは変化の向きが発動せず緊張のみである。
+  - AC-005: `prefers-reduced-motion` で連続アニメに依存せず、静的な密度／向き表示へ落ちる。
+  - AC-006: 既存の進行ボード lane 集計、ETA、包括評価 dedicated 表示を壊さない。
+- **Steps**:
+  1. [ ] progress SSE に内部用採点シグナルと緊張用開始時刻を additive で載せる
+  2. [ ] 緊張 / 向き / 異常の helper を実装し、生スコアを表示経路から隔離する
+  3. [ ] ActiveTaskCard に inset/segment 緊張・専用 motif 拍・異常割込みを接続し、CSS 変数 transition / motion / reduced-motion を追加する
+  4. [ ] helper / store / snapshot テストと Manual QA を実施し verification を残す
+- **Description**:
+  - Context: 進行ボードは状態一覧として機能するが API 待ちが静止する。観察目的の presence を局所に置く。楽しさは質であり暇つぶし目的化しない。
+  - Notes: Plan の Expression Technique（自己レビュー反映）と Intent DEC-001..005。緊張はばね圧縮、向きは専用 motif、点滅高速化とカード translate は禁止。
+- **Plan**: `_docs/plan/UI/run-presence-observation/plan.md`
+- **Intent**: `_docs/intent/UI/run-presence-observation/decision.md`
+- **QA**: `_docs/qa/UI/run-presence-observation/test-plan.md`
+- **Verification**: None
 
 ## In Progress
 
