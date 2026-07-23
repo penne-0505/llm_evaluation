@@ -305,38 +305,22 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - `run_holistic_task` で `TaskResult` を生成する際に `subject_prompt` が渡されていない（デフォルト空文字）。通常タスクとの一貫性のために、明示的に渡すか意図をコメントで残すべき。
 - ChatGPT（OpenAI）をjudgeモデルに指定した場合、reasoning/thinking過程をAPI経由で取得・表示する機能を実装する。Chat Completions APIではreasoningトークンは不可視なので、Responses APIへの移行や、プロンプトレベルでの`<thinking>`タグ指示による抽出を検討する。
 - Claude（Anthropic）、Gemini（Google）をjudgeモデルに指定した場合でも、同様にreasoning/thinking過程をAPI経由で取得・表示できるかを調査・修正する。AnthropicはMessages APIの`thinking`ブロックで取得可能だが、現状のアダプターでは抽出していない。Geminiについては要調査。
+- ダッシュボード画面で、strictと非strictのグラフを分けたい。
+- 複数judge試行時のばらつきを、ページ下部の注意表示だけではなく各タスクの箇所にも出したい。自己申告の信頼度表示しかないせいで現状では混同リスクもある
+- 時間ROIが適切に出せていないかもしれない。また、総所要時間ではなく、各タスクにおいて被験およびjudgeの所要時間を記録し、それをそれぞれ合算して提示すべき。適切な計算ができていないリスク+並列でも待機時間が生じると、純粋な時間ROIが算出できない。
+- 結果画面においてtool利用履歴が見れない。使用がない場合でも、tool定義があるタスクについては"使われなかった"をUIで明示的に見せるべき
+- ばらつきが大きすぎる,多すぎる,自己申告低信頼が多すぎる,他judgeモデルとの採点が乖離しすぎている場合に、judgeモデル自身の信頼性を疑い、総合得点の計算に含めないモードを追加する。包括評価とかみたいなtoggleで切り替えたい
+- 被験を複数回実行,まとめてjudgeに渡すことができるようにしたい
+- ローカルモデルが被験の時effortどうなってる？highで渡っているのか、渡せないと判定して何もせずに渡しているのか。reasoning自体はONになっている、もしくはLM Studio側のモデルデフォルト設定が採用されているように見えるがどうなのか
+- 包括評価だけ別judgeモデルを使えるように？
+- プリセット別でフィルタできるように(ダッシュボード)。色もプリセットごとで変えるか？
+
 
 ---
 
 ## Backlog
 
-### UI-Bug-33: [Bug] Align bundled UI font contract with shipped assets
-
-- **Title**: [Bug] Align bundled UI font contract with shipped assets
-- **ID**: UI-Bug-33
-- **Priority**: P2
-- **Size**: S
-- **Risk**: Low
-- **Area**: UI
-- **Dependencies**: []
-- **Goal**: UI fontのCSS、配布資産、READMEの説明が一致し、frontend buildで未解決font warningが出ない。
-- **Acceptance Criteria**:
-  - AC-001: `frontend/src/index.css`が参照するfont fileが配布物に存在するか、存在しない参照がfallback contractへ置き換えられる。
-  - AC-002: READMEの同梱・外部依存に関する説明が実際の配布資産と一致する。
-  - AC-003: `npm run build --prefix frontend`がfont未解決warningなしで成功する。
-  - AC-004: font assetを変更する場合、対応licenseが配布物に保持される。
-  - AC-005: regression checkがCSSのfont参照とtracked assetの不一致を検出する。
-- **Steps**:
-  1. [ ] UDEV Gothic本体を復元するか、system fallbackを正式採用するか決定する。
-  2. [ ] CSS、asset、READMEを同じcontractへ更新する。
-  3. [ ] frontend buildと配布bundleを検証する。
-- **Description**:
-  - Context: READMEはUDEV Gothicのlocal同梱を記載するが、tracked fileはlicenseのみで、Vite buildはRegular/Bold TTFの未解決warningを出す。
-  - Notes: docs cleanupとはUI資産判断を分離し、legacy docsのstrict migrationを妨げない。
-- **Plan**: None
-- **Intent**: None
-- **QA**: None
-- **Verification**: None
+- (empty)
 
 ---
 
@@ -344,33 +328,11 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 - (empty)
 
+
 ---
 
 ## In Progress
 
-### Core-Enhance-31: [Enhance] Expose holistic evaluation progress in the run board
+- (empty)
 
-- **Title**: [Enhance] Expose holistic evaluation progress in the run board
-- **ID**: Core-Enhance-31
-- **Priority**: P1
-- **Size**: M
-- **Risk**: Medium
-- **Area**: Core
-- **Dependencies**: []
-- **Goal**: 包括評価を有効にした実行で、通常タスクの進捗と混同せずに開始・進行・完了を Run 画面で確認でき、送信タスク ID は画面の canonical 順に保たれる。
-- **Acceptance Criteria**:
-  - AC-001: backend は包括評価の開始・各タスクの進行・完了を専用 SSE event として送信し、通常タスクの lane 集計へ包括タスクを混在させない。
-  - AC-002: frontend は専用 event を型安全に store へ反映し、Run 画面で包括評価の段階・件数・現在のメッセージを通常 lane と別に表示する。
-  - AC-003: RunPage が backend へ送る `selectedTaskIds` は画面 `tasks` の canonical 順で `selectedTasks.map(...)` から構築され、選択状態由来の順序・未知 ID・重複に左右されない。
-- **Steps**:
-  1. [x] 現行 SSE / Run store / RunPage の進捗経路と選択 ID の送信経路を確認する。
-  2. [x] Plan / Intent / QA test-plan を作成する。
-  3. [x] backend / frontend の専用包括進捗経路と canonical task-ID 正規化を実装する。
-  4. [ ] `run_holistic=true/false` の live Run 画面で専用 card の lifecycle を確認し、PARTIAL verification を PASS へ更新する。
-- **Description**:
-  - Context: 現行の包括評価は通常 `progress` snapshot の `task_states` へ追加されるため、Run 画面の通常 task lane と完了件数が包括評価を明示せずに増加する。
-  - Notes: 実行プロトコルを変えず、SSE の dedicated event と store の derived display state で観測可能性を追加する。通常 task の選択 canonicalization は UI boundary で行う。通常状態の Run 画面は実ブラウザで確認済みだが、provider を呼び出す live holistic run は未実施である。
-- **Plan**: _docs/plan/Core/holistic-run-progress/plan.md
-- **Intent**: _docs/intent/Core/holistic-run-progress/decision.md
-- **QA**: _docs/qa/Core/holistic-run-progress/test-plan.md
-- **Verification**: _docs/qa/Core/holistic-run-progress/verification.md
+

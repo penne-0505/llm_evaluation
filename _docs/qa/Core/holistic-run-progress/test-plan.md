@@ -6,7 +6,7 @@ qa_schema: 2
 qa_status: planned
 risk: Medium
 created_at: 2026-07-22
-updated_at: 2026-07-22
+updated_at: 2026-07-23
 references:
   - "_docs/plan/Core/holistic-run-progress/plan.md"
   - "_docs/intent/Core/holistic-run-progress/decision.md"
@@ -67,16 +67,16 @@ None
 
 ## Manual QA Checklist
 
-- [ ] `run_holistic=true` で通常 task の完了後に dedicated 「包括評価」表示が開始する。
-- [ ] 包括 task の進行中、通常 lane の完了・実行中・待機中件数が変わらない。
-- [ ] 包括評価完了時に total と completed が一致し、最後のメッセージが読める。
-- [ ] `run_holistic=false` では dedicated card が表示されない。
+- [x] `run_holistic=true` で通常 task の完了後に dedicated 「包括評価」表示が開始する。
+- [x] 包括 task の進行中、通常 lane の完了・実行中・待機中件数が変わらない。
+- [x] 包括評価完了時に total と completed が一致し、最後のメッセージが読める。
+- [x] `run_holistic=false` では dedicated card が表示されない。
 
 ## Regression Checklist
 
-- [ ] standard-only run の SSE progress と lane 表示が従来どおりである。
+- [x] standard-only run の SSE progress と lane 表示が従来どおりである。
 - [ ] cancel / error event が既存 status 遷移を維持する。
-- [ ] strict mode でも canonical task ID list が backend request に渡る。
+- [x] strict mode でも canonical task ID list が backend request に渡る。
 
 ## Out of Scope
 
