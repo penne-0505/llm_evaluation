@@ -166,6 +166,10 @@ class BenchmarkEngine:
     _CHARS_PER_TOKEN = 4
     _DEFAULT_CONTEXT_LIMIT_TOKENS = 32_768
     _JUDGE_OUTPUT_RESERVE_TOKENS = 4096
+    # subject の completion 上限。reasoning 既定 ON では thinking と visible content が共有するため、
+    # 4096 だと content 空のまま打ち切られることがある。16384 は目標長ではなく打ち切り緩和。
+    # judge の 4096 は採点 JSON 用で別予算（本定数の対象外）。
+    _SUBJECT_MAX_OUTPUT_TOKENS = 16384
     _CONTEXT_SAFETY_MARGIN_RATIO = 0.05
     _RESPONSE_TRUNCATE_MARKER = "\n...[truncated]"
     # より具体的な識別子を先に置く（部分一致）
@@ -497,7 +501,7 @@ class BenchmarkEngine:
                 messages,
                 tools_schema,
                 temperature,
-                4096,
+                self._SUBJECT_MAX_OUTPUT_TOKENS,
                 extra_params,
             )
             usage_records.append(
@@ -655,7 +659,7 @@ class BenchmarkEngine:
             "",
             user_prompt,
             temperature,
-            4096,
+            self._SUBJECT_MAX_OUTPUT_TOKENS,
             extra_params,
         )
 

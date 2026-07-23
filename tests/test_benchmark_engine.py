@@ -108,7 +108,9 @@ class _NativeToolLoopAdapter(_StubAdapter):
         extra_params=None,
     ):
         self.native_call_count += 1
-        self.native_calls.append({"extra_params": extra_params})
+        self.native_calls.append(
+            {"extra_params": extra_params, "max_tokens": max_tokens}
+        )
         if self._native_responses:
             result = self._native_responses.pop(0)
         else:
@@ -146,6 +148,112 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             subject_adapter.calls[0]["extra_params"],
             {"reasoning": {"effort": "high"}},
         )
+
+    async def test_subject_max_tokens_is_16384(self):
+        subject_adapter = _StubAdapter(["subject-response"])
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="local-model",
+            judge_adapters={},
+            judge_runs=1,
+        )
+
+        await engine.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+
+        self.assertEqual(
+            subject_adapter.calls[0]["max_tokens"],
+            BenchmarkEngine._SUBJECT_MAX_OUTPUT_TOKENS,
+        )
+        self.assertEqual(subject_adapter.calls[0]["max_tokens"], 16384)
+
+    async def test_subject_native_tools_max_tokens_is_16384(self):
+        subject_adapter = _NativeToolLoopAdapter(
+            native_responses=[
+                NativeCompletionResult(content="done", tool_calls=[]),
+            ],
+            final_responses=[],
+        )
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="tool-model",
+            judge_adapters={},
+            judge_runs=1,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_path = Path(tmp) / "fixture.json"
+            fixture_path.write_text(
+                json.dumps(
+                    {
+                        "query_snapshots": [],
+                        "documents": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            await engine.run_task(
+                task_name="08",
+                task_type="fact",
+                input_prompt="prompt",
+                rubric_content="rubric",
+                system_prompt="system",
+                subject_tools={
+                    "enabled_tools": ["web_search", "fetch_webpage"],
+                    "fixture_path": str(fixture_path),
+                    "max_steps": 1,
+                    "tool_mode": "native",
+                },
+            )
+
+        self.assertEqual(subject_adapter.native_call_count, 1)
+        self.assertEqual(
+            subject_adapter.native_calls[0]["max_tokens"],
+            BenchmarkEngine._SUBJECT_MAX_OUTPUT_TOKENS,
+        )
+        self.assertEqual(subject_adapter.native_calls[0]["max_tokens"], 16384)
+
+    async def test_judge_max_tokens_remains_4096(self):
+        valid_response = json.dumps(
+            {
+                "task_name": "test",
+                "task_type": "fact",
+                "score": {
+                    "logic_and_fact": 60,
+                    "constraint_adherence": 30,
+                    "helpfulness_and_creativity": 10,
+                },
+                "total_score": 100,
+                "confidence": "high",
+            }
+        )
+        subject_adapter = _StubAdapter(["subject-response"])
+        judge_adapter = _StubAdapter([valid_response])
+        engine = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="gpt-4o",
+            judge_adapters={"judge-model": judge_adapter},
+            judge_runs=1,
+            max_parallel_runs_per_judge=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+
+        await engine.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+
+        self.assertEqual(judge_adapter.calls[0]["max_tokens"], 4096)
 
     async def test_fail_fast_skips_remaining_runs_after_threshold(self):
         subject_adapter = _StubAdapter(["subject-response"])
