@@ -3,7 +3,7 @@ title: "Reference: Time ROI and task timing"
 status: active
 draft_status: n/a
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
   - "_docs/intent/Core/time-roi-task-timing/decision.md"
   - "_docs/intent/Core/task-duration-eta/decision.md"
@@ -25,11 +25,14 @@ related_prs: []
 
 Holistic tasks are excluded from `timing_summary` (DEC-004).
 
-## Time ROI denominator
+## Time ROI
 
-- Definition: average score / (processing seconds), where processing seconds come from
-  `timing_summary.total_duration_ms` (or the subject / judge slice on CostSection tabs).
-- Shared frontend helpers: `frontend/src/lib/timeRoi.ts`.
+- **Formula (DEC-005)**: `(averageScore × taskCount) / (processing_ms / 60000)` → **点/分**
+- Processing minutes come from `timing_summary.total_duration_ms` (or the subject / judge
+  slice on CostSection tabs). Denominator rules: DEC-001 / DEC-003 / DEC-004.
+- Shared frontend helpers: `frontend/src/lib/timeRoi.ts` (`runScoreSum`, `computeTimeRoi`,
+  `formatTimeRoi`).
+- Dashboard aggregates timed runs as `Σ(averageScore×taskCount) / Σ(processing_ms)`.
 - Legacy runs without `task_timing` / `timing_summary`: time ROI is **N/A** (no silent
   wall-clock fallback).
 

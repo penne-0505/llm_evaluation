@@ -4,16 +4,10 @@ export function formatDurationMs(ms: number | null | undefined): string {
     if (ms == null || !Number.isFinite(ms) || ms < 0) {
         return 'N/A';
     }
-    if (ms < 1000) {
-        return `${Math.round(ms)}ms`;
-    }
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    if (minutes <= 0) {
-        return `${seconds}s`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
 }
 
 /** intent: DEC-003 (Core/task-duration-eta) — never present a bare number as a certainty. */

@@ -8,7 +8,7 @@
 import type { EvaluationRun } from '../types';
 import { isHeroScoreAvailable } from './judgeReliability';
 import { mean, stddev } from './stats';
-import { runProcessingDurationMs } from './timeRoi';
+import { runProcessingDurationMs, runScoreSum } from './timeRoi';
 
 const UNCLASSIFIED_PRESET_ID = '__unclassified__';
 
@@ -23,6 +23,10 @@ export type ModelAggregate = {
     latest: string;
     avgCostPer1m?: number;
     avgExecutionTimeMs?: number;
+    /** Σ(averageScore × taskCount) over runs that also have processing timing (DEC-005). */
+    timeRoiScoreSum?: number;
+    /** Σ processing ms over the same runs as timeRoiScoreSum (DEC-005). */
+    timeRoiDurationMs?: number;
     /** Dominant preset among this model's runs (for color when filter is OFF). */
     dominantPresetId: string;
 };
@@ -62,6 +66,8 @@ export function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
             latest: string;
             costPer1m: number[];
             executionTimes: number[];
+            timeRoiScoreSum: number;
+            timeRoiDurationMs: number;
             runs: EvaluationRun[];
         }
     >();
@@ -74,6 +80,8 @@ export function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
             latest: '',
             costPer1m: [],
             executionTimes: [],
+            timeRoiScoreSum: 0,
+            timeRoiDurationMs: 0,
             runs: [],
         };
         if (isHeroScoreAvailable(run.averageScore)) {
@@ -95,6 +103,12 @@ export function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
         const processingMs = runProcessingDurationMs(run);
         if (typeof processingMs === 'number' && processingMs > 0) {
             entry.executionTimes.push(processingMs);
+        }
+        // intent: DEC-005 — Dashboard ROI uses Σscore / Σminutes across timed runs
+        const scoreSum = runScoreSum(run);
+        if (scoreSum !== undefined && processingMs !== undefined) {
+            entry.timeRoiScoreSum += scoreSum;
+            entry.timeRoiDurationMs += processingMs;
         }
         entry.runs.push(run);
         map.set(run.subjectModelId, entry);
@@ -128,6 +142,10 @@ export function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
                 entry.executionTimes.length > 0
                     ? Number(mean(entry.executionTimes).toFixed(0))
                     : undefined,
+            timeRoiScoreSum:
+                entry.timeRoiDurationMs > 0 ? entry.timeRoiScoreSum : undefined,
+            timeRoiDurationMs:
+                entry.timeRoiDurationMs > 0 ? entry.timeRoiDurationMs : undefined,
             dominantPresetId: dominantPresetId(entry.runs),
         }))
         .sort((a, b) => sortKey(b.avgScore) - sortKey(a.avgScore));

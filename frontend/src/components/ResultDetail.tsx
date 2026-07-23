@@ -26,6 +26,7 @@ import {
     computeTimeRoi,
     resolveTimeRoiDenominator,
     resolveTimingSummary,
+    runScoreSum,
 } from '../lib/timeRoi';
 import {
     computeJudgeSummaries,
@@ -422,12 +423,12 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                     <span className={`px-1.5 py-0 rounded text-[10px] font-medium ${TASK_TYPE_STYLE[tr.taskType]}`}>
                         {TASK_TYPE_LABELS[tr.taskType] || tr.taskType}
                     </span>
-                    {showToolUi && <ToolStatusBadge toolTrace={tr.toolTrace} hasSubjectTools={tr.hasSubjectTools} />}
                     {timingLabel && (
                         <span className="hidden sm:inline text-[10px] text-text-tertiary tabular-nums">
                             {timingLabel}
                         </span>
                     )}
+                    {showToolUi && <ToolStatusBadge toolTrace={tr.toolTrace} hasSubjectTools={tr.hasSubjectTools} />}
                 </div>
                 <div className="flex items-center gap-3">
                     {/* Mini scores + trial variance preview */}
@@ -438,18 +439,17 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                                 return (
                                     <span
                                         key={je.judgeModelId}
-                                        className="inline-flex items-baseline gap-1 shrink-0"
+                                        className="inline-flex shrink-0 items-center gap-1"
                                         title={`${je.judgeModelName}: 試行間 SD ${formatTrialSd(je.totalScore.sd)}${highVariance ? `（閾値 ${HIGH_VARIANCE_STD_THRESHOLD} 超過）` : ''}`}
                                     >
-                                        <span className={`data-display text-[11px] ${scoreColor(je.totalScore.mean)}`}>
-                                            {je.totalScore.mean}
+                                        <span className={`data-display w-[5ch] shrink-0 text-right text-[11px] ${scoreColor(je.totalScore.mean)}`}>
+                                            {Number(je.totalScore.mean).toFixed(1)}
                                         </span>
-                                        <span className={`text-[9px] tabular-nums ${highVariance ? 'text-score-mid' : 'text-text-tertiary'}`}>
-                                            試行間 SD {formatTrialSd(je.totalScore.sd)}
+                                        <span className="inline-flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+                                            {highVariance && (
+                                                <AlertTriangle size={10} className="text-score-mid" aria-label="ばらつき大" />
+                                            )}
                                         </span>
-                                        {highVariance && (
-                                            <AlertTriangle size={10} className="text-score-mid shrink-0 self-center" aria-label="ばらつき大" />
-                                        )}
                                     </span>
                                 );
                             })}
@@ -903,20 +903,21 @@ function CostSection({ run }: { run: EvaluationRun }) {
                 ? '被検/Judgeいずれかの価格未設定'
                 : `${roiLabel}の価格未設定`;
 
-    // 時間的ROI（タブごと）— task_timing 合算のみ（DEC-001/003）
+    // 時間的ROI（タブごと）— Σscore / task_timing 合算（DEC-001/003/005）
     const timingSummary = resolveTimingSummary(run);
     const {
         ms: timeRoiMs,
         label: timeRoiLabel,
         available: canCalculateTimeRoi,
     } = resolveTimeRoiDenominator(timingSummary, activeTab);
+    const timeRoiScoreSum = runScoreSum(run);
 
     const timeRoi = canCalculateTimeRoi
-        ? computeTimeRoi(run.averageScore, timeRoiMs)
+        ? computeTimeRoi(timeRoiScoreSum, timeRoiMs)
         : undefined;
 
-    const timeRoiSub = timeRoi
-        ? `平均点 / ${timeRoiLabel}`
+    const timeRoiSub = timeRoi !== undefined
+        ? `合計点 / ${timeRoiLabel}`
         : canCalculateTimeRoi
             ? '平均点が取得できません'
             : `${timeRoiLabel}が記録されていません`;
@@ -988,7 +989,7 @@ function CostSection({ run }: { run: EvaluationRun }) {
                 <CostCard
                     icon={<Timer size={12} />}
                     label="時間ROI"
-                    value={timeRoi ? `${timeRoi} 点/秒` : '—'}
+                    value={timeRoi !== undefined ? `${timeRoi} 点/分` : '—'}
                     sub={timeRoiSub}
                 />
                 <CostCard

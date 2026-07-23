@@ -1,4 +1,5 @@
 import type { EvaluationRun, TaskTiming, TimingSummary } from '../types';
+import { isHeroScoreAvailable } from './judgeReliability';
 
 export type TimeRoiTab = 'total' | 'subject' | 'judge';
 
@@ -69,22 +70,45 @@ export function resolveTimeRoiDenominator(
     };
 }
 
-export function computeTimeRoi(
-    score: number | null | undefined,
-    ms: number | undefined,
-): number | undefined {
-    if (score === null || score === undefined || !ms || ms <= 0 || score <= 0) {
+/**
+ * intent: DEC-005 (Core/time-roi-task-timing) — numerator is Σtask score
+ * (averageScore × taskCount), matching averageScore as the unweighted task mean.
+ */
+export function runScoreSum(run: Pick<EvaluationRun, 'averageScore' | 'taskCount'>): number | undefined {
+    if (!isHeroScoreAvailable(run.averageScore) || run.averageScore <= 0) {
         return undefined;
     }
-    return Number((score / (ms / 1000)).toFixed(1));
+    const n = Number(run.taskCount || 0);
+    if (!Number.isFinite(n) || n <= 0) {
+        return undefined;
+    }
+    return run.averageScore * n;
+}
+
+/**
+ * intent: DEC-005 (Core/time-roi-task-timing) — Σscore / processing minutes → 点/分
+ * (aligned with cost ROI's 点/$ unit pattern).
+ */
+export function computeTimeRoi(
+    scoreSum: number | null | undefined,
+    ms: number | undefined,
+): number | undefined {
+    if (scoreSum === null || scoreSum === undefined || !ms || ms <= 0 || scoreSum <= 0) {
+        return undefined;
+    }
+    const minutes = ms / 60_000;
+    if (minutes <= 0) {
+        return undefined;
+    }
+    return Number((scoreSum / minutes).toFixed(1));
 }
 
 export function formatTimeRoi(
-    score: number | null | undefined,
+    scoreSum: number | null | undefined,
     ms: number | undefined,
 ): string {
-    const roi = computeTimeRoi(score, ms);
-    return roi === undefined ? 'N/A' : `${roi} 点/秒`;
+    const roi = computeTimeRoi(scoreSum, ms);
+    return roi === undefined ? 'N/A' : `${roi} 点/分`;
 }
 
 /** Processing-time ms for Dashboard avg / ROI (DEC-004). */

@@ -6,7 +6,7 @@ qa_schema: 2
 qa_status: verified
 risk: Medium
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
   - "_docs/intent/Core/time-roi-task-timing/decision.md"
   - "_docs/qa/Core/time-roi-task-timing/test-plan.md"
@@ -25,6 +25,9 @@ related_prs: []
 `timing_summary` を付与し、ResultDetail `CostSection` と Dashboard
 `buildModelAggregates` / `formatTimeRoi` が同一定義を参照する。欠落時は N/A
 （暗黙 wall-clock フォールバックなし）。
+
+2026-07-24（DEC-005）: 分子を `averageScore × taskCount`（Σscore）、単位を **点/分** に
+変更。平均点÷合計秒（点/秒）は廃止。長時間 run で 0.0 → `—` になる不具合を解消。
 
 ## Verification Verdict
 
@@ -62,6 +65,7 @@ git diff --check: PASS
 | `test_task_timing_matches_usage_total_duration` | PASS | AC-004 既存整合 |
 | `timeRoi.node.test.ts` shared denominator | PASS | AC-002 / DEC-001 |
 | `timeRoi.node.test.ts` legacy N/A | PASS | AC-003 / DEC-003 |
+| `timeRoi.node.test.ts` DEC-005 点/分・多タスク | PASS | 2026-07-24 re-check |
 | `client.node.test.ts` timing_summary map | PASS | DEC-002 |
 | backend full suite | PASS | 129件 |
 | frontend lint / build | PASS | |
@@ -92,6 +96,7 @@ git diff --check: PASS
 | DEC-002 | PASS | `timing_summary` を result + summary index に付与 |
 | DEC-003 | PASS | 欠落時は完全 N/A（implementation で 1 方針に固定） |
 | DEC-004 | PASS | Dashboard `runProcessingDurationMs` が wall-clock を除外 |
+| DEC-005 | PASS | Σscore/処理分 → 点/分。unit test で多タスク同効率・直近 run 規模を確認 |
 
 ## Invariant Coverage
 
@@ -105,6 +110,7 @@ None
 | holistic timing の Dashboard 算入 | Intent Non-Goals / follow-up | 必要なら別 TODO |
 | 旧 result の時間 ROI | `task_timing` 欠落時は N/A（意図的）。過去 run との数値比較は不可 | None |
 | Dashboard 数値の定義変更 | wall-clock 時代と処理時間ベースで値が変わる（意図的） | release note 任意 |
+| 2026-07-24 点/秒→点/分・Σscore | DEC-005。コスト ROI（点/$）と単位パターンを揃えた | None |
 
 ## Residual Risks
 

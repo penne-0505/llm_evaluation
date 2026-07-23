@@ -4,7 +4,7 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
   - "_docs/archives/plan/Core/time-roi-task-timing/plan.md"
   - "_docs/qa/Core/time-roi-task-timing/test-plan.md"
@@ -33,8 +33,8 @@ ROI 分母をその合算へ統一する。
 - **What**: run 全体およびタブ（被検 / judge / total）の時間 ROI 分母は、各通常タスクの
   `task_timing.subject_duration_ms` / `judge_duration_ms` を合算した値を使う。並列実行の
   wall-clock は分母に使わない。
-- **Why**: ROI は「平均点 per モデル処理秒」を表す指標として読まれる。wall-clock は infra /
-  並列度に依存し、モデル比較の指標として歪む。
+- **Why**: ROI は「処理時間あたりのパフォーマンス」を表す指標として読まれる。wall-clock は
+  infra / 並列度に依存し、モデル比較の指標として歪む。
 - **Change freedom**: run サマリー field 名（例: `timing_summary`）、Dashboard 集計粒度、
   表示小数桁は、同一合算定義を維持する限り変更できる。
 - **Why not**: `usage_summary.totals.total_duration_ms` だけを直接使うと、holistic judge usage
@@ -76,11 +76,28 @@ ROI 分母をその合算へ統一する。
 - **Change freedom**: strict mode 別 leaderboard への適用順序、表示列ラベルは変更できる。
 - **Why not**: wall-clock 平均を残すと DEC-001 と Dashboard / Detail 間で定義が分裂する。
 
+### DEC-005: 時間 ROI は Σscore / 処理分 → 点/分とする
+
+- **What**: 分子はタスク得点の合計（`averageScore × taskCount`。averageScore がタスク等重み
+  平均である前提）。分母は DEC-001 の処理時間合算を分に換算した値。表示単位は **点/分**
+  （コスト ROI の 点/$ と揃える）。旧定義の「平均点 / 合計秒 → 点/秒」は使わない。
+- **Why**: 平均点÷合計時間はタスク数だけ分母が増えて同効率でも ROI が下がる。Σscore/Σtime
+  は平均点÷平均時間と同一で、「普通に使ってかかった時間あたりのパフォーマンス」に近い。
+  点/秒は長時間 run で 0.0 に潰れ UI が `—` になる。
+- **Change freedom**: 小数桁、Dashboard で run 横断の Σ 集計か run ROI 平均かは、同一 run 内
+  定義（Σscore/Σminutes）を崩さない範囲で選べる。
+- **Implementation choice (2026-07-24)**: Dashboard は timed run について
+  `Σ(averageScore×taskCount) / Σ(processing ms)` を点/分で表示する。
+- **Why not**: タスクごと ROI の単純平均は短い高得点タスクに引っ張られ、「かかった時間」の
+  比重とずれる。
+- **Revisit when**: 秒/点表示や中央値ベースの効率指標が必要になった時。
+
 ## Consequences / Impact
 
 - ダッシュボード時間 ROI 数値は定義変更により変わる（特に judge 並列 ON の run）。
 - 旧 result（`task_timing` 欠落）は時間 ROI N/A となる可能性が高い。
 - `Core-Feat-34` への hard dependency。Feat-34 未完了時は本タスクを開始しない。
+- 2026-07-24: 表示単位が 点/秒 → 点/分、分子が平均点 → Σscore に変わる（DEC-005）。
 
 ## Quality Implications
 
@@ -88,6 +105,8 @@ ROI 分母をその合算へ統一する。
   ms を分母に使うことを確認する。
 - cost_estimator の usage 合算と `task_timing` 合算が同一 fixture で一致することを AC-004
   で検証する。
+- 同一効率の 1 タスク run と多タスク run で点/分が一致すること（DEC-005）。
+- 長時間 run で点/分が 0 に潰れず表示されること。
 
 ## Intent-derived Invariants
 

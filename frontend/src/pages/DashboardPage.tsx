@@ -739,7 +739,7 @@ function StrictModeLeaderboard({
                                                     {formatDuration(row.avgExecutionTimeMs)}
                                                 </td>
                                                 <td className="px-4 py-3 text-center text-text-secondary">
-                                                    {formatTimeRoi(row.avgScore, row.avgExecutionTimeMs)}
+                                                    {formatTimeRoi(row.timeRoiScoreSum, row.timeRoiDurationMs)}
                                                 </td>
                                             </tr>
                                         ))}
@@ -1033,7 +1033,7 @@ function AggregationTable({ data, scopeLabel }: { data: ModelAggregate[]; scopeL
                                 <td className="px-4 py-2.5 text-center"><span className={`data-display ${scoreTextColor(row.bestScore)}`}>{formatHeroScore(row.bestScore)}</span></td>
                                 <td className="px-4 py-2.5 text-center text-text-secondary">{formatUsd(row.avgCostPer1m)}</td>
                                 <td className="px-4 py-2.5 text-center text-text-secondary">{formatDuration(row.avgExecutionTimeMs)}</td>
-                                <td className="px-4 py-2.5 text-center text-text-secondary">{formatTimeRoi(row.avgScore, row.avgExecutionTimeMs)}</td>
+                                <td className="px-4 py-2.5 text-center text-text-secondary">{formatTimeRoi(row.timeRoiScoreSum, row.timeRoiDurationMs)}</td>
                                 <td className="px-4 py-2.5 text-right text-text-secondary">{formatDateOnly(row.latest)}</td>
                             </tr>
                         ))}
