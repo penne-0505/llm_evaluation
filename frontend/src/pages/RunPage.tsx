@@ -284,7 +284,7 @@ export default function RunPage() {
                         <div className="flex items-center justify-between gap-3 mb-3">
                             <p className="section-label">実行前の見積</p>
                             <span className="text-[10px] text-text-tertiary">
-                                待ち時間は wall-clock / 履歴優先
+                                待ち時間は wall-clock / 複数履歴の近さ重み
                             </span>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -321,12 +321,13 @@ export default function RunPage() {
                         </div>
                         {preRunEstimate.costSource === 'unavailable' && (
                             <p className="mt-3 text-[11px] text-text-tertiary">
-                                コストは同一被検の価格付き履歴が無いと出せません（0 円扱いにはしません）。
+                                コストは価格付き履歴が足りないと出せません（0
+                                円扱いにはしません）。被験分は同一被検の履歴のみ使います。
                             </p>
                         )}
                         {preRunEstimate.durationSource === 'heuristic' && (
                             <p className="mt-3 text-[11px] text-text-tertiary">
-                                所要はステップ数からの粗い推定です。一度実行すると履歴ベースに切り替わります。
+                                所要はステップ数からの粗い推定です。履歴が溜まると近さ重みの合成に切り替わります。
                             </p>
                         )}
                     </div>

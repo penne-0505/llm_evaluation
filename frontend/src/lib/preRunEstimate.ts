@@ -1,9 +1,11 @@
 /**
  * Pre-run cost / wall-clock duration estimates.
  *
- * intent: DEC-001..005 (UI/pre-run-estimate) — history-first matching by subject,
- * config load scaling as assist, heuristic duration only when no history;
- * never zero-fill unknown cost (INV-001).
+ * intent: DEC-001..006 (UI/pre-run-estimate) — multi-run similarity pool,
+ * unitize before mix, wall-clock as wait, asymmetric subject gates;
+ * never zero-fill unknown cost (INV-001); never mix other-subject into subject cost (INV-002).
+ *
+ * Formula/constants: `_docs/reference/UI/pre-run-estimate/reference.md`
  */
 
 import type { EvaluationRun } from '../types';
@@ -23,6 +25,8 @@ export type PreRunEstimateInput = {
     judgeRunCount: number;
     /** Used only for no-history duration heuristic (DEC-004). */
     totalSteps: number;
+    /** Injected clock for deterministic tests (ms since epoch). */
+    nowMs?: number;
 };
 
 export type PreRunEstimate = {
@@ -30,7 +34,9 @@ export type PreRunEstimate = {
     costSource: PreRunEstimateSource;
     durationMs: number | null;
     durationSource: PreRunEstimateSource;
+    /** Highest-weight contributing run id, if any. */
     matchedRunId: string | null;
+    /** L_plan / weight-averaged L_hist for the primary channel used (1 when N/A). */
     scale: number;
     labels: {
         cost: string;
@@ -38,11 +44,23 @@ export type PreRunEstimate = {
     };
 };
 
-/** Rough ms per pipeline step when no subject history exists (DEC-004). */
+/** Rough ms per pipeline step when no wall history exists (DEC-004). */
 export const ASSUMED_MS_PER_STEP = 12_000;
 
-/** Treat load ratio within this band as unscaled history (DEC-003). */
+/** Treat load ratio within this band as unscaled history. */
 export const SCALE_NEAR_BAND = { min: 0.85, max: 1.15 };
+
+/** Distance decay (reference). */
+export const WEIGHT_ALPHA = 0.35;
+/** Soft subject-mismatch gate for judge channels (reference). */
+export const WEIGHT_BETA = 0.25;
+/** Soft subject-mismatch gate for wall (reference); γ > 0. */
+export const WEIGHT_GAMMA = 0.1;
+/** Recency half-life in days (reference). */
+export const WEIGHT_HALF_LIFE_DAYS = 90;
+export const WEIGHT_LAMBDA = Math.LN2 / WEIGHT_HALF_LIFE_DAYS;
+
+export type EstimateChannel = 'subject_cost' | 'judge_cost' | 'wall';
 
 export function plannedLoad(input: {
     taskCount: number;
@@ -57,7 +75,7 @@ export function plannedLoad(input: {
     return tasks * (subjectRuns + judges * judgeRuns);
 }
 
-/** History summaries lack run counts → assume 1 subject run and 1 judge run (DEC-003). */
+/** History summaries lack run counts → assume 1 subject run and 1 judge run. */
 export function historicalLoad(taskCount: number, judgeCount: number): number {
     const tasks = Math.max(0, Number(taskCount) || 0);
     const judges = Math.max(1, Number(judgeCount) || 1);
@@ -77,7 +95,7 @@ export function subjectMatchesRun(
     return run.subjectModelId === free || run.subjectModelName === free;
 }
 
-function matchDistance(
+export function matchDistance(
     run: Pick<EvaluationRun, 'taskCount' | 'judgeCount'>,
     taskCount: number,
     judgeCount: number,
@@ -87,22 +105,38 @@ function matchDistance(
     return dTasks + 2 * dJudges;
 }
 
-export function pickBestHistoricalRun(
-    runs: EvaluationRun[],
-    input: Pick<PreRunEstimateInput, 'subjectModelId' | 'freeTextSubject' | 'taskCount' | 'judgeCount'>,
-): EvaluationRun | null {
-    const candidates = runs.filter((run) =>
-        subjectMatchesRun(run, input.subjectModelId, input.freeTextSubject),
-    );
-    if (candidates.length === 0) return null;
+export function ageDays(timestamp: string | undefined, nowMs: number): number {
+    if (!timestamp) return 0;
+    const t = Date.parse(timestamp);
+    if (!Number.isFinite(t)) return 0;
+    return Math.max(0, (nowMs - t) / (1000 * 60 * 60 * 24));
+}
 
-    candidates.sort((a, b) => {
-        const da = matchDistance(a, input.taskCount, input.judgeCount);
-        const db = matchDistance(b, input.taskCount, input.judgeCount);
-        if (da !== db) return da - db;
-        return (b.timestamp || '').localeCompare(a.timestamp || '');
-    });
-    return candidates[0] ?? null;
+/** Subject gate s_{i,c} from reference. */
+export function subjectGate(channel: EstimateChannel, subjectMatch: boolean): number {
+    if (subjectMatch) return 1;
+    switch (channel) {
+        case 'subject_cost':
+            // intent-invariant: INV-002 (UI/pre-run-estimate) — other-subject never enters subject cost
+            return 0;
+        case 'judge_cost':
+            return WEIGHT_BETA;
+        case 'wall':
+            return WEIGHT_GAMMA;
+        default:
+            return 0;
+    }
+}
+
+export function channelWeight(
+    channel: EstimateChannel,
+    subjectMatch: boolean,
+    distance: number,
+    age: number,
+): number {
+    const s = subjectGate(channel, subjectMatch);
+    if (s <= 0) return 0;
+    return s * Math.exp(-WEIGHT_ALPHA * distance) * Math.exp(-WEIGHT_LAMBDA * age);
 }
 
 function sourceLabel(source: PreRunEstimateSource): string {
@@ -119,23 +153,128 @@ function sourceLabel(source: PreRunEstimateSource): string {
     }
 }
 
-function needsScale(
-    scale: number,
-    run: Pick<EvaluationRun, 'taskCount' | 'judgeCount'>,
-    input: Pick<PreRunEstimateInput, 'taskCount' | 'judgeCount' | 'subjectRunCount' | 'judgeRunCount'>,
+type ChannelSample = {
+    runId: string;
+    rate: number;
+    weight: number;
+    Lhist: number;
+    taskCount: number;
+    judgeCount: number;
+};
+
+function finitePositive(n: unknown): n is number {
+    return typeof n === 'number' && Number.isFinite(n) && n > 0;
+}
+
+function finiteNonNeg(n: unknown): n is number {
+    return typeof n === 'number' && Number.isFinite(n) && n >= 0;
+}
+
+function subjectCostValue(run: EvaluationRun): number | null {
+    if (finiteNonNeg(run.subjectEstimatedCostUsd)) {
+        return run.subjectEstimatedCostUsd;
+    }
+    // Legacy summaries: only total cost — treat as subject-gated total when same subject.
+    if (finiteNonNeg(run.estimatedCostUsd) && run.subjectEstimatedCostUsd == null) {
+        return run.estimatedCostUsd;
+    }
+    return null;
+}
+
+function judgeCostValue(run: EvaluationRun): number | null {
+    if (!finiteNonNeg(run.estimatedCostUsd)) return null;
+    if (!finiteNonNeg(run.subjectEstimatedCostUsd)) return null;
+    const judge = run.estimatedCostUsd - run.subjectEstimatedCostUsd;
+    if (!Number.isFinite(judge) || judge < 0) return null;
+    return judge;
+}
+
+function wallValue(run: EvaluationRun): number | null {
+    if (!finitePositive(run.executionDurationMs)) return null;
+    return run.executionDurationMs;
+}
+
+function collectChannelSamples(
+    runs: EvaluationRun[],
+    input: PreRunEstimateInput,
+    channel: EstimateChannel,
+    valueOf: (run: EvaluationRun) => number | null,
+): ChannelSample[] {
+    const nowMs = input.nowMs ?? Date.now();
+    const samples: ChannelSample[] = [];
+    for (const run of runs) {
+        const value = valueOf(run);
+        if (value == null) continue;
+        const Lhist = historicalLoad(run.taskCount, run.judgeCount || 1);
+        if (Lhist <= 0) continue;
+        const match = subjectMatchesRun(run, input.subjectModelId, input.freeTextSubject);
+        const d = matchDistance(run, input.taskCount, input.judgeCount);
+        const age = ageDays(run.timestamp, nowMs);
+        const weight = channelWeight(channel, match, d, age);
+        if (weight <= 0) continue;
+        samples.push({
+            runId: run.id,
+            rate: value / Lhist,
+            weight,
+            Lhist,
+            taskCount: run.taskCount || 0,
+            judgeCount: run.judgeCount || 0,
+        });
+    }
+    return samples;
+}
+
+export function weightedRate(samples: ChannelSample[]): {
+    rate: number | null;
+    sumW: number;
+    meanLhist: number;
+    topRunId: string | null;
+} {
+    let sumW = 0;
+    let sumWR = 0;
+    let sumWL = 0;
+    let topRunId: string | null = null;
+    let topW = -1;
+    for (const s of samples) {
+        sumW += s.weight;
+        sumWR += s.weight * s.rate;
+        sumWL += s.weight * s.Lhist;
+        if (s.weight > topW) {
+            topW = s.weight;
+            topRunId = s.runId;
+        }
+    }
+    if (sumW <= 0) {
+        return { rate: null, sumW: 0, meanLhist: 0, topRunId: null };
+    }
+    return {
+        rate: sumWR / sumW,
+        sumW,
+        meanLhist: sumWL / sumW,
+        topRunId,
+    };
+}
+
+function needsScaledLabel(
+    input: PreRunEstimateInput,
+    samples: ChannelSample[],
+    meanLhist: number,
+    Lplan: number,
 ): boolean {
-    if (scale < SCALE_NEAR_BAND.min || scale > SCALE_NEAR_BAND.max) return true;
-    if ((run.taskCount || 0) !== input.taskCount) return true;
-    if ((run.judgeCount || 0) !== Math.max(1, input.judgeCount)) return true;
     if (input.subjectRunCount !== 1 || input.judgeRunCount !== 1) return true;
+    if (meanLhist > 0) {
+        const scale = Lplan / meanLhist;
+        if (scale < SCALE_NEAR_BAND.min || scale > SCALE_NEAR_BAND.max) return true;
+    }
+    const planJudges = Math.max(1, input.judgeCount);
+    for (const s of samples) {
+        if (s.taskCount !== input.taskCount || s.judgeCount !== planJudges) return true;
+    }
     return false;
 }
 
-export function computePreRunEstimate(
-    runs: EvaluationRun[],
-    input: PreRunEstimateInput,
-): PreRunEstimate {
-    const empty: PreRunEstimate = {
+function emptyEstimate(): PreRunEstimate {
+    return {
         costUsd: null,
         costSource: 'unavailable',
         durationMs: null,
@@ -147,62 +286,83 @@ export function computePreRunEstimate(
             duration: sourceLabel('unavailable'),
         },
     };
+}
 
+export function computePreRunEstimate(
+    runs: EvaluationRun[],
+    input: PreRunEstimateInput,
+): PreRunEstimate {
     if (input.taskCount <= 0) {
-        return empty;
-    }
-
-    const match = pickBestHistoricalRun(runs, input);
-    if (!match) {
-        const steps = Math.max(0, Number(input.totalSteps) || 0);
-        const durationMs = steps > 0 ? steps * ASSUMED_MS_PER_STEP : null;
-        const durationSource: PreRunEstimateSource =
-            durationMs != null ? 'heuristic' : 'unavailable';
-        return {
-            ...empty,
-            // intent-invariant: INV-001 (UI/pre-run-estimate) — unknown cost stays null
-            costUsd: null,
-            costSource: 'unavailable',
-            durationMs,
-            durationSource,
-            labels: {
-                cost: sourceLabel('unavailable'),
-                duration: sourceLabel(durationSource),
-            },
-        };
+        return emptyEstimate();
     }
 
     const Lplan = plannedLoad(input);
-    const Lhist = historicalLoad(match.taskCount, match.judgeCount || 1);
-    const scale = Lhist > 0 ? Lplan / Lhist : 1;
-    const scaled = needsScale(scale, match, input);
-    const source: PreRunEstimateSource = scaled ? 'history_scaled' : 'history';
-    const factor = scaled ? scale : 1;
 
-    const rawCost =
-        typeof match.estimatedCostUsd === 'number' && Number.isFinite(match.estimatedCostUsd)
-            ? match.estimatedCostUsd
-            : null;
-    const rawDuration =
-        typeof match.executionDurationMs === 'number' &&
-        Number.isFinite(match.executionDurationMs) &&
-        match.executionDurationMs > 0
-            ? match.executionDurationMs
-            : null;
+    const subjectSamples = collectChannelSamples(runs, input, 'subject_cost', subjectCostValue);
+    const judgeSamples = collectChannelSamples(runs, input, 'judge_cost', judgeCostValue);
+    const wallSamples = collectChannelSamples(runs, input, 'wall', wallValue);
 
-    const costUsd = rawCost != null ? rawCost * factor : null;
-    const durationMs = rawDuration != null ? rawDuration * factor : null;
+    const subjectPool = weightedRate(subjectSamples);
+    const judgePool = weightedRate(judgeSamples);
+    const wallPool = weightedRate(wallSamples);
+
+    let costUsd: number | null = null;
+    const costParts: number[] = [];
+    if (subjectPool.rate != null) costParts.push(subjectPool.rate * Lplan);
+    if (judgePool.rate != null) costParts.push(judgePool.rate * Lplan);
+    if (costParts.length > 0) {
+        costUsd = costParts.reduce((a, b) => a + b, 0);
+    }
+
+    // intent-invariant: INV-001 (UI/pre-run-estimate) — unknown cost stays null
+    const costSamples = [...subjectSamples, ...judgeSamples];
+    const costMeanL =
+        subjectPool.sumW + judgePool.sumW > 0
+            ? ((subjectPool.meanLhist * subjectPool.sumW + judgePool.meanLhist * judgePool.sumW) /
+                  (subjectPool.sumW + judgePool.sumW))
+            : 0;
+    const costScaled =
+        costUsd != null && needsScaledLabel(input, costSamples, costMeanL, Lplan);
+    const costSource: PreRunEstimateSource =
+        costUsd == null ? 'unavailable' : costScaled ? 'history_scaled' : 'history';
+    const costScale =
+        costUsd != null && costMeanL > 0 ? Lplan / costMeanL : 1;
+
+    let durationMs: number | null = null;
+    let durationSource: PreRunEstimateSource = 'unavailable';
+    let durationScale = 1;
+    if (wallPool.rate != null) {
+        durationMs = wallPool.rate * Lplan;
+        const wallScaled = needsScaledLabel(input, wallSamples, wallPool.meanLhist, Lplan);
+        durationSource = wallScaled ? 'history_scaled' : 'history';
+        durationScale = wallPool.meanLhist > 0 ? Lplan / wallPool.meanLhist : 1;
+    } else {
+        const steps = Math.max(0, Number(input.totalSteps) || 0);
+        if (steps > 0) {
+            durationMs = steps * ASSUMED_MS_PER_STEP;
+            durationSource = 'heuristic';
+        }
+    }
+
+    const matchedRunId =
+        wallPool.topRunId ?? subjectPool.topRunId ?? judgePool.topRunId ?? null;
+
+    // Prefer duration scale for UI when both present; else cost.
+    const scale =
+        durationSource === 'history' || durationSource === 'history_scaled'
+            ? durationScale
+            : costScale;
 
     return {
         costUsd,
-        costSource: costUsd != null ? source : 'unavailable',
+        costSource,
         durationMs,
-        durationSource: durationMs != null ? source : 'unavailable',
-        matchedRunId: match.id,
-        scale: factor,
+        durationSource,
+        matchedRunId,
+        scale,
         labels: {
-            cost: sourceLabel(costUsd != null ? source : 'unavailable'),
-            duration: sourceLabel(durationMs != null ? source : 'unavailable'),
+            cost: sourceLabel(costSource),
+            duration: sourceLabel(durationSource),
         },
     };
 }

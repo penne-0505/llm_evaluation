@@ -7,6 +7,7 @@ updated_at: 2026-07-24
 references:
   - "_docs/intent/UI/pre-run-estimate/decision.md"
   - "_docs/qa/UI/pre-run-estimate/test-plan.md"
+  - "_docs/reference/UI/pre-run-estimate/reference.md"
 related_issues: []
 related_prs: []
 ---
@@ -15,38 +16,37 @@ related_prs: []
 
 ## Overview
 
-Run 画面 idle で、開始前に「だいたいの実行コスト」と「だいたいの所要（待ち時間）」を
-提示する。履歴（同一被検）を優先し、タスク数・judge 数・run 回数の差は構成ベースで
-補正する。履歴が無い場合のみ粗い構成ヒューリスティックに落とす。
+Run 画面 idle で、開始前にだいたいの実行コストと所要（待ち時間）を提示する。
+判断理由は Intent、計算仕様は reference に分離する。
 
 ## Scope
 
-- フロントエンドの見積 helper（履歴マッチ・負荷補正・ヒューリスティック）。
-- RunPage idle UI に見積カードを追加。
-- `historyStore` のサマリー（`executionDurationMs` / `estimatedCostUsd` / task・judge 数）を入力にする。
-- node unit test。
+- `frontend/src/lib/preRunEstimate.ts` を単一最近傍から、Intent DEC-001..006 に沿う
+  複数履歴合成へ置換（具体式は reference）。
+- RunPage idle UI のラベル調整（必要なら）。
+- node unit test の更新。
+- Intent / reference / QA / verification の同期（UI-Enhance-64）。
 
 ## Non-Goals
 
 - バックエンド新規見積 API、OpenRouter 価格のフロント取得。
-- 包括評価フェーズの精密見積（軽い注記に留めるか無視）。
-- 並列 ON/OFF フラグの履歴照合（summary に無い）。
-- 事後 CostSection / 実行中 ETA の定義変更。
+- summary への judge コスト明示フィールド追加（差分近似で足りる間は後回し）。
+- 包括評価の精密見積、並列フラグ照合、事後 CostSection / 実行中 ETA の定義変更。
+- 定数のオンライン学習。
 
 ## Requirements
 
-- 被検モデル一致を履歴マッチの必須条件とする。
-- 所要の正典は wall-clock（`executionDurationMs`）。
-- コストは履歴の `estimatedCostUsd`（partial 可）。無い・不明は N/A（0 埋め禁止）。
-- 構成差は負荷ユニット比で補正し、ラベルで明示する。
-- 履歴無しの所要は step 数ベースの粗い推定。コストは単価情報無しなら N/A。
+- Intent DEC-001..006 と INV-001 / INV-002 を満たす。
+- 計算の置き方は `_docs/reference/UI/pre-run-estimate/reference.md` に従い、逸脱するなら
+  reference を先に更新する。
 
 ## Tasks
 
-1. Intent / QA を固定する。
-2. `frontend/src/lib/preRunEstimate.ts` と node test を追加する。
-3. RunPage idle にカードを接続し `historyStore.initialize` する。
-4. verification を書く。
+1. Intent を Why 中心に薄くし、式を reference へ移す（本改訂）。
+2. `preRunEstimate.ts` を reference 仕様で置換する。
+3. node test を AC / INV に合わせて更新する。
+4. RunPage idle 表示を必要なら調整する。
+5. verification を再実行して書く。
 
 ## QA Plan
 
