@@ -863,31 +863,30 @@ function CostSection({ run }: { run: EvaluationRun }) {
     const totalCost = us.totals.estimatedCostUsd;
 
     // ROI はアクティブなタブのコストで計算
+    // intent: DEC-006 (Core/time-roi-task-timing) — Judgeタブは得点分子のROIを出さない
+    // （judge自体は採点対象ではない。カード枠はレイアウト予測可能性のため残す）
+    // intent: DEC-007 — Run全体タブのROI分母も被検のみ（Judgeコスト/時間を混ぜない）
     const subjectCost = run.usageSummarySubject?.totals.estimatedCostUsd;
-    const judgeCost = run.usageSummaryJudge?.totals.estimatedCostUsd;
     const hasSubjectCost = subjectCost !== null && subjectCost !== undefined && subjectCost > 0;
-    const hasJudgeCost = judgeCost !== null && judgeCost !== undefined && judgeCost > 0;
+    const judgeRoiNotApplicable = activeTab === 'judge';
+    const totalUsesSubjectRoi = activeTab === 'total';
 
     let roiCost: number | undefined;
     let roiLabel: string;
     let canCalculateRoi = false;
 
-    if (activeTab === 'subject') {
+    if (judgeRoiNotApplicable) {
+        roiLabel = 'Judgeコスト';
+        canCalculateRoi = false;
+    } else {
+        // 被検タブ・Run全体とも被検コストのみ（DEC-007）
         roiCost = hasSubjectCost ? subjectCost : undefined;
         roiLabel = '被検コスト';
         canCalculateRoi = hasSubjectCost;
-    } else if (activeTab === 'judge') {
-        roiCost = hasJudgeCost ? judgeCost : undefined;
-        roiLabel = 'Judgeコスト';
-        canCalculateRoi = hasJudgeCost;
-    } else {
-        // Run全体: subject と judge の両方が揃っている場合のみ計算
-        roiCost = (hasSubjectCost && hasJudgeCost) ? (subjectCost as number) + (judgeCost as number) : undefined;
-        roiLabel = '総コスト';
-        canCalculateRoi = hasSubjectCost && hasJudgeCost;
     }
 
-    const roi = canCalculateRoi
+    const roi = !judgeRoiNotApplicable
+        && canCalculateRoi
         && roiCost !== undefined
         && roiCost > 0
         && isHeroScoreAvailable(run.averageScore)
@@ -895,35 +894,51 @@ function CostSection({ run }: { run: EvaluationRun }) {
         ? Number((run.averageScore / roiCost).toFixed(1))
         : undefined;
 
-    const roiSub = roi
-        ? `平均点 / ${roiLabel}`
-        : canCalculateRoi
-            ? '平均点が取得できません'
-            : activeTab === 'total'
-                ? '被検/Judgeいずれかの価格未設定'
-                : `${roiLabel}の価格未設定`;
+    const roiSub = judgeRoiNotApplicable
+        ? 'Judgeは採点対象外'
+        : roi
+            ? totalUsesSubjectRoi
+                ? `平均点 / 被検コスト（Judge含まず）`
+                : `平均点 / ${roiLabel}`
+            : canCalculateRoi
+                ? '平均点が取得できません'
+                : totalUsesSubjectRoi
+                    ? '被検コストの価格未設定（ROIは被検のみ）'
+                    : `${roiLabel}の価格未設定`;
 
-    // 時間的ROI（タブごと）— Σscore / task_timing 合算（DEC-001/003/005）
+    // 時間的ROI — Σscore / task_timing（DEC-001/003/005）
+    // 実行時間カードはタブ内訳のまま。ROI分母は被検/全体とも被検時間（DEC-007）
+    // Judgeタブは得点ROIを出さない（DEC-006）
     const timingSummary = resolveTimingSummary(run);
+    const {
+        ms: displayDurationMs,
+        label: displayDurationLabel,
+    } = resolveTimeRoiDenominator(timingSummary, activeTab);
     const {
         ms: timeRoiMs,
         label: timeRoiLabel,
         available: canCalculateTimeRoi,
-    } = resolveTimeRoiDenominator(timingSummary, activeTab);
+    } = resolveTimeRoiDenominator(
+        timingSummary,
+        judgeRoiNotApplicable ? 'judge' : 'subject',
+    );
     const timeRoiScoreSum = runScoreSum(run);
 
-    const timeRoi = canCalculateTimeRoi
+    const timeRoi = !judgeRoiNotApplicable && canCalculateTimeRoi
         ? computeTimeRoi(timeRoiScoreSum, timeRoiMs)
         : undefined;
 
-    const timeRoiSub = timeRoi !== undefined
-        ? `合計点 / ${timeRoiLabel}`
-        : canCalculateTimeRoi
-            ? '平均点が取得できません'
-            : `${timeRoiLabel}が記録されていません`;
-
-    // 実行時間表示（処理時間合算。欠落時は N/A — wall-clock へ落とさない）
-    const displayDurationMs = timeRoiMs;
+    const timeRoiSub = judgeRoiNotApplicable
+        ? 'Judgeは採点対象外'
+        : timeRoi !== undefined
+            ? totalUsesSubjectRoi
+                ? `合計点 / 被検時間（Judge含まず）`
+                : `合計点 / ${timeRoiLabel}`
+            : canCalculateTimeRoi
+                ? '平均点が取得できません'
+                : totalUsesSubjectRoi
+                    ? '被検時間が記録されていません（ROIは被検のみ）'
+                    : `${timeRoiLabel}が記録されていません`;
 
     return (
         <section className="card p-4 space-y-3">
@@ -983,20 +998,20 @@ function CostSection({ run }: { run: EvaluationRun }) {
                 <CostCard
                     icon={<TrendingUp size={12} />}
                     label="コストROI"
-                    value={roi ? `${roi} 点/$` : '—'}
+                    value={judgeRoiNotApplicable ? '対象外' : roi ? `${roi} 点/$` : '—'}
                     sub={roiSub}
                 />
                 <CostCard
                     icon={<Timer size={12} />}
                     label="時間ROI"
-                    value={timeRoi !== undefined ? `${timeRoi} 点/分` : '—'}
+                    value={judgeRoiNotApplicable ? '対象外' : timeRoi !== undefined ? `${timeRoi} 点/分` : '—'}
                     sub={timeRoiSub}
                 />
                 <CostCard
                     icon={<Clock size={12} />}
                     label="実行時間"
                     value={typeof displayDurationMs === 'number' && displayDurationMs > 0 ? `${(displayDurationMs / 1000).toFixed(1)}s` : '—'}
-                    sub={timingSummary ? timeRoiLabel : '処理時間未記録'}
+                    sub={timingSummary ? displayDurationLabel : '処理時間未記録'}
                 />
             </div>
 

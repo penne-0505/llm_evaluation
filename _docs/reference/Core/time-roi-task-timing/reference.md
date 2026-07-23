@@ -28,13 +28,21 @@ Holistic tasks are excluded from `timing_summary` (DEC-004).
 ## Time ROI
 
 - **Formula (DEC-005)**: `(averageScore × taskCount) / (processing_ms / 60000)` → **点/分**
-- Processing minutes come from `timing_summary.total_duration_ms` (or the subject / judge
-  slice on CostSection tabs). Denominator rules: DEC-001 / DEC-003 / DEC-004.
+- Processing minutes come from `timing_summary.total_duration_ms` on Dashboard, or the
+  subject timing slice for ResultDetail cost/time ROI on subject and total tabs (DEC-007).
+  Judge tab does not show score-based ROI (DEC-006). Denominator rules: DEC-001 / DEC-003 /
+  DEC-004 / DEC-007.
 - Shared frontend helpers: `frontend/src/lib/timeRoi.ts` (`runScoreSum`, `computeTimeRoi`,
   `formatTimeRoi`).
 - Dashboard aggregates timed runs as `Σ(averageScore×taskCount) / Σ(processing_ms)`.
 - Legacy runs without `task_timing` / `timing_summary`: time ROI is **N/A** (no silent
   wall-clock fallback).
+- **ResultDetail Judge tab (DEC-006)**: cost ROI / time ROI are shown as **対象外** (score
+  numerator does not apply to judges). Card slots remain for layout stability; execution
+  time still uses the judge timing slice.
+- **ResultDetail total tab ROI (DEC-007)**: cost / time ROI denominators are **subject-only**
+  (same values as the subject tab). Subs state that Judge is excluded. Estimated cost,
+  tokens, and execution time on the total tab still show subject+judge totals.
 
 ## Related APIs
 

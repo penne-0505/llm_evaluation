@@ -92,12 +92,38 @@ ROI 分母をその合算へ統一する。
   比重とずれる。
 - **Revisit when**: 秒/点表示や中央値ベースの効率指標が必要になった時。
 
+### DEC-006: ResultDetail の Judge タブでは得点ベース ROI を表示しない
+
+- **What**: `CostSection` の Judgeモデルタブでは、コスト ROI（点/$）と時間 ROI（点/分）を
+  算出せず「対象外」と表示する。カード枠は被検 / Run全体と同じ5枠レイアウトを維持する。
+  Judge時間の実行時間表示は従来どおり。
+- **Why**: ROI の分子は被検タスクの得点であり、judge 自身は採点対象ではない。Judge コストや
+  Judge時間で得点を割ると、judge の効率指標に見えてしまう。
+- **Change freedom**: 「対象外」ラベル文言、sub テキストは意味が変わらない範囲で変更できる。
+- **Why not**: カード自体を消すとタブ切替で列数が変わり、レイアウトの予測可能性が落ちる。
+- **Revisit when**: judge 品質を独立指標（一致率など）で測り、その分子で ROI を定義する必要が
+  出た時。
+
+### DEC-007: ResultDetail の Run全体タブ ROI 分母も被検のみとする
+
+- **What**: `CostSection` の Run全体タブでも、コスト ROI / 時間 ROI の分母は被検コスト・被検
+  時間のみとする（Judge を含めない）。成功時・欠落時の sub に「Judge含まず」「ROIは被検のみ」
+  を明示する。実行時間カードと推定コストはタブどおり総量（subject+judge）を示す。
+- **Why**: DEC-006 と同じく、得点は被検の指標であり Judge 資源を分母に混ぜると意味が歪む。
+  Run全体タブでも被検タブと同値の ROI にし、比較の整合を取る。
+- **Change freedom**: sub 文言の細部は意味が変わらない範囲で変更できる。
+- **Why not**: Run全体で総コスト分母を残すと、Judgeタブを対象外にした判断と矛盾する。
+- **Revisit when**: 「パイプライン総コストあたりの得点」を別指標として明示ラベル付きで出す
+  必要が出た時。
+
 ## Consequences / Impact
 
 - ダッシュボード時間 ROI 数値は定義変更により変わる（特に judge 並列 ON の run）。
 - 旧 result（`task_timing` 欠落）は時間 ROI N/A となる可能性が高い。
 - `Core-Feat-34` への hard dependency。Feat-34 未完了時は本タスクを開始しない。
 - 2026-07-24: 表示単位が 点/秒 → 点/分、分子が平均点 → Σscore に変わる（DEC-005）。
+- 2026-07-24: ResultDetail Judgeタブの得点ベース ROI 表示をやめる（DEC-006）。
+- 2026-07-24: ResultDetail Run全体タブの ROI 分母を被検のみにする（DEC-007）。
 
 ## Quality Implications
 
