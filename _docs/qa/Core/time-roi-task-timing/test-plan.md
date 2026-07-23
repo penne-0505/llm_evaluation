@@ -106,4 +106,3 @@ None
 ## Open Questions
 
 - DEC-003: ~~内訳欠落時に完全 N/A と明示 wall-clock のどちらを採用するか~~ → **完全 N/A に固定**（verification 記録済み）。
-

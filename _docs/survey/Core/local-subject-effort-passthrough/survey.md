@@ -113,7 +113,7 @@ OpenRouter の `supported_parameters: ["reasoning"]` + `:thinking` always-on と
 
 1. ~~Core-Chore-45 で代表モデルの stub 突合と Survey 追記~~（本更新で完了）。
 2. trivial: `LMStudioAdapter.is_reasoning_opt_in` の docstring で「default on / 無 capability は未送信」を明示（実施済み）。
-  3. 非 trivial follow-up: LM Studio chat completions 向けに nested `reasoning.effort` と
+3. 非 trivial follow-up: LM Studio chat completions 向けに nested `reasoning.effort` と
    top-level `reasoning_effort` のどちらが効くかをライブ検証し、必要なら adapter の payload 正規化を行う
    （**Core-Bug-48** を Backlog 起票済み）。
-  4. default on モデルへも常に effort high を強制したい場合は、別 Enhance（opt-in 定義変更）とする。
+4. default on モデルへも常に effort high を強制したい場合は、別 Enhance（opt-in 定義変更）とする。
