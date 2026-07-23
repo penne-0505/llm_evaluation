@@ -184,8 +184,9 @@ class OpenRouterAdapter(LLMAdapter):
     @staticmethod
     def _should_use_max_completion_tokens(model: str) -> bool:
         """max_completion_tokens が必要なモデルかどうかを判定"""
-        lower = model.lower()
-        return any(lower.startswith(p) for p in ("o1", "o3", "o4", "gpt-5"))
+        from core.model_parameter_support import uses_max_completion_tokens
+
+        return uses_max_completion_tokens("openrouter", model)
 
     def complete_with_model_result(
         self,
@@ -212,11 +213,14 @@ class OpenRouterAdapter(LLMAdapter):
                     {"role": "user", "content": user_prompt},
                 ],
             }
-            if (
-                temperature is not None
-                and self._supports_parameter(normalized_model, "temperature") is not False
-            ):
-                kwargs["temperature"] = temperature
+            from core.model_parameter_support import apply_temperature
+
+            apply_temperature(
+                kwargs,
+                provider=self.PROVIDER,
+                model=model,
+                temperature=temperature,
+            )
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens
             else:
@@ -282,11 +286,14 @@ class OpenRouterAdapter(LLMAdapter):
                 "tools": tools,
                 "tool_choice": "auto",
             }
-            if (
-                temperature is not None
-                and self._supports_parameter(normalized_model, "temperature") is not False
-            ):
-                kwargs["temperature"] = temperature
+            from core.model_parameter_support import apply_temperature
+
+            apply_temperature(
+                kwargs,
+                provider=self.PROVIDER,
+                model=model,
+                temperature=temperature,
+            )
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens
             else:
@@ -406,17 +413,6 @@ class OpenRouterAdapter(LLMAdapter):
         return extract_api_reasoning_from_message(
             message, raw_content, allow_tag_fallback=False
         )
-
-    def _supports_parameter(self, model: str, parameter: str) -> Optional[bool]:
-        """OpenRouter catalog が既知なら、未対応 parameter を送信しない。"""
-        models = self._fetch_models_cache()
-        if models is None:
-            return None
-        normalized = self._normalize_model_name(model)
-        info = models.get(normalized)
-        if not info:
-            return None
-        return parameter in info.get("supported_parameters", [])
 
     @staticmethod
     def _normalize_model_name(model: str) -> str:

@@ -61,8 +61,9 @@ class OpenAICompatibleAdapter(LLMAdapter):
 
     @staticmethod
     def _should_use_max_completion_tokens(model: str) -> bool:
-        lower = model.lower()
-        return any(lower.startswith(p) for p in ("o1", "o3", "o4", "gpt-5"))
+        from core.model_parameter_support import uses_max_completion_tokens
+
+        return uses_max_completion_tokens("openai", model)
 
     def complete(
         self,
@@ -116,8 +117,14 @@ class OpenAICompatibleAdapter(LLMAdapter):
                     {"role": "user", "content": user_prompt},
                 ],
             }
-            if temperature is not None:
-                kwargs["temperature"] = temperature
+            from core.model_parameter_support import apply_temperature
+
+            apply_temperature(
+                kwargs,
+                provider=self._provider_id,
+                model=model,
+                temperature=temperature,
+            )
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens
             else:
@@ -177,8 +184,14 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 "tools": tools,
                 "tool_choice": "auto",
             }
-            if temperature is not None:
-                kwargs["temperature"] = temperature
+            from core.model_parameter_support import apply_temperature
+
+            apply_temperature(
+                kwargs,
+                provider=self._provider_id,
+                model=model,
+                temperature=temperature,
+            )
             if self._should_use_max_completion_tokens(normalized_model):
                 kwargs["max_completion_tokens"] = max_tokens
             else:

@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from adapters import CompletionResult, LLMAdapter, LLMError
 from adapters.base import NativeToolCall, NativeToolsNotSupportedError, strip_thinking_tags
 from core.json_parser import JudgeResponseParser, ParseError
+from core.model_parameter_support import should_send_temperature
 from core.result_aggregator import ResultAggregator
 from core.tool_runtime import LocalToolRuntime, ToolCall, ToolRuntimeConfig, parse_tool_call
 
@@ -1018,7 +1019,11 @@ class BenchmarkEngine:
                 cancel_checker()
             try:
                 judge_temperature: Optional[float] = 0.0
-                if "gemini-3" in model_name.lower():
+                # intent: DEC-003 (Core/model-parameter-support) — provider は adapter 正典
+                provider = getattr(adapter, "PROVIDER", None) or "unknown"
+                if not should_send_temperature(
+                    provider, model_name, judge_temperature
+                ):
                     judge_temperature = None
                 extra_params = None
                 if adapter.is_reasoning_opt_in(model_name):

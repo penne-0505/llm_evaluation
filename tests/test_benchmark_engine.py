@@ -376,6 +376,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         )
         subject_adapter = _StubAdapter(["subject-response"])
         judge_adapter = _StubAdapter([valid_response], reasoning_opt_in=True)
+        judge_adapter.PROVIDER = "openrouter"
         engine = BenchmarkEngine(
             subject_adapter=subject_adapter,
             subject_model="subject-model",
@@ -398,6 +399,62 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             judge_adapter.calls[0]["extra_params"],
             {"reasoning": {"effort": "high"}},
         )
+
+    async def test_judge_temperature_uses_adapter_provider_not_model_prefix(self):
+        """engine は model 先頭セグメントではなく adapter.PROVIDER で判定する。"""
+        valid_response = json.dumps(
+            {
+                "task_name": "test",
+                "task_type": "fact",
+                "score": {
+                    "logic_and_fact": 60,
+                    "constraint_adherence": 30,
+                    "helpfulness_and_creativity": 10,
+                },
+                "total_score": 100,
+                "confidence": "high",
+            }
+        )
+        subject_adapter = _StubAdapter(["subject-response"])
+        # model id 先頭は openrouter だが、実 adapter は google-ai-studio
+        send_judge = _StubAdapter([valid_response])
+        send_judge.PROVIDER = "google-ai-studio"
+        omit_judge = _StubAdapter([valid_response])
+        omit_judge.PROVIDER = "google-ai-studio"
+
+        engine_send = BenchmarkEngine(
+            subject_adapter=subject_adapter,
+            subject_model="subject-model",
+            judge_adapters={"gemini-2.5-flash": send_judge},
+            judge_runs=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+        await engine_send.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+        self.assertEqual(send_judge.calls[0]["temperature"], 0.0)
+
+        engine_omit = BenchmarkEngine(
+            subject_adapter=_StubAdapter(["subject-response"]),
+            subject_model="subject-model",
+            judge_adapters={"gemini-3.5-flash": omit_judge},
+            judge_runs=1,
+            judge_dispatch_min_interval_sec=0.0,
+            judge_dispatch_jitter_sec=0.0,
+        )
+        await engine_omit.run_task(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            rubric_content="rubric",
+            system_prompt="system",
+        )
+        self.assertIsNone(omit_judge.calls[0]["temperature"])
 
     async def test_judge_run_persists_api_reasoning_separate_from_scoring_reasoning(self):
         """AC-002 / DEC-001: api_reasoning と judge JSON reasoning を分離して永続化"""

@@ -353,8 +353,14 @@ class AnthropicAdapter(LLMAdapter):
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_prompt}],
             }
-            if temperature is not None:
-                kwargs["temperature"] = temperature
+            from core.model_parameter_support import apply_temperature
+
+            apply_temperature(
+                kwargs,
+                provider=self._provider_id,
+                model=model,
+                temperature=temperature,
+            )
             self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()
@@ -404,8 +410,14 @@ class AnthropicAdapter(LLMAdapter):
             }
             if system:
                 kwargs["system"] = system
-            if temperature is not None:
-                kwargs["temperature"] = temperature
+            from core.model_parameter_support import apply_temperature
+
+            apply_temperature(
+                kwargs,
+                provider=self._provider_id,
+                model=model,
+                temperature=temperature,
+            )
             self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()
