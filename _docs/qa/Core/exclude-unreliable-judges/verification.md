@@ -29,6 +29,8 @@ backend / frontend の自動テストは成功。live multi-judge 目視 Manual 
 
 Core-Bug-52: `computeReviewFlags` が `cross_judge_divergence` を出さず除外理由と要確認
 flags がずれていた問題を修正し、DEC-001 の追跡一致を front 側でも満たす。
+Core-Bug-51: Dashboard `buildModelAggregates` の null→0 coerce を解消。
+Core-Bug-56: list summary `min_score` を exclude 適用後スコアと整合。
 
 ## Verification Verdict
 
@@ -128,19 +130,17 @@ markdownlint (Feat-43 docs): 0 issues
 | --- | --- | --- |
 | live multi-judge run 目視 | fixtures で 4 理由コードと N/A を検証。live smoke 未実施 | 任意（運用時 Manual Checklist） |
 | RunPage exclude toggle node test | `RunPage.node.test.ts` は task 順序のみ。toggle は body 契約で代替 | 必要なら RunPage node 追加 |
-| Dashboard の null-only モデル行 | null hero は集計から除外しつつ runCount は残す | UX 調整が必要なら別 TODO |
 
 ## Residual Risks
 
 - live Manual QA 未実施のため、実 API multi-judge での除外理由文言・N/A 警告の視覚確認が残る。
 - RunPage toggle 操作そのものの自動テストが無く、UI 回帰は Settings/preset/body 契約と lint/build に依存する。
-- Dashboard で null hero のみのモデル行が残る表示は、比較 UX として紛らわしい可能性がある（集計ロジック自体は Intent どおり）。
+- Dashboard で null hero のみのモデル行が残る表示は、比較 UX として紛らわしい可能性がある（Bug-51 で 0 強制は解消済み。集計ロジックは Intent どおり）。
 
 ## Follow-up TODOs
 
 - 任意: live multi-judge 1 run で Manual Checklist（toggle ON/OFF・除外理由・全除外 N/A）を目視する。
 - 任意: `RunPage.node.test.ts` に exclude toggle default OFF / ON → body 反映を追加すると AC-001 UI が閉じる。
-- Dashboard null-only 行の扱いが問題なら別 TODO で UX 調整する。
 
 ## Completion Decision
 
@@ -169,7 +169,7 @@ npx --prefix frontend tsx --test \
   frontend/src/components/ResultDetail.node.test.ts
 ```
 
-Result: 11 PASS / 0 fail
+Result: 11 PASS / 0 fail（Bug-52 単独時点）。Bug-51/52 合算の parent 実測は下記。
 
 ### Decision Conformance (Bug-52)
 
@@ -178,3 +178,67 @@ Result: 11 PASS / 0 fail
 | DEC-001 | PASS | 乖離 task の参加 judge 全員が review flag と除外候補の両方で追跡可能 |
 
 Verdict (Bug-52 scope): PASS
+
+## Core-Bug-51 follow-up (2026-07-23)
+
+Dashboard リーダーボードが null hero を scores 空扱いして `avgScore: 0` / `best: 0` に
+coerce していた経路を修正。`buildModelAggregates` は null-only を N/A のまま残し、真の 0 と区別する（DEC-004 / INV-001）。
+
+### Bug AC Coverage
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| AC-001 | PASS | `modelAggregates.node.test.ts` null-only → `avgScore`/`bestScore` null、表示 `—` |
+| AC-002 | PASS | DEC-004 / INV-001 が Dashboard 集計経路でも成立 |
+| AC-003 | PASS | 同上 node test が null-only / mixed / genuine-zero を固定 |
+
+### Commands Run (Bug-51/52)
+
+```bash
+npx --prefix frontend tsx --test \
+  frontend/src/lib/modelAggregates.node.test.ts \
+  frontend/src/lib/judgeReliability.node.test.ts \
+  frontend/src/components/ResultDetail.node.test.ts
+```
+
+Result: 14 passed
+
+### Decision Conformance (Bug-51)
+
+| ID | Result | Notes |
+| --- | --- | --- |
+| DEC-004 | PASS | 全除外 / null hero を 0 にしない |
+| INV-001 | PASS | Dashboard aggregates でも silent 0 禁止 |
+
+Verdict (Bug-51 scope): PASS
+
+## Core-Bug-56 follow-up (2026-07-23)
+
+一覧 summary の `min_score` が exclude-ON でも全 judge 再集計のまま残っていた不整合を修正。
+`ResultStorage._summary_min_score` が hero / score_aggregation 適用後のスコア集合と揃う。
+
+### Bug AC Coverage
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| AC-001 | PASS | `test_summary_min_score_uses_exclude_aware_scores`（`tests/test_result_storage.py`） |
+| AC-002 | PASS | `_summary_min_score` が exclude 適用後集合と整合（avg/max hero 優先と意味一致） |
+| AC-003 | PASS | 同上 + null hero 時 `min_score` null 回帰 |
+
+### Commands Run (Bug-56)
+
+```bash
+uv run pytest tests/test_result_storage.py -q
+```
+
+Result: 8 passed
+
+### Decision Conformance (Bug-56)
+
+| ID | Result | Notes |
+| --- | --- | --- |
+| DEC-004 | PASS | exclude-ON の summary min も除外後（または null）と整合 |
+
+Verdict (Bug-56 scope): PASS
+
+全体 Verdict は live Manual 未実施のため PARTIAL 維持。

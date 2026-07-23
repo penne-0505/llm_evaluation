@@ -92,7 +92,7 @@ git diff --check: PASS
 | ID | Result | Why the implementation remains aligned |
 | --- | --- | --- |
 | DEC-001 | PASS | タスク JSON に `task_timing` を正典として追加。usage 合算と同一 fixture で一致 |
-| DEC-002 | PASS | 完了タスク実測平均を優先。完了 0 のみ step 比率。不可時 unavailable |
+| DEC-002 | PASS | 完了タスク実測平均を優先。完了 0 のみ step 比率。不可時 unavailable。Bug-54 で holistic remaining を remaining に含む |
 | DEC-003 | PASS | RunPage が「推定（実測平均）」「推定（step ベース）」「推定不可」を明示 |
 
 ## Invariant Coverage
@@ -104,7 +104,6 @@ None
 | ID | Reason | Follow-up |
 | --- | --- | --- |
 | live SSE ETA 体感 | unit / code review のみ。並列 subject の体感確認は未実施 | Enhance-41 着手前の手動 smoke で可 |
-| holistic 専用 ETA | Plan Non-Goals。通常 lane 完了後は remaining=0 | 必要なら follow-up |
 
 ## Residual Risks
 
@@ -117,3 +116,33 @@ None
 ## Completion Decision
 
 - TODO `Core-Feat-34` は Verification PASS のため完了扱い可能。エントリ削除と plan archive は parent に委ねる。
+
+## Core-Bug-54 follow-up (2026-07-23)
+
+標準 lane 完了後〜包括評価実行中に `remaining=0` となり `eta_ms: 0` + `eta_status: measured`
+と誤表示される経路を修正。remaining カウントが holistic 残作業を含む。
+
+### Bug AC Coverage
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| AC-001 | PASS | `test_progress_eta_measured_zero_only_when_remaining_is_zero` + holistic remaining 連携 |
+| AC-002 | PASS | `test_remaining_task_count_includes_holistic_while_incomplete` |
+| AC-003 | PASS | `tests/test_server_frontend.py` の progress / remaining 回帰 |
+
+### Commands Run (Bug-54)
+
+```bash
+uv run pytest tests/test_server_frontend.py tests/test_benchmark_engine.py -q
+```
+
+Result: 73 passed（Bug-50/54/55 含む targeted suite）
+
+### Decision Conformance (Bug-54)
+
+| ID | Result | Notes |
+| --- | --- | --- |
+| DEC-002 | PASS | measured ETA 0 は remaining 真に 0 のときのみ。holistic 残がある間は完了扱いしない |
+| DEC-003 | PASS | status / remaining が holistic 残を反映 |
+
+Verdict (Bug-54 scope): PASS

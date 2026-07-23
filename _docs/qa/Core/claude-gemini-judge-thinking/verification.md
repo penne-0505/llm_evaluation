@@ -90,7 +90,7 @@ Not applicable (Risk Medium).
 | ID | Result | Why the implementation remains aligned |
 | --- | --- | --- |
 | DEC-001 | PASS | OpenRouter CC 共通ヘルパのみ。ネイティブ SDK なし |
-| DEC-002 | PASS | 非 thinking Gemini は空 `api_reasoning`、採点は継続 |
+| DEC-002 | PASS | 非 thinking Gemini は空 `api_reasoning`、採点は継続。Bug-53 で catalog no-support / unknown の tag gate を追加 |
 | DEC-003 | PASS | 抽出はレスポンスフィールド有無。opt-in はリクエスト制御のみ |
 | DEC-004 | PASS | `api_reasoning` / ResultDetail ラベルは 37 契約をそのまま利用 |
 
@@ -116,6 +116,36 @@ None
 
 - Core-Test-49: Manual QA 対象に Claude `:thinking` / opt-in と Gemini thinking 各 1 件を追加し、
   ResultDetail の API thinking 折りたたみを live 確認する。
+
+## Core-Bug-53 follow-up (2026-07-23)
+
+catalog 上 reasoning 非サポートの Gemini で content 内 `<thinking>` 相当があっても
+`api_reasoning` を保存しないゲートを実装。`supports_reasoning` に応じて tag fallback を抑止し、
+thinking サポート Gemini / Claude の抽出は維持。
+
+### Bug AC Coverage
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| AC-001 | PASS | `test_openrouter_gemini_no_reasoning_catalog_ignores_thinking_tags` |
+| AC-002 | PASS | thinking サポート Gemini / Claude stub 既存 + `test_openrouter_gemini_reasoning_catalog_allows_fields_and_tags` |
+| AC-003 | PASS | `test_openrouter_gemini_unknown_catalog_allows_cc_not_tags` が no-support / unknown 境界を固定 |
+
+### Commands Run (Bug-53)
+
+```bash
+uv run pytest tests/test_adapters.py -q
+```
+
+Result: 25 passed
+
+### Decision Conformance (Bug-53)
+
+| ID | Result | Notes |
+| --- | --- | --- |
+| DEC-002 | PASS | Gemini no-support は抽出ゲート（`allow_tag_fallback=False` / 非サポートは空）。Intent と実装が一致 |
+
+Verdict (Bug-53 scope): PASS（unit）。全体 Verdict は live Manual 未実施のため PARTIAL 維持（Follow-up: Core-Test-49）。
 
 ## Reuse from Core-Feat-37
 

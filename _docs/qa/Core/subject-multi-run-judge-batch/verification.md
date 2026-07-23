@@ -113,6 +113,7 @@ frontend production build: PASS
 | DEC-004 | PASS | 部分 `[ERROR]` 続行、N>1 全失敗 raise |
 | DEC-005 | PASS | max 5 clamp、コスト比例を Intent に記録 |
 | DEC-006 | PASS | strict は subject_runs を固定しない |
+| DEC-007 | PASS（unit） | Core-Enhance-55: holistic non_creative は N>1 で `_build_bundled_subject_runs` 全文を渡す（下記 follow-up） |
 
 ## Invariant Coverage
 
@@ -138,9 +139,39 @@ frontend production build: PASS
 ## Follow-up TODOs
 
 - 任意: ResultDetail 試行タブの node assert（N run 見出し・error run）を追加すると AC-004 UI 証跡が自動テスト単独で閉じる。
-- live smoke は運用時任意（Out of Scope 維持）。
+- live smoke は運用時任意（Out of Scope 維持）。Enhance-55 / DEC-007 の unit は閉じ済み。
 
 ## Completion Decision
 
 - TODO `Core-Feat-44` 実装核は Intent 整合。Verification は live 目視 / ResultDetail multi-run node 欠落により PARTIAL。
   High-risk Checklist は unit 証跡で記録済み。エントリ削除は parent に委ねる。
+
+## Core-Enhance-55 / DEC-007 follow-up (2026-07-23)
+
+`subject_runs > 1` 時の包括評価入力方針を DEC-007 として Intent に固定し、実装を
+「全試行 bundled」に揃えた。`server.py` の non_creative holistic 入力は
+`_build_bundled_subject_runs` 由来テキストを渡し、list-eval と入力粒度が一致する。
+
+### Enhance AC Coverage
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| AC-001 | PASS | Intent DEC-007 + INV-004 |
+| AC-002 | PASS | `test_non_creative_holistic_inputs_bundle_subject_runs_when_n_gt_1`（`tests/test_server_frontend.py`） |
+| AC-003 | N/A | 「代表のみ」方針は採らず |
+
+### Commands Run (Enhance-55)
+
+```bash
+uv run pytest tests/test_server_frontend.py tests/test_benchmark_engine.py -q
+```
+
+Result: 73 passed（Bug-50/54/55 含む targeted suite）
+
+### Decision Conformance (Enhance-55)
+
+| ID | Result | Notes |
+| --- | --- | --- |
+| DEC-007 | PASS（unit） | N>1 は全試行 bundle、`len <= 1` は代表 `response` |
+
+Verdict (Enhance-55 scope): PARTIAL — unit は PASS。live multi-run + holistic 目視は未実施（既存 Deferred / Core-Test-49 系の live 残と併記）。

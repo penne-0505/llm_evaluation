@@ -111,3 +111,32 @@ None
 ## Follow-up TODOs
 
 None
+
+## Core-Bug-50 follow-up (2026-07-23)
+
+holistic judge adapter 解決が空のとき SSE error 後に即 `return` し、完了済み標準タスク結果が
+`ResultStorage.save` に届かない経路を修正。adapter 空でも standard results は保存される。
+
+### Bug AC Coverage
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| AC-001 | PASS | `test_holistic_adapter_failure_still_saves_standard_results`（`tests/test_server_frontend.py`） |
+| AC-002 | PASS | Intent Consequences の partial failure 方針と一致（SSE error + 保存継続） |
+| AC-003 | PASS | 同上回帰テストが「standard 完了 → holistic adapter 空 → 保存あり」を固定 |
+
+### Commands Run (Bug-50)
+
+```bash
+uv run pytest tests/test_server_frontend.py tests/test_benchmark_engine.py -q
+```
+
+Result: 73 passed（Bug-50/54/55 含む targeted suite）
+
+### Decision Conformance (Bug-50)
+
+| ID | Result | Notes |
+| --- | --- | --- |
+| Consequences（API key / adapter 空） | PASS | 標準結果は recoverable に保存。`holistic_tasks` / `holistic_judge_models` は空 |
+
+Verdict (Bug-50 scope): PASS
