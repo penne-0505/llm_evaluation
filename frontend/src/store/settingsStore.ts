@@ -22,6 +22,10 @@ import {
     resolveExecutionPresetConfig,
 } from '../lib/executionPresets';
 import {
+    judgeModelLeafId,
+    resolveStrictJudgeSelection,
+} from '../lib/strictMode';
+import {
     fetchTasks,
     fetchModels,
     fetchKeyStatus,
@@ -257,8 +261,27 @@ export const useSettingsStore = create<SettingsState>()(
             judgeModelIds: [],
             setSubjectModel: (id) => set({ subjectModelId: id }),
             toggleJudgeModel: (id) => {
-                if (get().evaluationMode === 'strict') return;
-                const ids = get().judgeModelIds;
+                const state = get();
+                // intent: DEC-003 (Core/strict-mode-v3) — leaf 内なら provider ルートを置換選択
+                if (state.evaluationMode === 'strict') {
+                    const preset = state.strictPreset;
+                    if (!preset) return;
+                    const leaf = judgeModelLeafId(id);
+                    const allowed = new Set(
+                        preset.judgeModels.map((judge) => judgeModelLeafId(judge.id)),
+                    );
+                    if (!allowed.has(leaf)) return;
+                    const withoutLeaf = state.judgeModelIds.filter(
+                        (existing) => judgeModelLeafId(existing) !== leaf,
+                    );
+                    if (state.judgeModelIds.includes(id)) {
+                        set({ judgeModelIds: withoutLeaf });
+                        return;
+                    }
+                    set({ judgeModelIds: [...withoutLeaf, id] });
+                    return;
+                }
+                const ids = state.judgeModelIds;
                 set({
                     judgeModelIds: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
                 });
@@ -327,7 +350,11 @@ export const useSettingsStore = create<SettingsState>()(
                     const preset = get().strictPreset;
                     if (preset) {
                         set((s) => ({
-                            judgeModelIds: preset.judgeModels.map((judge) => judge.id),
+                            judgeModelIds: resolveStrictJudgeSelection(
+                                preset,
+                                s.judgeModelIds,
+                                s.availableModels,
+                            ),
                             freeTextJudges: [],
                             selectedTaskIds: preset.taskIds,
                             evalParams: {
@@ -349,7 +376,11 @@ export const useSettingsStore = create<SettingsState>()(
                         strictPresetLoading: false,
                         ...(s.evaluationMode === 'strict'
                             ? {
-                                judgeModelIds: preset.judgeModels.map((judge) => judge.id),
+                                judgeModelIds: resolveStrictJudgeSelection(
+                                    preset,
+                                    s.judgeModelIds,
+                                    s.availableModels,
+                                ),
                                 freeTextJudges: [],
                                 selectedTaskIds: preset.taskIds,
                                 evalParams: {

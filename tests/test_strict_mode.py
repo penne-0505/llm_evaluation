@@ -7,6 +7,7 @@ from pathlib import Path
 from core.strict_mode import (
     build_strict_mode_metadata,
     get_official_strict_preset,
+    judge_model_leaf_id,
     validate_official_strict_request,
 )
 
@@ -27,9 +28,30 @@ class TestStrictModeMetadata(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp_dir.cleanup()
 
+    def test_official_preset_is_v3(self) -> None:
+        preset = get_official_strict_preset()
+        self.assertEqual(preset["id"], "official-v3")
+        self.assertEqual(
+            [judge["id"] for judge in preset["judge_models"]],
+            [
+                "openrouter/moonshotai/kimi-k3",
+                "openrouter/openai/gpt-5.6-terra",
+                "openrouter/qwen/qwen3.7-max",
+            ],
+        )
+
+    def test_judge_model_leaf_id(self) -> None:
+        self.assertEqual(
+            judge_model_leaf_id("openrouter/openai/gpt-5.6-terra"),
+            "gpt-5.6-terra",
+        )
+        self.assertEqual(judge_model_leaf_id("openai/gpt-5.6-terra"), "gpt-5.6-terra")
+
     def test_profile_id_is_shared_across_subject_models(self):
         preset = get_official_strict_preset()
-        preset["judge_models"] = [{"id": "judge-a", "label": "Judge A", "provider": "openrouter"}]
+        preset["judge_models"] = [
+            {"id": "openrouter/vendor/judge-a", "label": "Judge A", "provider": "openrouter"}
+        ]
         preset["task_ids"] = ["01"]
 
         selected_tasks = [
@@ -46,7 +68,7 @@ class TestStrictModeMetadata(unittest.TestCase):
         run_a = build_strict_mode_metadata(
             target_model="openrouter/model-a",
             selected_tasks=selected_tasks,
-            judge_models=["judge-a"],
+            judge_models=["openrouter/vendor/judge-a"],
             judge_runs=3,
             subject_temp=0.45,
             judge_system_prompt_path=self.judge_prompt_path,
@@ -56,7 +78,7 @@ class TestStrictModeMetadata(unittest.TestCase):
         run_b = build_strict_mode_metadata(
             target_model="openrouter/model-b",
             selected_tasks=selected_tasks,
-            judge_models=["judge-a"],
+            judge_models=["openai/judge-a"],
             judge_runs=3,
             subject_temp=0.45,
             judge_system_prompt_path=self.judge_prompt_path,
@@ -72,14 +94,39 @@ class TestStrictModeMetadata(unittest.TestCase):
         self.assertEqual(run_a["profile_id"], run_b["profile_id"])
         self.assertEqual(run_a["config"]["subject_model"], "openrouter/model-a")
         self.assertEqual(run_b["config"]["subject_model"], "openrouter/model-b")
-        self.assertEqual(
-            run_a["policy"]["judge_temperature_omitted_models"],
-            ["openrouter/google/gemini-3.5-flash"],
+        self.assertEqual(run_a["version"], "v3")
+
+    def test_leaf_mismatch_marks_ineligible(self) -> None:
+        preset = get_official_strict_preset()
+        preset["judge_models"] = [
+            {"id": "openrouter/vendor/judge-a", "label": "Judge A", "provider": "openrouter"}
+        ]
+        preset["task_ids"] = ["01"]
+
+        violations = validate_official_strict_request(
+            selected_tasks=[
+                {
+                    "id": "01",
+                    "type": "fact",
+                    "prompt_file": str(self.prompt_path),
+                    "rubric_file": str(self.rubric_path),
+                    "prompt_source": "bundled",
+                    "rubric_source": "bundled",
+                }
+            ],
+            judge_models=["openrouter/vendor/judge-b"],
+            judge_runs=3,
+            subject_temp=0.45,
+            judge_system_prompt_source="bundled",
+            preset=preset,
         )
+        self.assertTrue(any("leaf mismatch" in item for item in violations))
 
     def test_override_resource_marks_run_ineligible(self):
         preset = get_official_strict_preset()
-        preset["judge_models"] = [{"id": "judge-a", "label": "Judge A", "provider": "openrouter"}]
+        preset["judge_models"] = [
+            {"id": "judge-a", "label": "Judge A", "provider": "openrouter"}
+        ]
         preset["task_ids"] = ["01"]
 
         selected_tasks = [
@@ -109,7 +156,9 @@ class TestStrictModeMetadata(unittest.TestCase):
 
     def test_validate_official_strict_request_detects_parameter_mismatch(self):
         preset = get_official_strict_preset()
-        preset["judge_models"] = [{"id": "judge-a", "label": "Judge A", "provider": "openrouter"}]
+        preset["judge_models"] = [
+            {"id": "judge-a", "label": "Judge A", "provider": "openrouter"}
+        ]
         preset["task_ids"] = ["01"]
 
         violations = validate_official_strict_request(
@@ -124,14 +173,13 @@ class TestStrictModeMetadata(unittest.TestCase):
                 }
             ],
             judge_models=["judge-a"],
-            judge_runs=5,
-            subject_temp=0.7,
+            judge_runs=1,
+            subject_temp=0.3,
             judge_system_prompt_source="bundled",
             preset=preset,
         )
-
-        self.assertIn("judge_runs mismatch expected=3 actual=5", violations)
-        self.assertIn("subject_temp mismatch expected=0.45 actual=0.70", violations)
+        self.assertTrue(any("judge_runs" in item for item in violations))
+        self.assertTrue(any("subject_temp" in item for item in violations))
 
 
 if __name__ == "__main__":

@@ -4,6 +4,60 @@ function sortedValues(values: string[]): string[] {
     return [...values].sort((a, b) => a.localeCompare(b));
 }
 
+/** Segment after the last `/` — Strict judge match key (DEC-002). */
+export function judgeModelLeafId(modelId: string): string {
+    const text = String(modelId || '').trim();
+    if (!text) return '';
+    const idx = text.lastIndexOf('/');
+    return idx >= 0 ? text.slice(idx + 1) : text;
+}
+
+export function judgeModelLeafIds(modelIds: string[]): string[] {
+    return sortedValues(modelIds.map(judgeModelLeafId));
+}
+
+export function strictJudgeLeafSet(preset: StrictModePreset): Set<string> {
+    return new Set(preset.judgeModels.map((judge) => judgeModelLeafId(judge.id)));
+}
+
+export function filterModelsByStrictJudgeLeaves(
+    models: Model[],
+    preset: StrictModePreset,
+): Model[] {
+    const leaves = strictJudgeLeafSet(preset);
+    return models.filter((model) => leaves.has(judgeModelLeafId(model.id)));
+}
+
+/**
+ * Seed Strict judge IDs: keep current leaf matches when still in catalog,
+ * else preferred preset id, else any catalog match for that leaf.
+ */
+export function resolveStrictJudgeSelection(
+    preset: StrictModePreset,
+    currentIds: string[],
+    availableModels: Model[],
+): string[] {
+    const availableIds = new Set(availableModels.map((model) => model.id));
+    const byLeaf = new Map<string, string[]>();
+    for (const model of availableModels) {
+        const leaf = judgeModelLeafId(model.id);
+        const list = byLeaf.get(leaf) ?? [];
+        list.push(model.id);
+        byLeaf.set(leaf, list);
+    }
+
+    return preset.judgeModels.map((judge) => {
+        const leaf = judgeModelLeafId(judge.id);
+        const existing = currentIds.find(
+            (id) => judgeModelLeafId(id) === leaf && availableIds.has(id),
+        );
+        if (existing) return existing;
+        if (availableIds.has(judge.id)) return judge.id;
+        const alts = byLeaf.get(leaf) ?? [];
+        return alts[0] ?? judge.id;
+    });
+}
+
 export function getStrictModeIssues({
     strictPreset,
     availableModels,
@@ -32,10 +86,12 @@ export function getStrictModeIssues({
         issues.push('task set が official strict preset と一致していません');
     }
 
-    const presetJudgeIds = sortedValues(strictPreset.judgeModels.map((judge) => judge.id));
-    const activeJudgeIds = sortedValues(judgeModelIds);
-    if (presetJudgeIds.join('|') !== activeJudgeIds.join('|')) {
-        issues.push('judge set が official strict preset と一致していません');
+    const presetLeaves = judgeModelLeafIds(
+        strictPreset.judgeModels.map((judge) => judge.id),
+    );
+    const activeLeaves = judgeModelLeafIds(judgeModelIds);
+    if (presetLeaves.join('|') !== activeLeaves.join('|')) {
+        issues.push('judge set（モデル leaf）が official strict preset と一致していません');
     }
 
     if (judgeRunCount !== strictPreset.judgeRuns) {
@@ -46,10 +102,13 @@ export function getStrictModeIssues({
         issues.push(`Subject Temperature は ${strictPreset.subjectTemperature.toFixed(2)} 固定です`);
     }
 
-    const availableModelIds = new Set(availableModels.map((model) => model.id));
+    const availableLeaves = new Set(
+        availableModels.map((model) => judgeModelLeafId(model.id)),
+    );
     strictPreset.judgeModels.forEach((judge) => {
-        if (!availableModelIds.has(judge.id)) {
-            issues.push(`${judge.label} がモデル一覧に見つかりません`);
+        const leaf = judgeModelLeafId(judge.id);
+        if (!availableLeaves.has(leaf)) {
+            issues.push(`${judge.label}（${leaf}）がモデル一覧に見つかりません`);
         }
     });
 

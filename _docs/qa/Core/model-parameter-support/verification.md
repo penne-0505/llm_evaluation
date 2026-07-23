@@ -82,13 +82,12 @@ Result: PASS（model_parameter_support + adapters 回帰 + Gemini 3 + adapter.PR
 | ID | Reason | Follow-up |
 | --- | --- | --- |
 | Live re-run | ユーザー環境の key / 課金 | Settings で同モデル再実行 |
+| OpenRouter catalog 未取得時 omit | DEC-002 意図（旧実装は送信） | 静的表拡充・catalog 監視 |
+| 静的表漏れで UI 温度が効かない | Intent Consequences | 表追記 |
 
 ## Residual Risks
 
-| Risk | Severity | Mitigation / Follow-up |
-| --- | --- | --- |
-| OpenRouter catalog 未取得時は temperature を omit（旧実装は送信） | Low | DEC-002 意図。静的表拡充・catalog 取得失敗の監視 |
-| 静的表漏れの旧モデルで UI 温度が効かない | Low | Intent Consequences と同旨。表追記で解消 |
+None
 
 ## Follow-up TODOs
 

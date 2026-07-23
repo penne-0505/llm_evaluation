@@ -255,10 +255,10 @@ user override の配置先:
 各 task には `subject_usage`、各 judge run には `usage` が保存されます。さらに結果全体には `usage_summary`、`estimated_cost_usd`、`cost_estimate_status` が追加され、usage が取れた呼び出しと価格が分かるモデルについて推定コストを保存します。
 推定コストは、registry の `pricing_profile` に従います。OpenRouter はカタログ価格、OpenAI / Anthropic / Google はリポジトリ内静的表、未マップ・表外モデルは `cost_estimate_status: partial` または `unavailable`（0 円扱いにはしません）。
 結果JSONには `strict_mode` も保存されます。正式な Strict Mode は Settings で `Strict` を選んだうえで official preset を満たした run だけが `requested: true` / `enforced: true` になり、Dashboard の Strict Mode leaderboard 集計対象になります。
-official preset v2 は `task_ids=01..11`、`judge_models=[openrouter/anthropic/claude-sonnet-5, openrouter/openai/gpt-5.6-terra, openrouter/google/gemini-3.5-flash]`、`judge_runs=3`、`subject_temperature=0.45`、bundled prompt / rubric / judge_system_prompt 固定です。
-Strict Mode の judge 3モデルはすべて OpenRouter 経由で呼び出され、OpenAI / Anthropic / Gemini の native provider へ自動で切り替えることはしません。
+official preset v3 は `task_ids=01..11`、preferred `judge_models=[openrouter/moonshotai/kimi-k3, openrouter/openai/gpt-5.6-terra, openrouter/qwen/qwen3.7-max]`、`judge_runs=3`、`subject_temperature=0.45`、bundled prompt / rubric / judge_system_prompt 固定です。
+Strict Mode の judge 適合は model ID の末尾セグメント（leaf）一致で判定します。同一 leaf なら OpenRouter 以外の provider ルートも選べます（Settings の judge picker は leaf 一致モデルにフィルタされます）。
 reasoning を明示指定できる被験モデルとjudgeモデルには effort `high` を指定します。モデルカタログ上で reasoning の明示指定に対応しないモデルは、各 provider / model の既定動作を使用します。
-judge の temperature は原則 `0.0` です。ただし Gemini 3 系では sampling parameter を送信せず、モデルの既定値を使用します。
+judge の temperature は原則 `0.0` です。gpt-5 系など非対応モデルでは sampling parameter を送信せず、モデルの既定値を使用します。
 
 Settings の実行プリセットはブラウザの localStorage に保存されます。保存対象は被験モデル、judgeモデル、タスク選択、包括評価の有無、judge評価回数、subject temperatureです。ロード時に現在のカタログに存在しないモデルやタスクは除外し、ブラウザコンソールへwarningを記録します。
 実行時のアプリログは app data 配下の `logs/app.log` にローテーション付きで保存されます。

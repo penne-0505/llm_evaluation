@@ -6,21 +6,25 @@ import hashlib
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
 
-STRICT_MODE_VERSION = "v2"
-OFFICIAL_STRICT_PRESET_ID = "official-v2"
+STRICT_MODE_VERSION = "v3"
+OFFICIAL_STRICT_PRESET_ID = "official-v3"
 
 _OFFICIAL_STRICT_PRESET: Dict[str, Any] = {
     "id": OFFICIAL_STRICT_PRESET_ID,
-    "label": "Official Strict v2",
-    "description": "固定 judge・固定 task set・固定 parameter で leaderboard 比較を成立させる正式モード",
+    "label": "Official Strict v3",
+    "description": (
+        "固定 judge leaf・固定 task set・固定 parameter で leaderboard 比較を成立させる正式モード。"
+        "judge の provider ルートは leaf 一致の範囲で選択可。"
+    ),
     "subject_model_policy": "variable",
+    # intent: DEC-001 (Core/strict-mode-v3) — preferred OpenRouter IDs; match is by leaf
     "judge_models": [
         {
-            "id": "openrouter/anthropic/claude-sonnet-5",
-            "label": "Claude Sonnet 5",
+            "id": "openrouter/moonshotai/kimi-k3",
+            "label": "Kimi K3",
             "provider": "openrouter",
         },
         {
@@ -29,8 +33,8 @@ _OFFICIAL_STRICT_PRESET: Dict[str, Any] = {
             "provider": "openrouter",
         },
         {
-            "id": "openrouter/google/gemini-3.5-flash",
-            "label": "Gemini 3.5 Flash",
+            "id": "openrouter/qwen/qwen3.7-max",
+            "label": "Qwen3.7 Max",
             "provider": "openrouter",
         },
     ],
@@ -38,10 +42,28 @@ _OFFICIAL_STRICT_PRESET: Dict[str, Any] = {
     "judge_runs": 3,
     "subject_temperature": 0.45,
     "judge_temperature": 0.0,
+    # metadata only; runtime omit is model_parameter_support
     "judge_temperature_omitted_models": [
-        "openrouter/google/gemini-3.5-flash",
+        "openrouter/openai/gpt-5.6-terra",
     ],
 }
+
+
+def judge_model_leaf_id(model_id: str) -> str:
+    """Return the segment after the last `/` (upstream leaf id).
+
+    intent: DEC-002 (Core/strict-mode-v3) — Strict match key.
+    """
+    text = str(model_id or "").strip()
+    if not text:
+        return ""
+    if "/" not in text:
+        return text
+    return text.rsplit("/", 1)[-1]
+
+
+def judge_model_leaf_ids(model_ids: Sequence[str]) -> List[str]:
+    return sorted(judge_model_leaf_id(model_id) for model_id in model_ids)
 
 
 def get_official_strict_preset() -> Dict[str, Any]:
@@ -68,15 +90,17 @@ def validate_official_strict_request(
             f"expected={','.join(expected_task_ids)} actual={','.join(actual_task_ids)}"
         )
 
-    actual_judges = sorted(judge_models)
-    expected_judges = sorted(
+    expected_judge_ids = [
         judge["id"] if isinstance(judge, dict) else judge
         for judge in strict_preset["judge_models"]
-    )
-    if actual_judges != expected_judges:
+    ]
+    # intent-invariant: INV-001 (Core/strict-mode-v3) — leaf 多重集合一致
+    actual_leaves = judge_model_leaf_ids(judge_models)
+    expected_leaves = judge_model_leaf_ids(expected_judge_ids)
+    if actual_leaves != expected_leaves:
         violations.append(
-            "judge_models mismatch "
-            f"expected={','.join(expected_judges)} actual={','.join(actual_judges)}"
+            "judge_models leaf mismatch "
+            f"expected={','.join(expected_leaves)} actual={','.join(actual_leaves)}"
         )
 
     if judge_runs != strict_preset["judge_runs"]:
@@ -142,14 +166,16 @@ def build_strict_mode_metadata(
             }
         )
 
+    preferred_judge_ids = [
+        judge["id"] if isinstance(judge, dict) else judge
+        for judge in strict_preset["judge_models"]
+    ]
+    # intent: DEC-002 — profile は leaf 集合で共有（provider 差は config に残す）
     profile_payload = {
         "strict_mode_version": STRICT_MODE_VERSION,
         "preset_id": strict_preset["id"],
         "task_ids": strict_preset["task_ids"],
-        "judge_models": [
-            judge["id"] if isinstance(judge, dict) else judge
-            for judge in strict_preset["judge_models"]
-        ],
+        "judge_model_leaves": judge_model_leaf_ids(preferred_judge_ids),
         "judge_runs": strict_preset["judge_runs"],
         "subject_temperature": round(float(strict_preset["subject_temperature"]), 4),
         "judge_temperature": round(float(strict_preset["judge_temperature"]), 4),
@@ -164,13 +190,9 @@ def build_strict_mode_metadata(
     ).hexdigest()
     profile_id = manifest_hash[:16]
 
-    judge_ids = [
-        judge["id"] if isinstance(judge, dict) else judge
-        for judge in strict_preset["judge_models"]
-    ]
     profile_label = (
         f"{strict_preset['label']} · {len(strict_preset['task_ids'])} tasks · "
-        f"{len(judge_ids)} judges · runs x{strict_preset['judge_runs']} · "
+        f"{len(preferred_judge_ids)} judges · runs x{strict_preset['judge_runs']} · "
         f"temp {float(strict_preset['subject_temperature']):.2f}"
     )
 

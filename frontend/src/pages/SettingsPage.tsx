@@ -12,7 +12,7 @@ import {
 import { useSettingsStore } from '../store/settingsStore';
 import type { ProviderKind, RegistryProvider, ToolMode } from '../types';
 import { providerDisplayName } from '../types';
-import { getStrictModeIssues } from '../lib/strictMode';
+import { filterModelsByStrictJudgeLeaves, getStrictModeIssues } from '../lib/strictMode';
 import { TASK_TYPE_LABELS, TASK_TYPE_STYLE } from '../lib/taskTypeStyles';
 import {
     Trash2,
@@ -432,7 +432,7 @@ function EvaluationModeSection() {
                                 </p>
                                 <p className="text-[11px] leading-5 text-text-tertiary">{strictPreset.description}</p>
                                 <p className="text-[11px] leading-5 text-text-tertiary">
-                                    judge モデルはすべて OpenRouter 経由で呼び出されます。
+                                    judge は preset のモデル leaf（末尾 ID）が一致すればよく、provider ルートは下のピッカーで選べます。
                                 </p>
                             </div>
                             <div className="grid gap-2 md:grid-cols-4">
@@ -442,7 +442,7 @@ function EvaluationModeSection() {
                                 <StrictSpec label="Subject Temperature" value={strictPreset.subjectTemperature.toFixed(2)} />
                             </div>
                             <div className="space-y-2">
-                                <p className="text-[11px] font-medium text-text-secondary">Fixed judges</p>
+                                <p className="text-[11px] font-medium text-text-secondary">Required judge leaves</p>
                                 <div className="flex flex-wrap gap-1.5">
                                     {strictPreset.judgeModels.map((judge) => (
                                         <span key={judge.id} className="rounded bg-surface-hover px-2 py-1 text-[11px] text-text-secondary">
@@ -1103,19 +1103,48 @@ function ModelSelectionSection() {
                     {isStrict && strictPreset ? (
                         <div className="space-y-2">
                             <div className="rounded-md border border-score-high/20 bg-score-high/8 px-3 py-2 text-[11px] text-score-high">
-                                official strict preset により固定されています
+                                official strict preset の judge leaf に一致するモデルだけ選べます。provider ルートは自由です。
                             </div>
-                            <p className="text-[11px] leading-5 text-text-tertiary">
-                                Strict Mode の judge はすべて OpenRouter から実行されます。
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {strictPreset.judgeModels.map((judge) => (
-                                    <span key={judge.id} className="flex items-center gap-1 rounded bg-surface-hover px-2 py-1 text-[11px] text-text-secondary">
-                                        <span>{judge.label}</span>
-                                        <span className="text-text-tertiary">· {providerDisplayName(judge.provider, registryProviders)}</span>
-                                    </span>
-                                ))}
-                            </div>
+                            {hasCatalogModels ? (
+                                <>
+                                    <ModelPicker
+                                        availableModels={filterModelsByStrictJudgeLeaves(
+                                            availableModels,
+                                            strictPreset,
+                                        )}
+                                        registryProviders={registryProviders}
+                                        open={judgeOpen}
+                                        onOpenChange={setJudgeOpen}
+                                        placeholder="評価モデル（leaf 一致）を選択"
+                                        selectedLabel={judgeLabel}
+                                        onSelect={(id) => toggleJudgeModel(id)}
+                                        isSelected={(id) => judgeModelIds.includes(id)}
+                                        multi
+                                    />
+                                    {judgeModelIds.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {judgeModelIds.map((id) => {
+                                                const model = availableModels.find((m) => m.id === id);
+                                                const label = model?.name || id;
+                                                return (
+                                                    <Button
+                                                        key={id}
+                                                        onClick={() => toggleJudgeModel(id)}
+                                                        className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber hover:text-score-low transition-colors duration-150"
+                                                    >
+                                                        <span>{label}</span>
+                                                        <X size={10} />
+                                                    </Button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <p className="text-[11px] text-text-tertiary">
+                                    モデル一覧が無いため Strict judge を選べません。プロバイダキーを設定して再取得してください。
+                                </p>
+                            )}
                         </div>
                     ) : hasCatalogModels ? (
                         <div className="space-y-2">
