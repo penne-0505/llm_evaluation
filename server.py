@@ -474,6 +474,33 @@ def _apply_progress_message(
         task_state["judge_states"][judge_model] = "running"
 
 
+def _remaining_task_count_for_eta(
+    *,
+    snapshot: Dict[str, Any],
+    task_states: List[Dict[str, Any]],
+    holistic_task_count: int,
+) -> int:
+    """ETA 用の残タスク数。standard lane に holistic 残件を加算する。
+
+    intent: Core-Bug-54 / DEC-002 (Core/task-duration-eta) —
+    standard 完了後も holistic 未完了なら remaining=0 の measured 0 にしない。
+    snapshot の active/queued は standard-only（DEC-001 holistic-run-progress）のまま。
+    """
+    remaining = int(snapshot["active_task_count"]) + int(snapshot["queued_task_count"])
+    if holistic_task_count <= 0:
+        return remaining
+    # holistic phase 開始後（task_states に holistic が載った時点）だけ加算する
+    if not any(state.get("task_kind") == "holistic" for state in task_states):
+        return remaining
+    holistic_done = sum(
+        1
+        for state in task_states
+        if state.get("task_kind") == "holistic"
+        and state.get("phase") in ("completed", "failed")
+    )
+    return remaining + max(0, holistic_task_count - holistic_done)
+
+
 def _compute_progress_eta(
     *,
     completed_timings: List[Dict[str, Any]],
@@ -517,6 +544,34 @@ def _compute_progress_eta(
         }
 
     return {"eta_ms": None, "eta_status": "unavailable"}
+
+
+def _holistic_subject_response_text(task_result: Dict[str, Any]) -> str:
+    """包括評価へ渡す被験回答テキストを構築する。
+
+    intent: DEC-007 (Core/subject-multi-run-judge-batch) —
+    subject_runs > 1 では list-eval と同じ `_build_bundled_subject_runs` 全文を渡す。
+    """
+    subject_runs = task_result.get("subject_runs")
+    if isinstance(subject_runs, list) and len(subject_runs) > 1:
+        return BenchmarkEngine._build_bundled_subject_runs(subject_runs)
+    return str(task_result.get("response", ""))
+
+
+def _build_non_creative_holistic_inputs(
+    completed: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """creative 除外済みの包括評価入力リストを構築する。"""
+    return [
+        {
+            "task_name": r["task_name"],
+            "task_type": r["task_type"],
+            "input_prompt": r["input_prompt"],
+            "response": _holistic_subject_response_text(r),
+        }
+        for r in completed
+        if r.get("task_type") != "creative"
+    ]
 
 
 def _build_progress_snapshot(task_states: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1190,8 +1245,10 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                     and state.get("phase") == "completed"
                     and isinstance(state.get("task_timing"), dict)
                 ]
-                remaining_task_count = (
-                    snapshot["active_task_count"] + snapshot["queued_task_count"]
+                remaining_task_count = _remaining_task_count_for_eta(
+                    snapshot=snapshot,
+                    task_states=task_states,
+                    holistic_task_count=holistic_task_count,
                 )
                 elapsed_ms = int((time.perf_counter() - run_started_at) * 1000)
                 eta = _compute_progress_eta(
@@ -1414,6 +1471,8 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                     holistic_judge_model_ids, api_keys=api_keys
                 )
                 if not holistic_judge_adapters:
+                    # intent: Core-Bug-50 / Consequences (Core/holistic-judge-model) —
+                    # adapter 空でも return せず、完了済み標準結果を ResultStorage へ保存する。
                     logger.warning(
                         "holistic aborted: no judge adapters run_id=%s "
                         "holistic_judge_models=%s",
@@ -1427,159 +1486,157 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                             "traceback": "",
                         }
                     )
-                    return
-                effective_holistic_judge_models = list(holistic_judge_adapters.keys())
-
-                failed_holistic_task_count = 0
-                non_creative_responses = [
-                    {
-                        "task_name": r["task_name"],
-                        "task_type": r["task_type"],
-                        "input_prompt": r["input_prompt"],
-                        "response": r["response"],
-                    }
-                    for r in completed
-                    if r.get("task_type") != "creative"
-                ]
-                enqueue_holistic_progress_event(
-                    status="started",
-                    completed_task_count=0,
-                    failed_task_count=0,
-                    message="包括評価を開始します",
-                )
-
-                for h_idx, h_task in enumerate(holistic_tasks_meta):
-                    try:
-                        cancel_checker()
-                    except asyncio.CancelledError:
-                        cancelled = True
-                        cancel_reason = "ユーザーによってキャンセルされました"
-                        break
-
-                    h_state_index = total_tasks + h_idx
-                    h_state = _initial_task_progress_state(
-                        h_task["id"],
-                        h_state_index,
-                        list(holistic_judge_adapters.keys()),
-                        task_kind="holistic",
+                    # holistic_results=[] / effective_holistic_judge_models=[] のまま保存へ進む
+                else:
+                    effective_holistic_judge_models = list(
+                        holistic_judge_adapters.keys()
                     )
-                    task_states.append(h_state)
 
+                    failed_holistic_task_count = 0
+                    non_creative_responses = _build_non_creative_holistic_inputs(
+                        completed
+                    )
                     enqueue_holistic_progress_event(
-                        status="running",
-                        completed_task_count=len(holistic_results),
-                        failed_task_count=failed_holistic_task_count,
-                        current_task_index=h_idx,
-                        current_task_id=h_task["id"],
-                        message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 実行中",
+                        status="started",
+                        completed_task_count=0,
+                        failed_task_count=0,
+                        message="包括評価を開始します",
                     )
 
-                    enqueue_progress_event(
-                        message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 実行開始",
-                        task_index=h_state_index,
-                        task_id=h_task["id"],
-                        task_kind="holistic",
-                        increment_step=False,
-                    )
+                    for h_idx, h_task in enumerate(holistic_tasks_meta):
+                        try:
+                            cancel_checker()
+                        except asyncio.CancelledError:
+                            cancelled = True
+                            cancel_reason = "ユーザーによってキャンセルされました"
+                            break
 
-                    rubric_content = Path(h_task["rubric_file"]).read_text(
-                        encoding="utf-8"
-                    )
-                    eval_prompt = Path(h_task["prompt_file"]).read_text(encoding="utf-8")
-
-                    holistic_future = asyncio.create_task(
-                        engine.run_holistic_task(
-                            task_name=h_task["id"],
-                            eval_prompt=eval_prompt,
-                            rubric_content=rubric_content,
-                            bundled_responses=non_creative_responses,
-                            system_prompt=system_prompt,
-                            progress_callback=lambda msg, _idx=h_state_index, _tid=h_task["id"]: (
-                                progress_callback(
-                                    f"包括評価: {msg}",
-                                    task_index=_idx,
-                                    task_id=_tid,
-                                    judge_model=_extract_judge_model(msg),
-                                )
-                            ),
-                            cancel_checker=cancel_checker,
-                            # intent: DEC-002 (Core/holistic-judge-model) — 共有 engine を差し替えず override 注入
-                            judge_adapters=holistic_judge_adapters,
-                        )
-                    )
-                    try:
-                        # intent: DEC-001 (Core/holistic-run-progress) — 専用イベントを完了後まで滞留させず、実行中の phase を観測可能にする。
-                        async for event in _drain_progress_events_while_task_runs(
-                            holistic_future, progress_queue, cancel_checker
-                        ):
-                            yield _sse_event(event)
-
-                        h_result = await holistic_future
-                        holistic_results.append(h_result.to_dict())
-                        task_states[h_state_index]["phase"] = "completed"
-                        task_states[h_state_index]["subject_done"] = True
-                        task_states[h_state_index]["message"] = "Completed"
-                        enqueue_progress_event(
-                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 完了",
-                            task_index=h_state_index,
-                            task_id=h_task["id"],
-                            task_kind="holistic",
-                            increment_step=False,
-                        )
-                        enqueue_holistic_progress_event(
-                            status="running",
-                            completed_task_count=len(holistic_results),
-                            failed_task_count=failed_holistic_task_count,
-                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 完了",
-                        )
-                    except asyncio.CancelledError:
-                        cancelled = True
-                        cancel_reason = "ユーザーによってキャンセルされました"
-                        break
-                    except Exception as h_exc:
-                        logger.exception(
-                            "holistic task failed run_id=%s task_id=%s",
-                            run_id,
+                        h_state_index = total_tasks + h_idx
+                        h_state = _initial_task_progress_state(
                             h_task["id"],
+                            h_state_index,
+                            list(holistic_judge_adapters.keys()),
+                            task_kind="holistic",
                         )
-                        task_states[h_state_index]["phase"] = "failed"
-                        task_states[h_state_index]["message"] = f"Failed: {h_exc}"
-                        failed_holistic_task_count += 1
+                        task_states.append(h_state)
+
+                        enqueue_holistic_progress_event(
+                            status="running",
+                            completed_task_count=len(holistic_results),
+                            failed_task_count=failed_holistic_task_count,
+                            current_task_index=h_idx,
+                            current_task_id=h_task["id"],
+                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 実行中",
+                        )
+
                         enqueue_progress_event(
-                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 失敗",
+                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 実行開始",
                             task_index=h_state_index,
                             task_id=h_task["id"],
                             task_kind="holistic",
                             increment_step=False,
                         )
-                        enqueue_holistic_progress_event(
-                            status="running",
-                            completed_task_count=len(holistic_results),
-                            failed_task_count=failed_holistic_task_count,
-                            message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 失敗",
+
+                        rubric_content = Path(h_task["rubric_file"]).read_text(
+                            encoding="utf-8"
+                        )
+                        eval_prompt = Path(h_task["prompt_file"]).read_text(
+                            encoding="utf-8"
                         )
 
-                # キューの残りをフラッシュ
-                while not progress_queue.empty():
-                    try:
-                        event = progress_queue.get_nowait()
-                        yield _sse_event(event)
-                    except asyncio.QueueEmpty:
-                        break
+                        holistic_future = asyncio.create_task(
+                            engine.run_holistic_task(
+                                task_name=h_task["id"],
+                                eval_prompt=eval_prompt,
+                                rubric_content=rubric_content,
+                                bundled_responses=non_creative_responses,
+                                system_prompt=system_prompt,
+                                progress_callback=lambda msg, _idx=h_state_index, _tid=h_task["id"]: (
+                                    progress_callback(
+                                        f"包括評価: {msg}",
+                                        task_index=_idx,
+                                        task_id=_tid,
+                                        judge_model=_extract_judge_model(msg),
+                                    )
+                                ),
+                                cancel_checker=cancel_checker,
+                                # intent: DEC-002 (Core/holistic-judge-model) — 共有 engine を差し替えず override 注入
+                                judge_adapters=holistic_judge_adapters,
+                            )
+                        )
+                        try:
+                            # intent: DEC-001 (Core/holistic-run-progress) — 専用イベントを完了後まで滞留させず、実行中の phase を観測可能にする。
+                            async for event in _drain_progress_events_while_task_runs(
+                                holistic_future, progress_queue, cancel_checker
+                            ):
+                                yield _sse_event(event)
 
-                if not cancelled:
-                    enqueue_holistic_progress_event(
-                        status="completed",
-                        completed_task_count=len(holistic_results),
-                        failed_task_count=failed_holistic_task_count,
-                        message="包括評価が完了しました",
-                    )
+                            h_result = await holistic_future
+                            holistic_results.append(h_result.to_dict())
+                            task_states[h_state_index]["phase"] = "completed"
+                            task_states[h_state_index]["subject_done"] = True
+                            task_states[h_state_index]["message"] = "Completed"
+                            enqueue_progress_event(
+                                message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 完了",
+                                task_index=h_state_index,
+                                task_id=h_task["id"],
+                                task_kind="holistic",
+                                increment_step=False,
+                            )
+                            enqueue_holistic_progress_event(
+                                status="running",
+                                completed_task_count=len(holistic_results),
+                                failed_task_count=failed_holistic_task_count,
+                                message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 完了",
+                            )
+                        except asyncio.CancelledError:
+                            cancelled = True
+                            cancel_reason = "ユーザーによってキャンセルされました"
+                            break
+                        except Exception as h_exc:
+                            logger.exception(
+                                "holistic task failed run_id=%s task_id=%s",
+                                run_id,
+                                h_task["id"],
+                            )
+                            task_states[h_state_index]["phase"] = "failed"
+                            task_states[h_state_index]["message"] = f"Failed: {h_exc}"
+                            failed_holistic_task_count += 1
+                            enqueue_progress_event(
+                                message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 失敗",
+                                task_index=h_state_index,
+                                task_id=h_task["id"],
+                                task_kind="holistic",
+                                increment_step=False,
+                            )
+                            enqueue_holistic_progress_event(
+                                status="running",
+                                completed_task_count=len(holistic_results),
+                                failed_task_count=failed_holistic_task_count,
+                                message=f"包括評価 {h_idx + 1}/{holistic_task_count}: 失敗",
+                            )
+
+                    # キューの残りをフラッシュ
                     while not progress_queue.empty():
                         try:
                             event = progress_queue.get_nowait()
                             yield _sse_event(event)
                         except asyncio.QueueEmpty:
                             break
+
+                    if not cancelled:
+                        enqueue_holistic_progress_event(
+                            status="completed",
+                            completed_task_count=len(holistic_results),
+                            failed_task_count=failed_holistic_task_count,
+                            message="包括評価が完了しました",
+                        )
+                        while not progress_queue.empty():
+                            try:
+                                event = progress_queue.get_nowait()
+                                yield _sse_event(event)
+                            except asyncio.QueueEmpty:
+                                break
 
             if cancelled:
                 logger.info(

@@ -94,6 +94,22 @@ best-of / list-eval / per-run average など評価セマンティクスの選択
 - **Change freedom**: 将来 strict で `subject_runs=1` 固定にする場合は preset と validator へ追加。
 - **Revisit when**: strict leaderboard が被験サンプリング条件もハッシュ対象にする場合。
 
+### DEC-007: 包括評価の non_creative 入力は `subject_runs > 1` で全試行 bundled テキストを使う
+
+- **What**: `server.py` が包括評価用 `non_creative_responses` を組み立てるとき、完了タスクに
+  `subject_runs` 配列があり `len > 1` なら、各タスクの `response` フィールドへ
+  `BenchmarkEngine._build_bundled_subject_runs(subject_runs)` の結果を入れる。
+  `len <= 1` は従来どおり代表 `response` を使う。holistic 複数 task 用の
+  `_build_bundled_responses` schema（見出し・区切り）は変更しない。
+- **Why**: 標準 list-eval と包括評価で被験出力の入力粒度を揃え、multi-run ON 時に包括だけが
+  代表 1 本へ縮退してばらつき情報を落とすことを防ぐ。
+- **Change freedom**: 入力組み立てヘルパーの配置、UI 上の説明文言は変更可能。task 横断
+  bundler の形式は INV-002 を維持する。
+- **Why not**: 代表 `response` のみを渡し続けると、Intent DEC-001 の list-eval 意味論と
+  包括評価が食い違い、`subject_runs > 1` の実行意図（集合としての文体・一貫性）が包括に
+  届かない。Plan Non-Goals の「holistic bundler schema 非変更」は task 横断フォーマットの
+  話であり、task 内の被験回答本文を multi-run bundled にすることとは両立する。
+
 ## Consequences / Impact
 
 - `RunRequest`、preset schema version、strict mode 検証（該当時）への additive field。
@@ -115,6 +131,9 @@ best-of / list-eval / per-run average など評価セマンティクスの選択
   bundling とは builder 関数を共有しても混同しない（task 種別で分岐）。
 - INV-003 (from DEC-003): `subject_runs=1` の保存 JSON は、新 field を除き従来 schema と
   意味的に同等である。
+- INV-004 (from DEC-007): 包括評価の task 内 `response` は `subject_runs > 1` のとき
+  `_build_bundled_subject_runs` 由来であり、`_build_bundled_responses` の task 横断 schema は
+  変えない。
 
 ## Rollback / Follow-ups
 

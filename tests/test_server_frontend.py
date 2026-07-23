@@ -6,12 +6,13 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
 import server
 from core.app_paths import AppPaths
+from core.benchmark_engine import BenchmarkEngine, TaskResult
 from core.grounding_corpus import GroundingCorpusStore
 from core.result_storage import ResultStorage
 
@@ -278,6 +279,81 @@ class TestRunProgressSnapshot(unittest.TestCase):
         )
         self.assertEqual(eta["eta_status"], "unavailable")
         self.assertIsNone(eta["eta_ms"])
+
+    def test_progress_eta_measured_zero_only_when_remaining_is_zero(self):
+        # AC: remaining > 0 なら measured 0 にならない
+        eta = server._compute_progress_eta(
+            completed_timings=[
+                {"subject_duration_ms": 1000, "judge_duration_ms": 1000},
+            ],
+            remaining_task_count=1,
+            elapsed_ms=5000,
+            current_step=4,
+            total_steps=10,
+        )
+        self.assertEqual(eta["eta_status"], "measured")
+        self.assertEqual(eta["eta_ms"], 2000)
+        self.assertNotEqual(eta["eta_ms"], 0)
+
+        done = server._compute_progress_eta(
+            completed_timings=[
+                {"subject_duration_ms": 1000, "judge_duration_ms": 1000},
+            ],
+            remaining_task_count=0,
+            elapsed_ms=5000,
+            current_step=10,
+            total_steps=10,
+        )
+        self.assertEqual(done["eta_status"], "measured")
+        self.assertEqual(done["eta_ms"], 0)
+
+    def test_remaining_task_count_includes_holistic_while_incomplete(self):
+        # Core-Bug-54: standard 完了 + holistic 未完了 → remaining > 0
+        standard = server._initial_task_progress_state("01", 0, ["judge-a"])
+        standard["phase"] = "completed"
+        standard["subject_done"] = True
+        standard["task_timing"] = {
+            "subject_duration_ms": 1000,
+            "judge_duration_ms": 2000,
+        }
+        holistic = server._initial_task_progress_state(
+            "style", 1, ["judge-h"], task_kind="holistic"
+        )
+        holistic["phase"] = "running_judges"
+        holistic["subject_done"] = True
+
+        snapshot = server._build_progress_snapshot([standard, holistic])
+        remaining = server._remaining_task_count_for_eta(
+            snapshot=snapshot,
+            task_states=[standard, holistic],
+            holistic_task_count=2,
+        )
+        # snapshot は standard-only で active/queued=0、holistic 残 2（1 done 扱いしない）
+        self.assertEqual(snapshot["active_task_count"], 0)
+        self.assertEqual(snapshot["queued_task_count"], 0)
+        self.assertEqual(remaining, 2)
+
+        eta = server._compute_progress_eta(
+            completed_timings=[standard["task_timing"]],
+            remaining_task_count=remaining,
+            elapsed_ms=9000,
+            current_step=5,
+            total_steps=12,
+        )
+        self.assertEqual(eta["eta_status"], "measured")
+        self.assertNotEqual(eta["eta_ms"], 0)
+        self.assertEqual(eta["eta_ms"], 6000)  # avg 3000 × 2
+
+    def test_remaining_task_count_ignores_holistic_before_phase_starts(self):
+        standard = server._initial_task_progress_state("01", 0, ["judge-a"])
+        standard["phase"] = "queued"
+        snapshot = server._build_progress_snapshot([standard])
+        remaining = server._remaining_task_count_for_eta(
+            snapshot=snapshot,
+            task_states=[standard],
+            holistic_task_count=1,
+        )
+        self.assertEqual(remaining, 1)
 
     def test_holistic_tasks_are_excluded_from_standard_progress_lanes(self):
         standard_task = server._initial_task_progress_state(
@@ -908,6 +984,174 @@ class TestHolisticJudgeModels(unittest.TestCase):
             req.judge_models, req.holistic_judge_models
         )
         self.assertEqual(effective, ["judge-holistic"])
+
+    def test_non_creative_holistic_inputs_bundle_subject_runs_when_n_gt_1(self):
+        """DEC-007 / Core-Enhance-55: multi-run completed task → bundled text in holistic input."""
+        completed = [
+            {
+                "task_name": "01",
+                "task_type": "fact",
+                "input_prompt": "p1",
+                "response": "representative-only",
+                "subject_runs": [
+                    {"run_index": 1, "response": "alpha"},
+                    {"run_index": 2, "response": "beta"},
+                ],
+            },
+            {
+                "task_name": "02",
+                "task_type": "creative",
+                "input_prompt": "p2",
+                "response": "skip-me",
+                "subject_runs": [
+                    {"run_index": 1, "response": "c1"},
+                    {"run_index": 2, "response": "c2"},
+                ],
+            },
+            {
+                "task_name": "03",
+                "task_type": "fact",
+                "input_prompt": "p3",
+                "response": "single-rep",
+                "subject_runs": [{"run_index": 1, "response": "single-rep"}],
+            },
+        ]
+        inputs = server._build_non_creative_holistic_inputs(completed)
+        self.assertEqual(len(inputs), 2)
+        self.assertEqual(inputs[0]["task_name"], "01")
+        self.assertIn("### 被験試行 #1\nalpha", inputs[0]["response"])
+        self.assertIn("### 被験試行 #2\nbeta", inputs[0]["response"])
+        self.assertNotEqual(inputs[0]["response"], "representative-only")
+        self.assertEqual(inputs[1]["task_name"], "03")
+        self.assertEqual(inputs[1]["response"], "single-rep")
+
+        # holistic multi-task bundler schema is unchanged (separate builder)
+        bundled = BenchmarkEngine._build_bundled_responses(inputs)
+        self.assertIn("### タスク: 01（fact）", bundled)
+        self.assertIn("被験試行 #1", bundled)
+
+    def test_holistic_adapter_failure_still_saves_standard_results(self):
+        """Core-Bug-50: standard 完了 → holistic adapter 空 → SSE error 後も ResultStorage.save."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        rubric = Path(tmp.name) / "rubric.md"
+        prompt = Path(tmp.name) / "prompt.md"
+        rubric.write_text("rubric", encoding="utf-8")
+        prompt.write_text("prompt", encoding="utf-8")
+
+        task_payload = {
+            "id": "01",
+            "type": "fact",
+            "rubric_file": str(rubric),
+            "prompt_file": str(prompt),
+            "config": {},
+        }
+        fake_adapter = MagicMock()
+        fake_adapter.is_available.return_value = True
+
+        task_result = TaskResult(
+            task_name="01",
+            task_type="fact",
+            input_prompt="prompt",
+            response="subject-answer",
+            judge_results={
+                "judge-a": {
+                    "runs": [
+                        {
+                            "scores": {
+                                "logic_and_fact": 30,
+                                "constraint_adherence": 20,
+                                "helpfulness_and_creativity": 20,
+                            },
+                            "total": 70,
+                            "usage": {"duration_ms": 100},
+                        }
+                    ]
+                }
+            },
+            subject_usage={"duration_ms": 50},
+        )
+
+        saved: list = []
+
+        def _capture_save(result):
+            saved.append(result)
+            return Path(tmp.name) / "saved.json"
+
+        judge_calls = {"n": 0}
+
+        def _judge_adapters(model_ids, api_keys=None):
+            judge_calls["n"] += 1
+            # 1st: standard judges available; 2nd: holistic resolves empty
+            if judge_calls["n"] == 1:
+                return {"judge-a": fake_adapter}
+            return {}
+
+        client = TestClient(server.app)
+        with (
+            patch.object(server, "_load_tasks", return_value=[task_payload]),
+            patch.object(
+                server,
+                "_load_holistic_tasks",
+                return_value=[
+                    {
+                        "id": "style",
+                        "rubric_file": str(rubric),
+                        "prompt_file": str(prompt),
+                    }
+                ],
+            ),
+            patch.object(
+                server.SecretsStore, "load_existing", return_value={"openrouter": "k"}
+            ),
+            patch.object(
+                server, "get_adapter_for_model", return_value=fake_adapter
+            ),
+            patch.object(
+                server, "get_available_judge_adapters", side_effect=_judge_adapters
+            ),
+            patch.object(
+                server.BenchmarkEngine,
+                "run_task",
+                new=AsyncMock(return_value=task_result),
+            ),
+            patch.object(server.ResultStorage, "save", side_effect=_capture_save),
+            patch.object(
+                server,
+                "_resolve_judge_system_prompt_resource",
+                return_value=MagicMock(
+                    path=Path(tmp.name) / "missing_judge_system.md",
+                    source="test",
+                ),
+            ),
+        ):
+            response = client.post(
+                "/api/run",
+                json={
+                    "target_model": "openrouter/openai/gpt-5.4",
+                    "judge_models": ["judge-a"],
+                    "holistic_judge_models": ["judge-holistic-missing-key"],
+                    "selected_task_ids": ["01"],
+                    "run_holistic": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        events = []
+        for line in response.text.split("\n"):
+            if line.startswith("data: "):
+                events.append(json.loads(line[6:]))
+
+        error_events = [e for e in events if e.get("type") == "error"]
+        complete_events = [e for e in events if e.get("type") == "complete"]
+        self.assertTrue(error_events, f"expected error SSE, got {events}")
+        self.assertIn("包括評価用", error_events[0].get("message", ""))
+        self.assertTrue(complete_events, f"expected complete after save, got {events}")
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0]["tasks"][0]["response"], "subject-answer")
+        self.assertEqual(saved[0]["holistic_tasks"], [])
+        self.assertEqual(saved[0]["holistic_judge_models"], [])
+        self.assertEqual(complete_events[0]["result"]["holistic_tasks"], [])
 
 
 if __name__ == "__main__":

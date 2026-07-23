@@ -8,6 +8,7 @@ references:
   - "_docs/intent/Core/holistic-run-progress/decision.md"
   - "_docs/intent/Core/holistic-context-overflow/decision.md"
   - "_docs/intent/Core/holistic-judge-model/decision.md"
+  - "_docs/intent/Core/subject-multi-run-judge-batch/decision.md"
   - "_docs/intent/Core/judge-rubric-reliability/decision.md"
   - "_docs/reference/Core/judge-prompt-contract/reference.md"
   - "_docs/qa/Core/judge-rubric-reliability/verification.md"
@@ -149,6 +150,13 @@ holistic style の文体傾向ではありません。その欠落自体を holi
 ### creative タスク除外について
 
 `task_type: creative` のタスクは、文体評価において「創作的な逸脱」が意図的に含まれるため、包括評価の入力から自動的に除外されます。
+
+### subject_runs > 1 の入力粒度
+
+通常タスクで `subject_runs > 1` のとき、包括評価へ渡す各タスクの `response` は代表 1 本ではなく、
+標準 list-eval と同じ `_build_bundled_subject_runs` による全試行テキストです
+（`DEC-007` / `_docs/intent/Core/subject-multi-run-judge-batch/decision.md`）。
+複数タスクを束ねる `_build_bundled_responses` の見出し・区切り形式自体は変わりません。
 
 ---
 
