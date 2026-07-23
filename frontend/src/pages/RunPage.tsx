@@ -1,7 +1,8 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRunStore } from '../store/runStore';
+import { useHistoryStore } from '../store/historyStore';
 import { getStrictModeIssues } from '../lib/strictMode';
 import { startBenchmarkSSE, type SSEConnection } from '../api/sse';
 import {
@@ -19,7 +20,11 @@ import {
 } from 'lucide-react';
 import Button from '../components/Button';
 import { getSelectedTasksInCanonicalOrder } from './runPageTaskSelection';
-import { formatEtaDisplay } from '../lib/taskTiming';
+import { formatDurationMs, formatEtaDisplay } from '../lib/taskTiming';
+import {
+    computePreRunEstimate,
+    formatPreRunCost,
+} from '../lib/preRunEstimate';
 
 function formatTime(ms: number): string {
     const s = Math.floor(ms / 1000);
@@ -58,6 +63,7 @@ export default function RunPage() {
         status, progress, holisticProgress, result, resultFilePath, cancelRequested, errorMessage, runId,
         startRun, requestCancel, reset, setResult,
     } = useRunStore();
+    const { runs: historyRuns, initialize: initializeHistory } = useHistoryStore();
 
     const sseRef = useRef<SSEConnection | null>(null);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -126,6 +132,33 @@ export default function RunPage() {
     useEffect(() => {
         void loadCredits();
     }, [loadCredits]);
+
+    useEffect(() => {
+        void initializeHistory();
+    }, [initializeHistory]);
+
+    const preRunEstimate = useMemo(
+        () =>
+            computePreRunEstimate(historyRuns, {
+                subjectModelId,
+                freeTextSubject,
+                taskCount: selectedTasks.length,
+                judgeCount: effectiveJudgeNames.length,
+                subjectRunCount: evalParams.subjectRunCount,
+                judgeRunCount: evalParams.judgeRunCount,
+                totalSteps,
+            }),
+        [
+            historyRuns,
+            subjectModelId,
+            freeTextSubject,
+            selectedTasks.length,
+            effectiveJudgeNames.length,
+            evalParams.subjectRunCount,
+            evalParams.judgeRunCount,
+            totalSteps,
+        ],
+    );
 
     useEffect(() => {
         if (status !== 'running' || !creditsConfigured) {
@@ -244,6 +277,58 @@ export default function RunPage() {
                                 items={selectedTasks.map((t) => t.id)}
                             />
                         </div>
+                    </div>
+
+                    {/* Pre-run estimate — history first, config assist (UI-Feat-62) */}
+                    <div className="card p-5">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                            <p className="section-label">実行前の見積</p>
+                            <span className="text-[10px] text-text-tertiary">
+                                待ち時間は wall-clock / 履歴優先
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">
+                                    推定コスト
+                                </p>
+                                <p className="data-display text-lg text-text-primary">
+                                    {formatPreRunCost(preRunEstimate.costUsd)}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-text-tertiary">
+                                    {preRunEstimate.labels.cost}
+                                    {preRunEstimate.costSource === 'history_scaled'
+                                        ? ` · ×${preRunEstimate.scale.toFixed(2)}`
+                                        : ''}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-[9px] text-text-tertiary uppercase tracking-wider mb-0.5">
+                                    推定所要
+                                </p>
+                                <p className="data-display text-lg text-text-primary">
+                                    {preRunEstimate.durationMs != null
+                                        ? formatDurationMs(preRunEstimate.durationMs)
+                                        : '—'}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-text-tertiary">
+                                    {preRunEstimate.labels.duration}
+                                    {preRunEstimate.durationSource === 'history_scaled'
+                                        ? ` · ×${preRunEstimate.scale.toFixed(2)}`
+                                        : ''}
+                                </p>
+                            </div>
+                        </div>
+                        {preRunEstimate.costSource === 'unavailable' && (
+                            <p className="mt-3 text-[11px] text-text-tertiary">
+                                コストは同一被検の価格付き履歴が無いと出せません（0 円扱いにはしません）。
+                            </p>
+                        )}
+                        {preRunEstimate.durationSource === 'heuristic' && (
+                            <p className="mt-3 text-[11px] text-text-tertiary">
+                                所要はステップ数からの粗い推定です。一度実行すると履歴ベースに切り替わります。
+                            </p>
+                        )}
                     </div>
 
                     {/* Holistic */}
