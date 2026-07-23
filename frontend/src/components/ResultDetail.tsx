@@ -1,4 +1,4 @@
-import type { EvaluationRun, JudgeEvaluation, ReviewFlag, TaskType } from '../types';
+import type { EvaluationRun, JudgeEvaluation, TaskType } from '../types';
 import { format } from 'date-fns';
 import {
     AlertTriangle,
@@ -29,8 +29,10 @@ import {
 } from '../lib/timeRoi';
 import {
     computeJudgeSummaries,
+    computeReviewFlags,
     formatHeroScore,
     formatReliabilityReason,
+    HIGH_VARIANCE_STD_THRESHOLD,
     isHeroScoreAvailable,
 } from '../lib/judgeReliability';
 import Button from './Button';
@@ -76,33 +78,12 @@ function normalizedScoreBg(score: number, maxScore: number): string {
     return scoreBg(normalizeScore(score, maxScore));
 }
 
-/** Footer「要確認」とタスク行のばらつき警告で共有する閾値（totalScore.sd） */
-const REVIEW_SCORE_SD_THRESHOLD = 5;
-
 function isHighTrialVariance(sd: number): boolean {
-    return sd > REVIEW_SCORE_SD_THRESHOLD;
+    return sd > HIGH_VARIANCE_STD_THRESHOLD;
 }
 
 function formatTrialSd(sd: number): string {
     return Number.isInteger(sd) ? String(sd) : sd.toFixed(1);
-}
-
-function computeReviewFlags(run: EvaluationRun): ReviewFlag[] {
-    const flags: ReviewFlag[] = [];
-    run.taskResults.forEach((tr) => {
-        tr.judgeEvaluations.forEach((je) => {
-            const reasons: string[] = [];
-            if (isHighTrialVariance(je.totalScore.sd)) {
-                reasons.push(`ばらつき大（試行間 SD ${formatTrialSd(je.totalScore.sd)}）`);
-            }
-            if (je.criticalFail.detected) reasons.push('重大な失敗を検出');
-            if (je.confidenceDistribution.low > 0) reasons.push(`低信頼レビュー ${je.confidenceDistribution.low} 件`);
-            if (reasons.length > 0) {
-                flags.push({ taskId: tr.taskId, judgeModelName: je.judgeModelName, reasons });
-            }
-        });
-    });
-    return flags;
 }
 
 export default function ResultDetail({ run }: { run: EvaluationRun }) {
@@ -458,7 +439,7 @@ function TaskResultCard({ tr, delay }: { tr: EvaluationRun['taskResults'][0]; de
                                     <span
                                         key={je.judgeModelId}
                                         className="inline-flex items-baseline gap-1 shrink-0"
-                                        title={`${je.judgeModelName}: 試行間 SD ${formatTrialSd(je.totalScore.sd)}${highVariance ? `（閾値 ${REVIEW_SCORE_SD_THRESHOLD} 超過）` : ''}`}
+                                        title={`${je.judgeModelName}: 試行間 SD ${formatTrialSd(je.totalScore.sd)}${highVariance ? `（閾値 ${HIGH_VARIANCE_STD_THRESHOLD} 超過）` : ''}`}
                                     >
                                         <span className={`data-display text-[11px] ${scoreColor(je.totalScore.mean)}`}>
                                             {je.totalScore.mean}
@@ -779,7 +760,7 @@ function JudgeEvaluationCard({ je, taskType }: { je: JudgeEvaluation; taskType: 
                     )}
                 </div>
                 <p className="text-[10px] leading-5 text-text-tertiary">
-                    試行間 SD は同一 judge の複数試行スコアのばらつきです（閾値 {REVIEW_SCORE_SD_THRESHOLD}）。信頼度チップ（高/中/低）は judge 自己申告であり別指標です。
+                    試行間 SD は同一 judge の複数試行スコアのばらつきです（閾値 {HIGH_VARIANCE_STD_THRESHOLD}）。信頼度チップ（高/中/低）は judge 自己申告であり別指標です。
                     {totalConfidenceVotes > 0 ? ` 低信頼 ${je.confidenceDistribution.low}/${totalConfidenceVotes} 件。` : ''}
                 </p>
             </div>

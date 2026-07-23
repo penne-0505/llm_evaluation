@@ -3,9 +3,12 @@ import test from 'node:test';
 import type { EvaluationRun, JudgeEvaluation, TaskResult } from '../types/index.ts';
 import {
     computeJudgeSummaries,
+    computeReviewFlags,
+    CROSS_JUDGE_DIVERGENCE_RANGE_THRESHOLD,
     formatHeroScore,
     formatReliabilityReason,
     isHeroScoreAvailable,
+    taskHasCrossJudgeDivergence,
 } from './judgeReliability.ts';
 
 function je(
@@ -142,4 +145,36 @@ test('all-excluded run exposes N/A hero contract', () => {
     assert.equal(formatHeroScore(run.averageScore), '\u2014');
     assert.equal(run.scoreAggregation?.allExcluded, true);
     assert.equal(computeJudgeSummaries(run).length, 0);
+});
+
+test('taskHasCrossJudgeDivergence matches backend range > 15', () => {
+    assert.equal(CROSS_JUDGE_DIVERGENCE_RANGE_THRESHOLD, 15);
+    assert.equal(
+        taskHasCrossJudgeDivergence(task('01', [je('a', 90), je('b', 70)])),
+        true,
+    );
+    assert.equal(
+        taskHasCrossJudgeDivergence(task('02', [je('a', 88), je('b', 73)])),
+        false,
+    );
+    assert.equal(taskHasCrossJudgeDivergence(task('03', [je('a', 80)])), false);
+});
+
+test('computeReviewFlags flags both judges on divergent task', () => {
+    const run = baseRun({
+        taskResults: [
+            task('01', [je('judge-high', 90), je('judge-low', 70)]),
+            task('02', [je('judge-high', 88), je('judge-low', 86)]),
+        ],
+    });
+    const flags = computeReviewFlags(run);
+    const label = formatReliabilityReason('cross_judge_divergence');
+    const t1 = flags.filter((f) => f.taskId === '01');
+    assert.equal(t1.length, 2);
+    assert.ok(t1.every((f) => f.reasons.includes(label)));
+    assert.deepEqual(
+        t1.map((f) => f.judgeModelName).sort(),
+        ['judge-high', 'judge-low'],
+    );
+    assert.equal(flags.filter((f) => f.taskId === '02').length, 0);
 });
