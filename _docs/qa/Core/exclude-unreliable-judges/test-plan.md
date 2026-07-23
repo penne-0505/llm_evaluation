@@ -3,7 +3,7 @@ title: "QA Test Plan: Exclude unreliable judges from aggregate score"
 status: active
 draft_status: n/a
 qa_schema: 2
-qa_status: planned
+qa_status: in-progress
 risk: Medium
 created_at: 2026-07-23
 updated_at: 2026-07-23
@@ -76,13 +76,13 @@ N/A を返す。保存済み run の toggle 状態と集計が再表示で一貫
 | ID | Source | Requirement / Invariant | Test Type | Command / File | Expected Evidence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | AC-001 | TODO | toggle OFF で現行平均 | unit | `uv run pytest tests/test_judge_reliability.py` | OFF 時全 judge mean が従来と一致 | verified |
-| AC-001 | TODO | Run / Result toggle UI | node unit + review | `frontend/src/pages/RunPage.node.test.ts`, ResultDetail diff | toggle 操作可能、default OFF | verified |
+| AC-001 | TODO | Run / Result toggle UI | body contract + review | `frontend/src/api/client.node.test.ts`（`exclude_unreliable_judges` default false）+ RunPage / ResultDetail diff | RunPage 上の toggle UI は code review。`RunPage.node.test.ts` は task 順序のみで exclude 非カバー → dedicated UI node は deferred、body 契約で covered | covered |
 | AC-002 | DEC-002 | high_variance 除外 | unit | `tests/test_judge_reliability.py` | SD > 5 の judge 系統が除外 | verified |
 | AC-002 | DEC-002 | low_confidence / critical_fail 除外 | unit | `tests/test_judge_reliability.py` | 各理由コードで除外 | verified |
 | AC-002 | DEC-002 | cross_judge_divergence 除外 | unit | `tests/test_judge_reliability.py` | 同一 task range > 15 で該当 judge フラグ | verified |
 | AC-002 | TODO | server average_score / best_score | integration | `tests/test_server_frontend.py` | 除外後 hero スコアが期待値 | verified |
 | AC-003 | TODO | 除外理由・前後スコア表示 | node unit | `frontend/src/components/ResultDetail.node.test.ts` | 理由文字列と before/after | verified |
-| AC-003 | INV-002 | flags と理由コード整合 | unit + review | `computeReviewFlags` vs backend mapper | 同一条件で同系統が flagged / excluded | verified |
+| AC-003 | INV-002 | flags と理由コード整合 | unit + review | `computeReviewFlags` / `taskHasCrossJudgeDivergence` node tests | 同一条件で同系統が flagged / excluded（`cross_judge_divergence` 含む） | verified |
 | AC-004 | DEC-004 / INV-001 | 全除外 N/A | unit | `tests/test_judge_reliability.py` | null スコア、0 非返却 | verified |
 | AC-004 | INV-001 | frontend N/A 表示 | node unit | ResultDetail test | hero が `—` / N/A + 警告 | verified |
 | AC-005 | DEC-003 | 保存 toggle 再現 | integration | `tests/test_result_storage.py` | JSON `exclude_unreliable_judges` 読込一致 | verified |

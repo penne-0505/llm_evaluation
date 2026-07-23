@@ -82,6 +82,10 @@ judge 間乖離は未実装である。
 
 - 保存 JSON に `exclude_unreliable_judges`、`score_aggregation`（除外前後・除外 judge 一覧）が
   additive に増える。
+- `score_aggregation.unreliable_candidates` は **toggle OFF でも** 判定結果を保存する。
+  OFF 時の `excluded_judges` は空のまま hero は全 judge mean だが、candidates は
+  「ON にすれば外れる系統」を UI / 再表示説明用に残す（集計には使わない）。
+  ON 時は `excluded_judges` ⊆ candidates として実際に除外した系統を記録する。
 - frontend `EvaluationRun` 型と ResultDetail hero / JudgeSummary が N/A と除外メタを扱う。
 - 既存 run（フィールドなし）は OFF 相当。hero スコアは現行値のまま。
 

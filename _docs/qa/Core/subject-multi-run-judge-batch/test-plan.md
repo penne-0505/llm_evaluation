@@ -79,15 +79,15 @@ related_prs: []
 | --- | --- | --- | --- | --- | --- | --- |
 | AC-001 | TODO | RunRequest subject_runs | unit | `tests/test_server_frontend.py` | field 受理、default 1 | verified |
 | AC-001 | TODO | preset / settings 永続化 | node unit | `frontend/src/lib/executionPresets.node.test.ts` | capture/resolve に subjectRuns | verified |
-| AC-001 | TODO | Run UI 入力 | node unit + review | RunPage test / diff | 1–5 入力、clamp | verified |
+| AC-001 | TODO | Run UI 入力 | preset + body + review | `executionPresets.node.test.ts` / `client.node.test.ts` + RunPage diff | 1–5 入力・clamp は preset/body。`RunPage.node.test.ts` に subject_runs カバレッジなし | covered |
 | AC-002 | DEC-001 | N 被験 + bundled judge 入力 | unit | `tests/test_benchmark_engine.py` | 被験 N 回、judge 1 bundled 文字列 | verified |
 | AC-002 | DEC-002 / INV-001 | judge_runs 独立性 | unit | `tests/test_benchmark_engine.py` | judge 呼び出し = judge_runs × judges | verified |
 | AC-002 | DEC-004 | エラー混在 run | unit | `tests/test_benchmark_engine.py` | 成功 run ありで judge 続行、[ERROR] 列挙 | verified |
 | AC-003 | DEC-001 | 複数出力プロンプト契約 | static unit | `tests/test_prompt_contracts.py` | system/rubric に multi-run 指示 | verified |
 | AC-003 | INV-003 | subject_runs=1 後方互換 | unit | `tests/test_benchmark_engine.py` | bundled が単一 run 相当 | verified |
 | AC-004 | DEC-003 | 保存 schema subject_runs 配列 | integration | `tests/test_result_storage.py` | run 別 response/usage 保存 | verified |
-| AC-004 | TODO | ResultDetail multi-run 表示 | node unit | ResultDetail test | N run 折りたたみ/一覧 | verified |
-| AC-004 | TODO | usage 合算 | unit | `tests/test_usage_summary.py`（または相当） | subject usage ≈ N 倍 | verified |
+| AC-004 | TODO | ResultDetail multi-run 表示 | convert + review | `frontend/src/api/client.node.test.ts`（`subjectRuns` map）+ ResultDetail diff | N run 表示は convert 契約と UI code review。`ResultDetail.node.test.ts` は空 `subjectRuns` fixture のみで multi-run assert なし | covered |
+| AC-004 | TODO | usage 合算 | unit | `tests/test_cost_estimator.py`（`test_summarize_subject_usage_prefers_subject_runs_array`） | subject_runs[] 優先で usage 合算 | verified |
 | AC-005 | DEC-005 | 上限 clamp | unit | server + frontend tests | subject_runs > 5 → 5 | verified |
 | AC-005 | Survey | コンテキスト長 sanity | unit | bundled builder fixture | 極端長でも builder 例外なし | verified |
 | INV-002 | DEC-001 | holistic vs subject builder 分離 | unit | `tests/test_benchmark_engine.py` | 関数/分岐が混同しない | verified |
