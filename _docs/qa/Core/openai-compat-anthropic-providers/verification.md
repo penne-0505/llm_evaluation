@@ -3,13 +3,13 @@ title: "QA Verification: User-registered OpenAI-compatible providers + Anthropic
 status: active
 draft_status: n/a
 qa_schema: 2
-qa_status: partial
+qa_status: verified
 risk: High
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
   - "_docs/intent/Core/openai-compat-anthropic-providers/decision.md"
-  - "_docs/plan/Core/openai-compat-anthropic-providers/plan.md"
+  - "_docs/archives/plan/Core/openai-compat-anthropic-providers/plan.md"
   - "_docs/qa/Core/openai-compat-anthropic-providers/test-plan.md"
   - "_docs/guide/Core/openai-compat-anthropic-providers/usage.md"
 related_issues: []
@@ -22,11 +22,11 @@ related_prs: []
 
 Provider registry（builtin 集合 A: OpenRouter / OpenAI / Google AI Studio / Anthropic）と
 カスタム openai_compatible、Anthropic Messages adapter、pricing_profile 静的表（INV-001）を実装した。
-関連 pytest 96 件、frontend lint/build は成功。live 公式 API 短 run の Manual QA のみ deferred。
+関連 pytest 96 件、frontend lint/build は成功。Core-Test-59 で公式 3 経路の live Manual QA も完了。
 
 ## Verification Verdict
 
-Verdict: PARTIAL
+Verdict: PASS
 
 ## Commands Run
 
@@ -61,19 +61,23 @@ npx --prefix frontend tsx --test \
 
 - Settings の Google AI Studio ヘルプ文言: 実装確認（diff）
 - guide: `_docs/guide/Core/openai-compat-anthropic-providers/usage.md`
-- Live OpenAI / Anthropic / AI Studio 短 run: **deferred**（課金）
+- Live OpenAI / Anthropic / AI Studio 短 run: **PASS**（Core-Test-59、2026-07-24、owner confirmed）
+  - AC-001: OpenAI builtin 短 run 完了
+  - AC-002: Anthropic builtin complete 完了
+  - AC-003: Google AI Studio builtin 短 run または models 一覧取得完了
+  - AC-004: 推定コストが公式 profile で `openrouter_catalog` にならないこと（または N/A）を確認
 
 ## Acceptance Criteria Coverage
 
 | ID | Result | Evidence |
 | --- | --- | --- |
-| AC-001 | partial | CRUD + adapter + routing。live run deferred |
+| AC-001 | pass | CRUD + adapter + routing。live run: Core-Test-59 |
 | AC-002 | pass | OpenRouterAdapter / prefix 互換テスト |
-| AC-003 | pass | anthropic adapter stub tests |
+| AC-003 | pass | anthropic adapter stub tests + Core-Test-59 live complete |
 | AC-004 | pass | Settings + guide |
 | AC-005 | pass | preset 欠損除外 + builtin 削除不可 |
 | AC-006 | pass | API `has_key` のみ、key 文字列非含有 assert |
-| AC-007 | pass | 静的表 + INV-001 unit |
+| AC-007 | pass | 静的表 + INV-001 unit + Core-Test-59 cost 確認 |
 
 ## Decision Conformance
 
@@ -106,15 +110,19 @@ npx --prefix frontend tsx --test \
 
 ## Deferred / Not Covered
 
-- Live Manual QA（公式 3 経路の短 run）
 - Connection test ボタン UI
-- 価格表の定期更新 chore
+- 価格表の定期更新 chore（静的表 `AS_OF=2026-07-23` の鮮度管理）
+- Anthropic live thinking/tools の網羅確認（短 run complete の範囲外）
 
 ## Residual Risks
 
-- 静的表の鮮度ずれ（`AS_OF=2026-07-23`）。表外は N/A。
-- Anthropic live thinking/tools 形状差は stub 外未確認。
+None
 
 ## Follow-up TODOs
 
-- 任意: Live Manual QA for openai / anthropic / google-ai-studio short runs
+- なし（Core-Test-59 live Manual QA 完了）
+
+## Core-Test-59 follow-up (2026-07-24)
+
+- Verdict (Test-59 scope): PASS — owner が公式 builtin 3 経路の短 run / cost を live 確認。
+- 本 verification 全体を PARTIAL → PASS に更新。

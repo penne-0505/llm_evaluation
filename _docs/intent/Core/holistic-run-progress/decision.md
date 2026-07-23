@@ -4,9 +4,9 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-22
-updated_at: 2026-07-22
+updated_at: 2026-07-24
 references:
-  - "_docs/plan/Core/holistic-run-progress/plan.md"
+  - "_docs/archives/plan/Core/holistic-run-progress/plan.md"
   - "_docs/qa/Core/holistic-run-progress/test-plan.md"
 related_issues: []
 related_prs: []

@@ -4,11 +4,11 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
-  - "_docs/draft/Core/openai-compat-anthropic-providers/notes.md"
-  - "_docs/survey/Core/openai-compat-anthropic-providers/survey.md"
-  - "_docs/plan/Core/openai-compat-anthropic-providers/plan.md"
+  - "_docs/archives/draft/Core/openai-compat-anthropic-providers/notes.md"
+  - "_docs/archives/survey/Core/openai-compat-anthropic-providers/survey.md"
+  - "_docs/archives/plan/Core/openai-compat-anthropic-providers/plan.md"
   - "_docs/qa/Core/openai-compat-anthropic-providers/test-plan.md"
 related_issues: []
 related_prs: []

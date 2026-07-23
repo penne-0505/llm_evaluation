@@ -306,33 +306,6 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## Backlog
 
-### Core-Test-59: [Test] Live Manual QA for official provider registry paths
-
-- **Title**: [Test] Live Manual QA for official provider registry paths
-- **ID**: Core-Test-59
-- **Priority**: P3
-- **Size**: S
-- **Risk**: Low
-- **Area**: Core
-- **Dependencies**: []
-- **Goal**: Core-Feat-58 の builtin OpenAI / Anthropic / Google AI Studio で短い実 run が通ることを確認する。
-- **Acceptance Criteria**:
-  - AC-001: OpenAI または互換 builtin で subject または judge の短 run が完了する。
-  - AC-002: Anthropic builtin で complete（可能なら thinking）が完了する。
-  - AC-003: Google AI Studio builtin で短 run または models 一覧取得ができる。
-  - AC-004: 結果の推定コストが公式 profile で `openrouter_catalog` にならない（または N/A）。
-- **Steps**:
-  1. [ ] Settings で各 builtin に key を設定する
-  2. [ ] 最短タスクで run し ResultDetail / cost を確認する
-  3. [ ] verification または本 Notes に結果を残す
-- **Description**:
-  - Context: Core-Feat-58 verification は Verdict PARTIAL（live deferred）。
-  - Notes: `_docs/qa/Core/openai-compat-anthropic-providers/verification.md`
-- **Plan**: None
-- **Intent**: None
-- **QA**: None
-- **Verification**: None
-
 ### Core-Test-49: [Test] Live Manual QA for OpenAI judge api_reasoning UI
 
 - **Title**: [Test] Live Manual QA for OpenAI judge api_reasoning UI

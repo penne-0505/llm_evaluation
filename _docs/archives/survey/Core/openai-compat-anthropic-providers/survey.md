@@ -1,12 +1,12 @@
 ---
 title: "Survey: User-registered OpenAI-compatible providers + Anthropic"
-status: active
+status: completed
 draft_status: n/a
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
-  - "_docs/draft/Core/openai-compat-anthropic-providers/notes.md"
-  - "_docs/plan/Core/openai-compat-anthropic-providers/plan.md"
+  - "_docs/archives/draft/Core/openai-compat-anthropic-providers/notes.md"
+  - "_docs/archives/plan/Core/openai-compat-anthropic-providers/plan.md"
   - "_docs/intent/Core/openai-compat-anthropic-providers/decision.md"
   - "_docs/qa/Core/openai-compat-anthropic-providers/test-plan.md"
 related_issues: []

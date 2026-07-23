@@ -6,9 +6,9 @@ qa_schema: 2
 qa_status: planned
 risk: Medium
 created_at: 2026-07-22
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
-  - "_docs/plan/Core/holistic-run-progress/plan.md"
+  - "_docs/archives/plan/Core/holistic-run-progress/plan.md"
   - "_docs/intent/Core/holistic-run-progress/decision.md"
 related_issues: []
 related_prs: []

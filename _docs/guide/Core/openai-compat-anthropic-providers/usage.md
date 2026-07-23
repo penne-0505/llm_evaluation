@@ -3,10 +3,10 @@ title: "Guide: Provider registry (OpenAI-compatible + Anthropic)"
 status: active
 draft_status: n/a
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-07-24
 references:
   - "_docs/intent/Core/openai-compat-anthropic-providers/decision.md"
-  - "_docs/plan/Core/openai-compat-anthropic-providers/plan.md"
+  - "_docs/archives/plan/Core/openai-compat-anthropic-providers/plan.md"
   - "_docs/qa/Core/openai-compat-anthropic-providers/test-plan.md"
   - "_docs/intent/Core/model-parameter-support/decision.md"
 related_issues: []

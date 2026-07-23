@@ -1,9 +1,9 @@
 ---
 title: "Plan: Holistic run progress"
-status: active
+status: completed
 draft_status: n/a
 created_at: 2026-07-22
-updated_at: 2026-07-22
+updated_at: 2026-07-24
 references:
   - "_docs/intent/Core/holistic-run-progress/decision.md"
   - "_docs/qa/Core/holistic-run-progress/test-plan.md"
