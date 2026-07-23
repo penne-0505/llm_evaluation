@@ -1,0 +1,44 @@
+M	.agents/skills/docs-cleanup/SKILL.md
+M	.agents/skills/post-implementation/SKILL.md
+M	.agents/skills/qa-prep/SKILL.md
+M	.claude/settings.json
+M	.claude/skills/docs-cleanup/SKILL.md
+M	.claude/skills/post-implementation/SKILL.md
+M	.claude/skills/qa-prep/SKILL.md
+M	.codex/hooks.json
+M	QUICKSTART.md
+M	_docs/documentation_guide.md
+M	_docs/intent/Workflow/lifecycle-self-audit/decision.md
+M	_docs/qa/Workflow/lifecycle-self-audit/test-plan.md
+M	_docs/qa/Workflow/lifecycle-self-audit/verification.md
+M	_docs/standards/documentation_guidelines.md
+M	_docs/standards/documentation_operations.md
+M	_evals/agent-workflows/cases/historical-prompt-not-operational.md
+M	_evals/agent-workflows/cases/intentional-omission-risk.md
+M	_evals/agent-workflows/cases/malformed-todo-heading.md
+M	_evals/agent-workflows/cases/qa-status-verdict-mismatch.md
+M	_evals/agent-workflows/expected-invariants.md
+M	_evals/validator-fixtures/README.md
+M	_evals/validator-fixtures/qa/invalid/missing-invariant.md
+M	_evals/validator-fixtures/qa/invalid/qa-archive-path.md
+M	_evals/validator-fixtures/qa/invalid/status-verdict-mismatch.md
+M	_evals/validator-fixtures/qa/invalid/v2-missing-decision-scope.md
+M	_evals/validator-fixtures/qa/invalid/verification-in-progress-status.md
+M	_evals/validator-fixtures/qa/invalid/verification-missing-test-plan-reference.md
+M	_evals/validator-fixtures/qa/valid/test-plan.md
+M	_evals/validator-fixtures/qa/valid/verification-pass.md
+A	deno.json
+M	docs-template.lock.example.json
+R075	scripts/agent-workflow-hook.mjs	scripts/agent-workflow-hook.ts
+M	scripts/check-docs.sh
+D	scripts/scope.mjs
+A	scripts/scope.ts
+D	scripts/test-agent-workflow-hook.mjs
+A	scripts/test-agent-workflow-hook.ts
+R081	scripts/test-agent-workflow-smoke.mjs	scripts/test-agent-workflow-smoke.ts
+R051	scripts/test-validators.mjs	scripts/test-validators.ts
+R075	scripts/validate-doc-links.mjs	scripts/validate-doc-links.ts
+R072	scripts/validate-frontmatter.mjs	scripts/validate-frontmatter.ts
+R077	scripts/validate-intent.mjs	scripts/validate-intent.ts
+R077	scripts/validate-qa.mjs	scripts/validate-qa.ts
+R076	scripts/validate-todo.mjs	scripts/validate-todo.ts

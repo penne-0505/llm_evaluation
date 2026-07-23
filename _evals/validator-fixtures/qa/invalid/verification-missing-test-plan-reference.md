@@ -27,7 +27,7 @@ Verdict: PASS
 
 | Command / Test | Result | Notes |
 | --- | --- | --- |
-| `deno run --allow-read scripts/validate-qa.mjs --fixture _evals/validator-fixtures/qa/invalid/verification-missing-test-plan-reference.md` | FAIL | Missing test-plan reference must be rejected. |
+| `deno run --allow-read scripts/validate-qa.ts --fixture _evals/validator-fixtures/qa/invalid/verification-missing-test-plan-reference.md` | FAIL | Missing test-plan reference must be rejected. |
 
 ## Automated Test Results
 

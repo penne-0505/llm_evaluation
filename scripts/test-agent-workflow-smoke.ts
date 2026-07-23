@@ -1,8 +1,8 @@
 // Lightweight smoke checks for agent workflow activation surfaces.
 
-const read = (path) => Deno.readTextFile(path);
+const read = (path: string): Promise<string> => Deno.readTextFile(path);
 
-const assert = (condition, message) => {
+const assert = (condition: unknown, message: string): void => {
   if (!condition) {
     console.error(`FAIL ${message}`);
     Deno.exit(1);
@@ -10,14 +10,19 @@ const assert = (condition, message) => {
   console.log(`PASS ${message}`);
 };
 
-const json = async (path) => JSON.parse(await read(path));
+const json = async (path: string): Promise<Record<string, unknown>> =>
+  JSON.parse(await read(path)) as Record<string, unknown>;
 
-const contains = (text, ...needles) =>
+const contains = (text: string, ...needles: string[]): boolean =>
   needles.every((needle) => text.includes(needle));
 
-const codexHooks = await json(".codex/hooks.json");
-const claudeSettings = await json(".claude/settings.json");
-const agentHook = await read("scripts/agent-workflow-hook.mjs");
+type HookConfig = {
+  hooks?: Record<string, unknown>;
+};
+
+const codexHooks = await json(".codex/hooks.json") as HookConfig;
+const claudeSettings = await json(".claude/settings.json") as HookConfig;
+const agentHook = await read("scripts/agent-workflow-hook.ts");
 const agentsInventory = await read(".agents/skills/docs-inventory/SKILL.md");
 const claudeInventory = await read(".claude/skills/docs-inventory/SKILL.md");
 const agentsMigration = await read(
@@ -33,7 +38,11 @@ const quickstart = await read("QUICKSTART.md");
 const documentationOperations = await read(
   "_docs/standards/documentation_operations.md",
 );
-const templateLock = await json("docs-template.lock.json");
+const templateLock = await json("docs-template.lock.json") as {
+  schema?: number;
+  source?: string;
+  revision?: { tag?: string; commit?: string };
+};
 const intentTemplate = await read("_docs/standards/templates/intent.md");
 const qaTemplate = await read("_docs/standards/templates/qa-test-plan.md");
 const qualityStandard = await read("_docs/standards/quality_assurance.md");
@@ -46,7 +55,8 @@ const whyFirstSkills = [
   "post-implementation",
 ];
 
-const hookEvents = (config) => Object.keys(config.hooks ?? {});
+const hookEvents = (config: HookConfig): string[] =>
+  Object.keys(config.hooks ?? {});
 
 assert(
   ["SessionStart", "UserPromptSubmit", "PreToolUse", "Stop"].every((event) =>
@@ -63,9 +73,19 @@ assert(
 );
 
 assert(
-  JSON.stringify(codexHooks).includes("scripts/agent-workflow-hook.mjs") &&
-    JSON.stringify(claudeSettings).includes("scripts/agent-workflow-hook.mjs"),
+  JSON.stringify(codexHooks).includes("scripts/agent-workflow-hook.ts") &&
+    JSON.stringify(claudeSettings).includes("scripts/agent-workflow-hook.ts"),
   "hook configs call the shared workflow hook script",
+);
+
+assert(
+  JSON.stringify(codexHooks).includes(
+    "--allow-read --allow-env --allow-run=git scripts/agent-workflow-hook.ts",
+  ) &&
+    JSON.stringify(claudeSettings).includes(
+      "--allow-read --allow-env --allow-run=git scripts/agent-workflow-hook.ts",
+    ),
+  "hook configs declare --allow-env for Stop git env sanitization",
 );
 
 assert(
@@ -143,10 +163,10 @@ assert(
   templateLock.schema === 1 &&
     templateLock.source ===
       "https://github.com/penne-0505/docs_driven_dev_template.git" &&
-    templateLock.revision?.tag === "v1.0.0" &&
+    templateLock.revision?.tag === "v1.1.0" &&
     templateLock.revision?.commit ===
-      "f71e9ab20466ea2972158334261f5ae2b2265754",
-  "downstream template lock identifies the exact v1.0.0 release commit",
+      "9f4503030bd42521541a951adc79fe3aa40823c3",
+  "downstream template lock identifies the exact v1.1.0 release commit",
 );
 
 assert(

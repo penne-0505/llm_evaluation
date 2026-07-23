@@ -9,6 +9,38 @@ const HOOK_EVENT_NAMES = new Set([
   "UserPromptSubmit",
 ]);
 
+type HookEventName =
+  | "SessionStart"
+  | "Stop"
+  | "PreToolUse"
+  | "UserPromptSubmit";
+
+type ToolInput = {
+  file_path?: unknown;
+  path?: unknown;
+  target_file?: unknown;
+  command?: unknown;
+  cmd?: unknown;
+  [key: string]: unknown;
+};
+
+type HookInput = {
+  hook_event_name?: unknown;
+  hookEventName?: unknown;
+  tool_name?: unknown;
+  toolName?: unknown;
+  tool_input?: ToolInput;
+  toolInput?: ToolInput;
+  stop_hook_active?: unknown;
+  last_assistant_message?: unknown;
+  lastAssistantMessage?: unknown;
+  [key: string]: unknown;
+};
+
+export type HookDecision =
+  | { decision: "block"; reason: string }
+  | { decision: "context"; context: string };
+
 const SESSION_CONTEXT = [
   "Docs-driven workflow reminder:",
   "- Read AGENTS.md, TODO.md, _docs/documentation_guide.md, and relevant _docs/standards before implementation.",
@@ -46,8 +78,8 @@ const COMPLETION_TERMS_RE =
 
 const QUESTION_AT_END_RE = /[?？]\s*$/;
 
-const normalizePath = (path) => {
-  const segments = [];
+const normalizePath = (path: unknown): string => {
+  const segments: string[] = [];
   for (const segment of String(path ?? "").replaceAll("\\", "/").split("/")) {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") segments.pop();
@@ -56,10 +88,12 @@ const normalizePath = (path) => {
   return segments.join("/");
 };
 
-const unique = (items) => [...new Set(items.filter(Boolean))];
+const unique = (
+  items: string[],
+): string[] => [...new Set(items.filter(Boolean))];
 
-export const parsePorcelainPaths = (statusOutput) => {
-  const paths = [];
+export const parsePorcelainPaths = (statusOutput: unknown): string[] => {
+  const paths: string[] = [];
   for (const rawLine of String(statusOutput ?? "").split(/\r?\n/)) {
     const line = rawLine.trimEnd();
     if (line === "") continue;
@@ -76,31 +110,33 @@ export const parsePorcelainPaths = (statusOutput) => {
   return unique(paths);
 };
 
-const pathFromToolInput = (toolInput) => {
+const pathFromToolInput = (toolInput: ToolInput | null | undefined): string => {
   if (!toolInput || typeof toolInput !== "object") return "";
   return normalizePath(
     toolInput.file_path ?? toolInput.path ?? toolInput.target_file ?? "",
   );
 };
 
-const commandFromToolInput = (toolInput) => {
+const commandFromToolInput = (
+  toolInput: ToolInput | null | undefined,
+): string => {
   if (!toolInput || typeof toolInput !== "object") return "";
   return String(toolInput.command ?? toolInput.cmd ?? "");
 };
 
-const includesSensitivePath = (value) =>
+const includesSensitivePath = (value: unknown): boolean =>
   /(^|[\/\s'"`])(\.env(\.|$|[\/\s'"`])|id_rsa\b|id_ed25519\b|\.pem\b|\.key\b)/i
     .test(String(value ?? ""));
 
-const protectedArchiveMove = (command) =>
+const protectedArchiveMove = (command: string): boolean =>
   /\b(git\s+)?mv\b[\s\S]*_docs\/(intent|qa|guide|reference)\b[\s\S]*_docs\/archives\b/i
     .test(command) ||
   /\b(git\s+)?mv\b[\s\S]*_docs\/archives\/(intent|qa|guide|reference)\b/i
     .test(command);
 
-const destructiveCommandReason = (command) => {
+const destructiveCommandReason = (command: unknown): string | null => {
   const text = String(command ?? "");
-  const checks = [
+  const checks: Array<{ re: RegExp; reason: string }> = [
     {
       re: /(^|[;&|()\s])git\s+rm(\s|$)/,
       reason:
@@ -141,12 +177,14 @@ const destructiveCommandReason = (command) => {
   return null;
 };
 
-const patchDeletionReason = (command) => {
+const patchDeletionReason = (command: string): string | null => {
   if (!/\*\*\* Delete File:/.test(command)) return null;
   return "File deletion through apply_patch is blocked by this template. Propose permanent deletion to the user, or use archive movement only after the checklist passes.";
 };
 
-export const analyzePreToolUse = (input) => {
+export const analyzePreToolUse = (
+  input: HookInput | null | undefined,
+): HookDecision | null => {
   const toolName = String(input?.tool_name ?? input?.toolName ?? "");
   const toolInput = input?.tool_input ?? input?.toolInput ?? {};
   const command = commandFromToolInput(toolInput);
@@ -173,12 +211,25 @@ export const analyzePreToolUse = (input) => {
   return null;
 };
 
-export const analyzeUserPromptSubmit = () => ({
+export const analyzeUserPromptSubmit = (): Extract<
+  HookDecision,
+  { decision: "context" }
+> => ({
   decision: "context",
   context: USER_PROMPT_CONTEXT,
 });
 
-const relevantStopPaths = (paths) => {
+type StopPathGroups = {
+  all: string[];
+  todo: string[];
+  docs: string[];
+  workflow: string[];
+  archive: string[];
+  temporaryDocs: string[];
+  qaDocs: string[];
+};
+
+const relevantStopPaths = (paths: string[]): StopPathGroups => {
   const normalized = unique(paths.map(normalizePath));
   return {
     all: normalized,
@@ -202,9 +253,9 @@ const relevantStopPaths = (paths) => {
       path.startsWith("_docs/standards/") ||
       path.startsWith("scripts/validate-") ||
       path === "scripts/check-docs.sh" ||
-      path === "scripts/scope.mjs" ||
-      path === "scripts/agent-workflow-hook.mjs" ||
-      path === "scripts/test-agent-workflow-smoke.mjs"
+      path === "scripts/scope.ts" ||
+      path === "scripts/agent-workflow-hook.ts" ||
+      path === "scripts/test-agent-workflow-smoke.ts"
     ),
     archive: normalized.filter((path) => path.startsWith("_docs/archives/")),
     temporaryDocs: normalized.filter((path) =>
@@ -214,7 +265,7 @@ const relevantStopPaths = (paths) => {
   };
 };
 
-const looksLikeCompletion = (message) => {
+const looksLikeCompletion = (message: unknown): boolean => {
   const text = String(message ?? "").trim();
   if (text === "") return true;
   if (QUESTION_AT_END_RE.test(text) && !COMPLETION_TERMS_RE.test(text)) {
@@ -223,13 +274,16 @@ const looksLikeCompletion = (message) => {
   return COMPLETION_TERMS_RE.test(text);
 };
 
-const hasClosureEvidence = (message) => CLOSURE_TERMS_RE.test(message ?? "");
+const hasClosureEvidence = (message: unknown): boolean =>
+  CLOSURE_TERMS_RE.test(String(message ?? ""));
 
-export const auditEvidenceCount = (message) =>
-  AUDIT_EVIDENCE_PATTERNS.filter((pattern) => pattern.test(message ?? ""))
+export const auditEvidenceCount = (message: unknown): number =>
+  AUDIT_EVIDENCE_PATTERNS.filter((pattern) =>
+    pattern.test(String(message ?? ""))
+  )
     .length;
 
-const listSome = (label, paths) => {
+const listSome = (label: string, paths: string[]): string | null => {
   if (paths.length === 0) return null;
   const shown = paths.slice(0, 5).map((path) => `  - ${path}`).join("\n");
   const suffix = paths.length > 5
@@ -238,7 +292,12 @@ const listSome = (label, paths) => {
   return `${label}:\n${shown}${suffix}`;
 };
 
-export const analyzeStop = ({ input = {}, dirtyPaths = [] }) => {
+export const analyzeStop = (
+  { input = {}, dirtyPaths = [] }: {
+    input?: HookInput;
+    dirtyPaths?: string[];
+  },
+): HookDecision | null => {
   if (input.stop_hook_active === true) return null;
 
   const grouped = relevantStopPaths(dirtyPaths);
@@ -278,8 +337,8 @@ export const analyzeStop = ({ input = {}, dirtyPaths = [] }) => {
   };
 };
 
-const readStdin = async () => {
-  const chunks = [];
+const readStdin = async (): Promise<string> => {
+  const chunks: Uint8Array[] = [];
   const buffer = new Uint8Array(8192);
   while (true) {
     const n = await Deno.stdin.read(buffer);
@@ -296,31 +355,53 @@ const readStdin = async () => {
   return new TextDecoder().decode(merged);
 };
 
-const parseHookInput = (raw) => {
+const parseHookInput = (raw: string): HookInput => {
   if (!raw.trim()) return {};
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as HookInput;
   } catch {
     return {};
   }
 };
 
-const runGitStatus = async () => {
-  const command = new Deno.Command("git", {
-    args: ["status", "--short"],
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const output = await command.output();
+const runGitStatus = async (): Promise<string[]> => {
+  let env: Record<string, string>;
+  try {
+    env = { ...Deno.env.toObject() };
+  } catch (err) {
+    throw new Error(
+      `Stop hook requires --allow-env to sanitize git subprocess env (need --allow-read --allow-env --allow-run=git): ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  delete env.LD_LIBRARY_PATH;
+  delete env.LD_PRELOAD;
+  let output: Deno.CommandOutput;
+  try {
+    output = await new Deno.Command("git", {
+      args: ["status", "--short"],
+      stdout: "piped",
+      stderr: "piped",
+      clearEnv: true,
+      env,
+    }).output();
+  } catch (err) {
+    throw new Error(
+      `Stop hook could not run git status (need --allow-run=git): ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
   if (!output.success) return [];
   return parsePorcelainPaths(new TextDecoder().decode(output.stdout));
 };
 
-const jsonOut = (value) => {
+const jsonOut = (value: unknown): void => {
   console.log(JSON.stringify(value));
 };
 
-const blockOut = (eventName, reason) => {
+const blockOut = (eventName: string, reason: string): void => {
   if (eventName === "PreToolUse") {
     jsonOut({
       decision: "block",
@@ -336,7 +417,7 @@ const blockOut = (eventName, reason) => {
   jsonOut({ decision: "block", reason });
 };
 
-const contextOut = (eventName, context) => {
+const contextOut = (eventName: string, context: string): void => {
   jsonOut({
     hookSpecificOutput: {
       hookEventName: eventName,
@@ -345,7 +426,7 @@ const contextOut = (eventName, context) => {
   });
 };
 
-const sessionStartOut = () => {
+const sessionStartOut = (): void => {
   jsonOut({
     hookSpecificOutput: {
       hookEventName: "SessionStart",
@@ -354,17 +435,19 @@ const sessionStartOut = () => {
   });
 };
 
-const inferEventName = (arg, input) => {
+const inferEventName = (arg: string | undefined, input: HookInput): string => {
   const fromInput = input.hook_event_name ?? input.hookEventName;
-  if (HOOK_EVENT_NAMES.has(fromInput)) return fromInput;
+  if (typeof fromInput === "string" && HOOK_EVENT_NAMES.has(fromInput)) {
+    return fromInput as HookEventName;
+  }
   if (arg === "session-start") return "SessionStart";
   if (arg === "stop") return "Stop";
   if (arg === "pre-tool-use") return "PreToolUse";
   if (arg === "user-prompt-submit") return "UserPromptSubmit";
-  return fromInput ?? arg ?? "";
+  return String(fromInput ?? arg ?? "");
 };
 
-const main = async () => {
+const main = async (): Promise<void> => {
   const raw = await readStdin();
   const input = parseHookInput(raw);
   const eventName = inferEventName(Deno.args[0], input);
@@ -384,7 +467,7 @@ const main = async () => {
   }
 
   if (eventName === "UserPromptSubmit") {
-    const result = analyzeUserPromptSubmit(input);
+    const result = analyzeUserPromptSubmit();
     contextOut("UserPromptSubmit", result.context);
     return;
   }
@@ -397,8 +480,12 @@ const main = async () => {
 };
 
 if (import.meta.main) {
-  main().catch((err) => {
-    console.error(`agent-workflow-hook failed: ${err.message}`);
+  main().catch((err: unknown) => {
+    console.error(
+      `agent-workflow-hook failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
     Deno.exit(1);
   });
 }

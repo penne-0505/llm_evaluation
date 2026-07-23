@@ -28,7 +28,7 @@ Verdict: PASS
 
 | Command / Test | Result | Notes |
 | --- | --- | --- |
-| `deno run --allow-read scripts/validate-qa.mjs --fixture _evals/validator-fixtures/qa/invalid/verification-in-progress-status.md` | FAIL | Completed verification cannot remain in progress. |
+| `deno run --allow-read scripts/validate-qa.ts --fixture _evals/validator-fixtures/qa/invalid/verification-in-progress-status.md` | FAIL | Completed verification cannot remain in progress. |
 
 ## Automated Test Results
 

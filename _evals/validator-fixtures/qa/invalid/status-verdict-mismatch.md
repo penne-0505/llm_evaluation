@@ -28,7 +28,7 @@ Verdict: FAIL
 
 | Command / Test | Result | Notes |
 | --- | --- | --- |
-| `deno run --allow-read scripts/validate-qa.mjs --fixture _evals/validator-fixtures/qa/invalid/status-verdict-mismatch.md` | FAIL | The mismatch must be rejected. |
+| `deno run --allow-read scripts/validate-qa.ts --fixture _evals/validator-fixtures/qa/invalid/status-verdict-mismatch.md` | FAIL | The mismatch must be rejected. |
 
 ## Automated Test Results
 

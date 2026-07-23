@@ -1,5 +1,25 @@
 // Deno validator self-test runner: exercises valid and intentionally invalid fixtures.
 
+type ValidatorKind = "todo" | "intent" | "qa" | "frontmatter";
+
+type TestCaseParams = {
+  kind: ValidatorKind;
+  target: string;
+  shouldPass: boolean;
+};
+
+type ScopeCaseParams = {
+  label: string;
+  scopePaths: string;
+  shouldPass: boolean;
+};
+
+type CommandResult = {
+  code: number;
+  stdout: string;
+  stderr: string;
+};
+
 const TODO_VALID = [
   "_evals/validator-fixtures/todo/valid/basic.md",
 ];
@@ -41,7 +61,7 @@ const FRONTMATTER_INVALID = [
 
 const deno = Deno.execPath();
 
-const runCommand = async (args) => {
+const runCommand = async (args: string[]): Promise<CommandResult> => {
   const command = new Deno.Command(deno, {
     args,
     stdout: "piped",
@@ -55,24 +75,24 @@ const runCommand = async (args) => {
   };
 };
 
-const validatorArgs = (kind, target) => {
+const validatorArgs = (kind: ValidatorKind, target: string): string[] => {
   if (kind === "frontmatter") {
     return [
       "run",
       "--allow-read",
-      "scripts/validate-frontmatter.mjs",
+      "scripts/validate-frontmatter.ts",
       "--fixture",
       target,
     ];
   }
   if (kind === "todo") {
-    return ["run", "--allow-read", "scripts/validate-todo.mjs", target];
+    return ["run", "--allow-read", "scripts/validate-todo.ts", target];
   }
   if (kind === "intent") {
     return [
       "run",
       "--allow-read",
-      "scripts/validate-intent.mjs",
+      "scripts/validate-intent.ts",
       "--fixture",
       target,
     ];
@@ -80,13 +100,17 @@ const validatorArgs = (kind, target) => {
   return [
     "run",
     "--allow-read",
-    "scripts/validate-qa.mjs",
+    "scripts/validate-qa.ts",
     "--fixture",
     target,
   ];
 };
 
-const testCase = async ({ kind, target, shouldPass }) => {
+const testCase = async ({
+  kind,
+  target,
+  shouldPass,
+}: TestCaseParams): Promise<boolean> => {
   const result = await runCommand(validatorArgs(kind, target));
   const passed = shouldPass ? result.code === 0 : result.code !== 0;
   const label = `${kind} ${target}`;
@@ -111,17 +135,29 @@ const testCase = async ({ kind, target, shouldPass }) => {
 const SCOPE_FIXTURE =
   "_evals/validator-fixtures/qa/invalid/missing-invariant.md";
 
-const runQaWithScope = async (scopePaths) => {
+// Cursor AppImage 等が LD_LIBRARY_PATH を付ける環境では、子 process にそのまま
+// 継承させると --allow-run=git が拒否される。親 env を掃除してから上書きする。
+const childEnv = (
+  overrides: Record<string, string>,
+): Record<string, string> => {
+  const env = { ...Deno.env.toObject() };
+  delete env.LD_LIBRARY_PATH;
+  delete env.LD_PRELOAD;
+  return { ...env, ...overrides };
+};
+
+const runQaWithScope = async (scopePaths: string): Promise<number> => {
   const command = new Deno.Command(deno, {
     args: [
       "run",
       "--allow-read",
       "--allow-env",
-      "scripts/validate-qa.mjs",
+      "scripts/validate-qa.ts",
       "--fixture",
       SCOPE_FIXTURE,
     ],
-    env: { DD_SCOPE_PATHS: scopePaths },
+    clearEnv: true,
+    env: childEnv({ DD_SCOPE_PATHS: scopePaths }),
     stdout: "piped",
     stderr: "piped",
   });
@@ -129,16 +165,19 @@ const runQaWithScope = async (scopePaths) => {
   return output.code;
 };
 
-const runFrontmatterWithGitScope = async (env) => {
+const runFrontmatterWithGitScope = async (
+  env: Record<string, string>,
+): Promise<number> => {
   const command = new Deno.Command(deno, {
     args: [
       "run",
       "--allow-read",
       "--allow-env",
       "--allow-run=git",
-      "scripts/validate-frontmatter.mjs",
+      "scripts/validate-frontmatter.ts",
     ],
-    env: { DD_SCOPE_PATHS: "", ...env },
+    clearEnv: true,
+    env: childEnv(env),
     stdout: "piped",
     stderr: "piped",
   });
@@ -146,17 +185,21 @@ const runFrontmatterWithGitScope = async (env) => {
   return output.code;
 };
 
-const runFrontmatterIn = async (cwd, env) => {
+const runFrontmatterIn = async (
+  cwd: string,
+  env: Record<string, string>,
+): Promise<number> => {
   const command = new Deno.Command(deno, {
     args: [
       "run",
       "--allow-read",
       "--allow-env",
       "--allow-run=git",
-      `${Deno.cwd()}/scripts/validate-frontmatter.mjs`,
+      `${Deno.cwd()}/scripts/validate-frontmatter.ts`,
     ],
     cwd,
-    env,
+    clearEnv: true,
+    env: childEnv(env),
     stdout: "piped",
     stderr: "piped",
   });
@@ -164,10 +207,12 @@ const runFrontmatterIn = async (cwd, env) => {
   return output.code;
 };
 
-const runGit = async (cwd, args) => {
+const runGit = async (cwd: string, args: string[]): Promise<string> => {
   const output = await new Deno.Command("git", {
     args,
     cwd,
+    clearEnv: true,
+    env: childEnv({}),
     stdout: "piped",
     stderr: "piped",
   }).output();
@@ -181,7 +226,7 @@ const runGit = async (cwd, args) => {
   return new TextDecoder().decode(output.stdout).trim();
 };
 
-const runCompatibilityBaselineCases = async () => {
+const runCompatibilityBaselineCases = async (): Promise<boolean> => {
   const temp = await Deno.makeTempDir({
     dir: Deno.cwd(),
     prefix: ".docs-dd-compatibility-",
@@ -206,7 +251,7 @@ const runCompatibilityBaselineCases = async () => {
     const blob = await runGit(temp, ["hash-object", "--", legacyPath]);
     const retiredBlob = await runGit(temp, ["hash-object", "--", retiredPath]);
     const manifest = `${temp}/compatibility.tsv`;
-    const writeManifest = (rows) =>
+    const writeManifest = (rows: Array<[string, string]>): Promise<void> =>
       write(
         manifest,
         `path\tblob_sha1\n${
@@ -251,11 +296,12 @@ const runCompatibilityBaselineCases = async () => {
   }
 };
 
-const ensureDir = async (path) => {
+const ensureDir = async (path: string): Promise<void> => {
   await Deno.mkdir(path, { recursive: true });
 };
 
-const write = (path, content) => Deno.writeTextFile(path, content);
+const write = (path: string, content: string): Promise<void> =>
+  Deno.writeTextFile(path, content);
 
 const runScopedTodoQaConsistencyCase = async () => {
   const repoRoot = Deno.cwd();
@@ -307,7 +353,7 @@ related_prs: []
         "run",
         "--allow-read",
         "--allow-env",
-        `${repoRoot}/scripts/validate-qa.mjs`,
+        `${repoRoot}/scripts/validate-qa.ts`,
         "_docs/qa",
       ],
       cwd: temp,
@@ -322,7 +368,11 @@ related_prs: []
   }
 };
 
-const scopeCase = async ({ label, scopePaths, shouldPass }) => {
+const scopeCase = async ({
+  label,
+  scopePaths,
+  shouldPass,
+}: ScopeCaseParams): Promise<boolean> => {
   const code = await runQaWithScope(scopePaths);
   const passed = shouldPass ? code === 0 : code !== 0;
   if (passed) {

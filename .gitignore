@@ -16,3 +16,7 @@ llm_evalution.egg-info/
 
 .log/
 *.log
+# Temporary upstream fetch trees created during docs-template migration work.
+.migration-quarantine/*-tree/
+.migration-quarantine/docs-template-v*/
+.migration-quarantine/upstream-compare/

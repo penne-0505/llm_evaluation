@@ -2,7 +2,7 @@
 
 These fixtures exercise the repository validators themselves.
 
-They are not active project tasks or QA records. `scripts/test-validators.mjs`
+They are not active project tasks or QA records. `scripts/test-validators.ts`
 runs the validators against these files and expects:
 
 - files under `valid/` to pass;

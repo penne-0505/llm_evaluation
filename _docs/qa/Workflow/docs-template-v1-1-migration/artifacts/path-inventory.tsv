@@ -1,0 +1,45 @@
+path	upstream_status	upstream_delta	project_relation	resolution	disposition	rationale
+.agents/skills/docs-cleanup/SKILL.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+.agents/skills/post-implementation/SKILL.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+.agents/skills/qa-prep/SKILL.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+.claude/settings.json	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+.claude/skills/docs-cleanup/SKILL.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+.claude/skills/post-implementation/SKILL.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+.claude/skills/qa-prep/SKILL.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+.codex/hooks.json	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+QUICKSTART.md	M	modified	customized-shared	keep	preserve-project-quickstart	Project app quickstart; U template onboarding not applicable
+_docs/documentation_guide.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_docs/intent/Workflow/lifecycle-self-audit/decision.md	M	modified	project-missing	defer	absent-keep	template-self meta excluded
+_docs/qa/Workflow/lifecycle-self-audit/test-plan.md	M	modified	project-missing	defer	absent-keep	template-self meta excluded
+_docs/qa/Workflow/lifecycle-self-audit/verification.md	M	modified	project-missing	defer	absent-keep	template-self meta excluded
+_docs/standards/documentation_guidelines.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_docs/standards/documentation_operations.md	M	modified	customized-shared	merge	merge-ts-refs-keep-downstream-lock-and-judge-exception	Keep judge_system_prompt + direct lock; take U .mjs→.ts refs and v1.1.0 example tag text where compatible
+_evals/agent-workflows/cases/historical-prompt-not-operational.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/agent-workflows/cases/intentional-omission-risk.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/agent-workflows/cases/malformed-todo-heading.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/agent-workflows/cases/qa-status-verdict-mismatch.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/agent-workflows/expected-invariants.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/README.md	M	modified	customized-shared	merge	keep-frontmatter-fixture-note-apply-U-wording	Preserve frontmatter fixture note; absorb U wording if any
+_evals/validator-fixtures/qa/invalid/missing-invariant.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/qa/invalid/qa-archive-path.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/qa/invalid/status-verdict-mismatch.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/qa/invalid/v2-missing-decision-scope.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/qa/invalid/verification-in-progress-status.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/qa/invalid/verification-missing-test-plan-reference.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/qa/valid/test-plan.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+_evals/validator-fixtures/qa/valid/verification-pass.md	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+deno.json	A	added	upstream-owned-unmodified	apply	import-U	new U file
+docs-template.lock.example.json	M	modified	project-missing	defer	absent-keep	template-self meta excluded
+scripts/agent-workflow-hook.mjs->scripts/agent-workflow-hook.ts	R075	renamed	customized-shared	merge	merge-P-logic-onto-U-ts	P diverged from B; port customizations onto U ts
+scripts/check-docs.sh	M	modified	upstream-owned-unmodified	apply	replace-with-U	P matched B
+scripts/scope.mjs	D	removed	customized-shared	merge	quarantine-after-port	port customizations then quarantine mjs
+scripts/scope.ts	A	added	upstream-owned-unmodified	apply	import-U	new U file
+scripts/test-agent-workflow-hook.mjs	D	removed	customized-shared	merge	quarantine-after-port	port customizations then quarantine mjs
+scripts/test-agent-workflow-hook.ts	A	added	upstream-owned-unmodified	apply	import-U	new U file
+scripts/test-agent-workflow-smoke.mjs->scripts/test-agent-workflow-smoke.ts	R081	renamed	customized-shared	merge	merge-P-logic-onto-U-ts	P diverged from B; port customizations onto U ts
+scripts/test-validators.mjs->scripts/test-validators.ts	R051	renamed	customized-shared	merge	merge-P-logic-onto-U-ts	P diverged from B; port customizations onto U ts
+scripts/validate-doc-links.mjs->scripts/validate-doc-links.ts	R075	renamed	customized-shared	merge	merge-P-logic-onto-U-ts	P diverged from B; port customizations onto U ts
+scripts/validate-frontmatter.mjs->scripts/validate-frontmatter.ts	R072	renamed	customized-shared	merge	merge-P-logic-onto-U-ts	P diverged from B; port customizations onto U ts
+scripts/validate-intent.mjs->scripts/validate-intent.ts	R077	renamed	upstream-owned-unmodified	apply	replace-mjs-with-U-ts	P matched B; apply U TypeScript rename
+scripts/validate-qa.mjs->scripts/validate-qa.ts	R077	renamed	upstream-owned-unmodified	apply	replace-mjs-with-U-ts	P matched B; apply U TypeScript rename
+scripts/validate-todo.mjs->scripts/validate-todo.ts	R076	renamed	upstream-owned-unmodified	apply	replace-mjs-with-U-ts	P matched B; apply U TypeScript rename

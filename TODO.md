@@ -396,4 +396,3 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 ## In Progress
 
 - (empty)
-

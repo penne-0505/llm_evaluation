@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": false
+  },
+  "fmt": {
+    "include": ["scripts/"]
+  },
+  "lint": {
+    "include": ["scripts/"]
+  }
+}

@@ -1,14 +1,33 @@
 // Deno版 intent schema validator: schema v2 の why-first decision record を検証する
 
-import { loadScope, makeInScope } from "./scope.mjs";
+import { loadScope, makeInScope } from "./scope.ts";
+
+type YamlValue = string | number | boolean | YamlValue[];
+type FrontMatter = Record<string, YamlValue>;
+
+type FrontMatterParseResult = {
+  attrs: FrontMatter | null;
+  error: string | null;
+};
+
+type ValidationError = {
+  file: string;
+  message: string;
+};
+
+type DecisionEntry = {
+  id: string;
+  title: string;
+  body: string;
+};
 
 const INTENT_SCHEMA = 2;
 const INTENT_PATH_RE =
   /^_docs\/intent\/([A-Za-z][A-Za-z0-9-]*)\/([a-z0-9]+(?:-[a-z0-9]+)*)\/decision\.md$/;
 
-const normalizePath = (path) => path.replaceAll("\\", "/");
+const normalizePath = (path: string): string => path.replaceAll("\\", "/");
 
-const walkFiles = async function* (dir) {
+const walkFiles = async function* (dir: string): AsyncGenerator<string> {
   try {
     for await (const entry of Deno.readDir(dir)) {
       const path = `${dir}/${entry.name}`;
@@ -23,13 +42,13 @@ const walkFiles = async function* (dir) {
   }
 };
 
-const fileOrDir = async (path) => {
+const fileOrDir = async (path: string): Promise<"file" | "dir"> => {
   const stat = await Deno.stat(path);
   return stat.isFile ? "file" : "dir";
 };
 
-const stripInlineComment = (value) => {
-  let quote = null;
+const stripInlineComment = (value: string): string => {
+  let quote: string | null = null;
   for (let i = 0; i < value.length; i += 1) {
     const ch = value[i];
     if ((ch === '"' || ch === "'") && value[i - 1] !== "\\") {
@@ -40,7 +59,7 @@ const stripInlineComment = (value) => {
   return value.trim();
 };
 
-const parseScalar = (raw) => {
+const parseScalar = (raw: string): YamlValue => {
   const value = stripInlineComment(raw);
   if (/^-?\d+$/.test(value)) return Number(value);
   if (
@@ -52,13 +71,13 @@ const parseScalar = (raw) => {
   return value;
 };
 
-const parseFrontMatter = (src) => {
+const parseFrontMatter = (src: string): FrontMatterParseResult => {
   const lines = src.split(/\r?\n/);
   if (lines[0] !== "---") return { attrs: null, error: "missing front matter" };
   const end = lines.findIndex((line, index) => index > 0 && line === "---");
   if (end === -1) return { attrs: null, error: "front matter is not closed" };
 
-  const attrs = {};
+  const attrs: FrontMatter = {};
   for (let i = 1; i < end; i += 1) {
     const match = lines[i].match(/^([A-Za-z0-9_]+):(?:\s*(.*))?$/);
     if (!match) continue;
@@ -68,8 +87,8 @@ const parseFrontMatter = (src) => {
   return { attrs, error: null };
 };
 
-const stripCodeBlocks = (src) => {
-  const output = [];
+const stripCodeBlocks = (src: string): string => {
+  const output: string[] = [];
   let inFence = false;
   for (const line of src.split(/\r?\n/)) {
     if (/^\s*```/.test(line)) {
@@ -82,7 +101,7 @@ const stripCodeBlocks = (src) => {
   return output.join("\n");
 };
 
-const sectionContent = (src, heading) => {
+const sectionContent = (src: string, heading: string): string | null => {
   const lines = stripCodeBlocks(src).split(/\r?\n/);
   const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
   if (start === -1) return null;
@@ -92,9 +111,9 @@ const sectionContent = (src, heading) => {
   return lines.slice(start + 1, end === -1 ? lines.length : end).join("\n");
 };
 
-const decisionEntries = (content) => {
+const decisionEntries = (content: string): DecisionEntry[] => {
   const lines = content.split(/\r?\n/);
-  const entries = [];
+  const entries: DecisionEntry[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     const match = lines[i].match(/^###\s+(DEC-\d{3}):\s+(.+)$/);
     if (!match) continue;
@@ -111,18 +130,28 @@ const decisionEntries = (content) => {
   return entries;
 };
 
-const fieldValue = (body, name) =>
+const fieldValue = (body: string, name: string): string | undefined =>
   body.match(new RegExp(`^- \\*\\*${name}\\*\\*:\\s*(.+)$`, "m"))?.[1]
     ?.trim();
 
-const isNoneLike = (content) => {
+const isNoneLike = (content: string): boolean => {
   const withoutComments = content.replace(/<!--[\s\S]*?-->/g, "").trim();
   return /^(None|N\/A|なし)$/i.test(withoutComments);
 };
 
-const add = (items, file, message) => items.push({ file, message });
+const add = (
+  items: ValidationError[],
+  file: string,
+  message: string,
+): void => {
+  items.push({ file, message });
+};
 
-const validateV2 = (file, src, errors) => {
+const validateV2 = (
+  file: string,
+  src: string,
+  errors: ValidationError[],
+): void => {
   const requiredHeadings = [
     "Context",
     "Decisions",
@@ -130,7 +159,7 @@ const validateV2 = (file, src, errors) => {
     "Quality Implications",
     "Intent-derived Invariants",
     "Rollback / Follow-ups",
-  ];
+  ] as const;
   for (const heading of requiredHeadings) {
     if (sectionContent(src, heading) === null) {
       add(errors, file, `intent_schema 2 missing heading: ${heading}`);
@@ -142,18 +171,18 @@ const validateV2 = (file, src, errors) => {
     add(errors, file, "intent_schema 2 requires at least one DEC-001 entry");
   }
 
-  const decisionIds = new Set();
+  const decisionIds = new Set<string>();
   for (const decision of decisions) {
     if (decisionIds.has(decision.id)) {
       add(errors, file, `duplicate decision ID: ${decision.id}`);
     }
     decisionIds.add(decision.id);
-    for (const field of ["What", "Why", "Change freedom"]) {
+    for (const field of ["What", "Why", "Change freedom"] as const) {
       if (!fieldValue(decision.body, field)) {
         add(errors, file, `${decision.id} missing substantive ${field}`);
       }
     }
-    for (const field of ["Why not", "Revisit when"]) {
+    for (const field of ["Why not", "Revisit when"] as const) {
       const fieldLine = new RegExp(`^- \\*\\*${field}\\*\\*:`, "m");
       if (fieldLine.test(decision.body) && !fieldValue(decision.body, field)) {
         add(errors, file, `${decision.id} has empty optional field: ${field}`);
@@ -178,7 +207,7 @@ const validateV2 = (file, src, errors) => {
     return;
   }
 
-  const invariantIds = new Set();
+  const invariantIds = new Set<string>();
   for (const line of invariantLines) {
     const match = line.match(
       /^- (INV-\d{3}) \(from (DEC-\d{3})\):\s*(.+)$/,
@@ -206,14 +235,14 @@ const validateV2 = (file, src, errors) => {
   }
 };
 
-const collectFiles = async (target) => {
+const collectFiles = async (target: string): Promise<string[]> => {
   if (await fileOrDir(target) === "file") return [normalizePath(target)];
-  const files = [];
+  const files: string[] = [];
   for await (const file of walkFiles(target)) files.push(file);
   return files;
 };
 
-const run = async () => {
+const run = async (): Promise<void> => {
   const fixtureIndex = Deno.args.indexOf("--fixture");
   const fixtureTarget = fixtureIndex === -1
     ? null
@@ -227,14 +256,14 @@ const run = async () => {
     Deno.args.find((arg) => !arg.startsWith("-")) ??
     "_docs/intent";
   const inScope = makeInScope(await loadScope());
-  const errors = [];
+  const errors: ValidationError[] = [];
 
   for (const file of await collectFiles(target)) {
     if (!fixtureTarget && !inScope(file)) continue;
     const src = await Deno.readTextFile(file);
     const { attrs, error } = parseFrontMatter(src);
-    if (error) {
-      add(errors, file, error);
+    if (error || !attrs) {
+      add(errors, file, error ?? "missing front matter");
       continue;
     }
 

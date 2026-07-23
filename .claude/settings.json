@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-run=git scripts/agent-workflow-hook.mjs session-start",
+            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-env --allow-run=git scripts/agent-workflow-hook.ts session-start",
             "timeout": 30
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-run=git scripts/agent-workflow-hook.mjs user-prompt-submit",
+            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-env --allow-run=git scripts/agent-workflow-hook.ts user-prompt-submit",
             "timeout": 30
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-run=git scripts/agent-workflow-hook.mjs pre-tool-use",
+            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-env --allow-run=git scripts/agent-workflow-hook.ts pre-tool-use",
             "timeout": 30
           }
         ]
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-run=git scripts/agent-workflow-hook.mjs stop",
+            "command": "cd \"${CLAUDE_PROJECT_DIR}\" && deno run --allow-read --allow-env --allow-run=git scripts/agent-workflow-hook.ts stop",
             "timeout": 30
           }
         ]

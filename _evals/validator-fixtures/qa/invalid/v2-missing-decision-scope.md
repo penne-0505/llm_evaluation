@@ -39,13 +39,13 @@ Risk: Medium.
 
 ## Test Strategy
 
-Use `validate-qa.mjs` in fixture mode.
+Use `validate-qa.ts` in fixture mode.
 
 ## Test Matrix
 
 | ID | Source | Requirement / Invariant | Test Type | Command / File | Expected Evidence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC-001 | fixture | Invalid fixture fails. | validator | `deno run --allow-read scripts/validate-qa.mjs --fixture _evals/validator-fixtures/qa/invalid/v2-missing-decision-scope.md` | Validator exits non-zero. | planned |
+| AC-001 | fixture | Invalid fixture fails. | validator | `deno run --allow-read scripts/validate-qa.ts --fixture _evals/validator-fixtures/qa/invalid/v2-missing-decision-scope.md` | Validator exits non-zero. | planned |
 
 ## Manual QA Checklist
 

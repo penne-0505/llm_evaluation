@@ -7,8 +7,14 @@ const DIFF_FILTER_RE = /^[ACDMRTUXB]+$/;
 const COMPATIBILITY_BASELINE_HEADER = "path\tblob_sha1";
 const SHA1_RE = /^[0-9a-f]{40}$/;
 
-const normalizePath = (path) => {
-  const segments = [];
+export type DocScope = Set<string> | null;
+export type InScopePredicate = (path: string) => boolean;
+
+const errorMessage = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err);
+
+const normalizePath = (path: string): string => {
+  const segments: string[] = [];
   for (const segment of path.replaceAll("\\", "/").split("/")) {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") segments.pop();
@@ -18,7 +24,7 @@ const normalizePath = (path) => {
 };
 
 // env 読み取りは権限が無くても安全側（未設定扱い = 全走査）に倒す。
-const readEnv = (key) => {
+const readEnv = (key: string): string | undefined => {
   try {
     return Deno.env.get(key);
   } catch {
@@ -26,14 +32,14 @@ const readEnv = (key) => {
   }
 };
 
-const fromPathList = (raw) =>
+const fromPathList = (raw: string): string[] =>
   raw
     .split(/[\n:]+/)
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map(normalizePath);
 
-const diffFilter = () => {
+const diffFilter = (): string => {
   const raw = readEnv("DD_SCOPE_DIFF_FILTER")?.trim();
   if (raw === undefined || raw === "") return DEFAULT_DIFF_FILTER;
   if (!DIFF_FILTER_RE.test(raw)) {
@@ -44,24 +50,43 @@ const diffFilter = () => {
   return raw;
 };
 
-const fromGitDiff = async (base) => {
+// Deno blocks --allow-run=<binary> when the current process has
+// LD_LIBRARY_PATH / LD_PRELOAD. Passing a sanitized `env` alone is not enough;
+// clearEnv must replace the child environment entirely.
+const gitCommandOptions = (
+  args: string[],
+): Deno.CommandOptions => {
+  const env = { ...Deno.env.toObject() };
+  delete env.LD_LIBRARY_PATH;
+  delete env.LD_PRELOAD;
+  return {
+    args,
+    stdout: "piped",
+    stderr: "piped",
+    clearEnv: true,
+    env,
+  };
+};
+
+const fromGitDiff = async (base: string): Promise<string[]> => {
   const filter = diffFilter();
-  let output;
+  let output: Deno.CommandOutput;
   try {
-    const command = new Deno.Command("git", {
-      args: [
+    const command = new Deno.Command(
+      "git",
+      gitCommandOptions([
         "diff",
         "--name-only",
         `--diff-filter=${filter}`,
         `${base}...HEAD`,
-      ],
-      stdout: "piped",
-      stderr: "piped",
-    });
+      ]),
+    );
     output = await command.output();
   } catch (err) {
     throw new Error(
-      `scope: DD_SCOPE_BASE is set but "git" could not run (need --allow-run=git): ${err.message}`,
+      `scope: DD_SCOPE_BASE is set but "git" could not run (need --allow-run=git): ${
+        errorMessage(err)
+      }`,
     );
   }
   if (!output.success) {
@@ -78,16 +103,15 @@ const fromGitDiff = async (base) => {
     .map(normalizePath);
 };
 
-const runGit = async (args, errorContext) => {
-  let output;
+const runGit = async (
+  args: string[],
+  errorContext: string,
+): Promise<string> => {
+  let output: Deno.CommandOutput;
   try {
-    output = await new Deno.Command("git", {
-      args,
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
+    output = await new Deno.Command("git", gitCommandOptions(args)).output();
   } catch (err) {
-    throw new Error(`scope: ${errorContext}: ${err.message}`);
+    throw new Error(`scope: ${errorContext}: ${errorMessage(err)}`);
   }
   if (!output.success) {
     const stderr = new TextDecoder().decode(output.stderr).trim();
@@ -98,16 +122,20 @@ const runGit = async (args, errorContext) => {
   return new TextDecoder().decode(output.stdout).trim();
 };
 
-const compatibilityBaselinePath = () =>
+const compatibilityBaselinePath = (): string | undefined =>
   readEnv("DD_SCOPE_COMPATIBILITY_BASELINE")?.trim();
 
-const readCompatibilityBaseline = async (path) => {
-  let source;
+const readCompatibilityBaseline = async (
+  path: string,
+): Promise<Map<string, string>> => {
+  let source: string;
   try {
     source = await Deno.readTextFile(path);
   } catch (err) {
     throw new Error(
-      `scope: cannot read compatibility baseline "${path}": ${err.message}`,
+      `scope: cannot read compatibility baseline "${path}": ${
+        errorMessage(err)
+      }`,
     );
   }
 
@@ -118,7 +146,7 @@ const readCompatibilityBaseline = async (path) => {
     );
   }
 
-  const entries = new Map();
+  const entries = new Map<string, string>();
   for (const [index, raw] of lines.entries()) {
     if (raw === "" || raw.startsWith("#")) continue;
     const columns = raw.split("\t");
@@ -127,7 +155,7 @@ const readCompatibilityBaseline = async (path) => {
         `scope: malformed compatibility baseline row ${index + 2} in "${path}"`,
       );
     }
-    const [entryPath, blob] = columns;
+    const [entryPath, blob] = columns as [string, string];
     const normalized = normalizePath(entryPath);
     if (
       entryPath !== normalized ||
@@ -156,7 +184,10 @@ const readCompatibilityBaseline = async (path) => {
   return entries;
 };
 
-const matchesCompatibilityBaseline = async (path, blob) => {
+const matchesCompatibilityBaseline = async (
+  path: string,
+  blob: string,
+): Promise<boolean> => {
   try {
     await Deno.stat(path);
   } catch (err) {
@@ -170,7 +201,10 @@ const matchesCompatibilityBaseline = async (path, blob) => {
   return currentBlob === blob;
 };
 
-const excludeExactCompatibilityBaselines = async (paths, manifestPath) => {
+const excludeExactCompatibilityBaselines = async (
+  paths: string[],
+  manifestPath: string,
+): Promise<Set<string>> => {
   const entries = await readCompatibilityBaseline(manifestPath);
   const scope = new Set(paths);
   for (const [path, blob] of entries) {
@@ -189,7 +223,7 @@ const excludeExactCompatibilityBaselines = async (paths, manifestPath) => {
 //   legacy Markdown を一時的に除外する TSV。内容変更・rename・delete は除外されない。
 // - いずれも未設定: null（= 全走査）。
 // 優先順位は DD_SCOPE_PATHS > DD_SCOPE_BASE > null。
-export const loadScope = async () => {
+export const loadScope = async (): Promise<DocScope> => {
   const paths = readEnv("DD_SCOPE_PATHS");
   if (paths !== undefined && paths.trim() !== "") {
     return new Set(fromPathList(paths));
@@ -206,7 +240,7 @@ export const loadScope = async () => {
 };
 
 // scope が null（= 全走査）のときは全ファイルが対象。
-export const makeInScope = (scope) => (path) =>
+export const makeInScope = (scope: DocScope): InScopePredicate => (path) =>
   scope === null || scope.has(normalizePath(path));
 
 export { normalizePath };

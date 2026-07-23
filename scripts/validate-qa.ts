@@ -1,10 +1,61 @@
 // Deno版 QA document validator: npm / remote import 依存なし
 
-import { loadScope, makeInScope } from "./scope.mjs";
+import { loadScope, makeInScope } from "./scope.ts";
+
+type YamlValue = string | number | boolean | YamlValue[];
+type FrontMatter = Record<string, YamlValue>;
+
+type FrontMatterParseResult = {
+  attrs: FrontMatter | null;
+  error: string | null;
+};
+
+type ValidationItem = {
+  file: string;
+  message: string;
+};
+
+type TodoTask = {
+  fields: Record<string, string>;
+};
+
+type ParsedArgs = {
+  roots: string[];
+  fixtureMode: boolean;
+};
+
+type ValidateTestPlanParams = {
+  file: string;
+  src: string;
+  attrs: FrontMatter;
+  area: string;
+  slug: string;
+  errors: ValidationItem[];
+  warnings: ValidationItem[];
+};
+
+type ValidateVerificationParams = {
+  file: string;
+  src: string;
+  attrs: FrontMatter;
+  area: string;
+  slug: string;
+  errors: ValidationItem[];
+};
+
+type EffectiveQaMatchParams = {
+  file: string;
+  src: string;
+  attrs: FrontMatter;
+  fixtureMode: boolean;
+  errors: ValidationItem[];
+};
+
+type Verdict = "PASS" | "PARTIAL" | "FAIL" | "BLOCKED";
 
 const TODO_FILE = "TODO.md";
 const QA_SCHEMA = 2;
-const RISKS = ["Low", "Medium", "High", "Critical"];
+const RISKS = ["Low", "Medium", "High", "Critical"] as const;
 const QA_STATUS_VALUES = [
   "planned",
   "in-progress",
@@ -12,16 +63,16 @@ const QA_STATUS_VALUES = [
   "partial",
   "failed",
   "blocked",
-];
+] as const;
 const TEST_MATRIX_STATUS_VALUES = [
   "planned",
   "covered",
   "verified",
   "deferred",
   "not-applicable",
-];
-const VERDICTS = ["PASS", "PARTIAL", "FAIL", "BLOCKED"];
-const VERDICT_STATUS = {
+] as const;
+const VERDICTS = ["PASS", "PARTIAL", "FAIL", "BLOCKED"] as const;
+const VERDICT_STATUS: Record<Verdict, string> = {
   PASS: "verified",
   PARTIAL: "partial",
   FAIL: "failed",
@@ -31,8 +82,8 @@ const QA_PATH_RE =
   /^_docs\/qa\/([A-Za-z][A-Za-z0-9-]*)\/([a-z0-9]+(?:-[a-z0-9]+)*)\/(test-plan|verification)\.md$/;
 const TODO_FIELD_RE = /^- \*\*([A-Za-z][A-Za-z ]*)\*\*:\s*(.*)$/;
 
-const normalizePath = (path) => {
-  const segments = [];
+const normalizePath = (path: string): string => {
+  const segments: string[] = [];
   for (const segment of path.replaceAll("\\", "/").split("/")) {
     if (segment === "" || segment === ".") continue;
     if (segment === "..") segments.pop();
@@ -41,7 +92,10 @@ const normalizePath = (path) => {
   return segments.join("/");
 };
 
-const walkFiles = async function* (dir, predicate = () => true) {
+const walkFiles = async function* (
+  dir: string,
+  predicate: (path: string) => boolean = () => true,
+): AsyncGenerator<string> {
   try {
     for await (const entry of Deno.readDir(dir)) {
       const path = `${dir}/${entry.name}`;
@@ -56,7 +110,7 @@ const walkFiles = async function* (dir, predicate = () => true) {
   }
 };
 
-const exists = async (path) => {
+const exists = async (path: string): Promise<boolean> => {
   try {
     const stat = await Deno.stat(path);
     return stat.isFile;
@@ -66,13 +120,13 @@ const exists = async (path) => {
   }
 };
 
-const fileOrDir = async (path) => {
+const fileOrDir = async (path: string): Promise<"file" | "dir"> => {
   const stat = await Deno.stat(path);
   return stat.isFile ? "file" : "dir";
 };
 
-const stripCodeBlocks = (src) => {
-  const output = [];
+const stripCodeBlocks = (src: string): string => {
+  const output: string[] = [];
   let inFence = false;
   for (const line of src.split(/\r?\n/)) {
     if (/^\s*```/.test(line)) {
@@ -85,8 +139,8 @@ const stripCodeBlocks = (src) => {
   return output.join("\n");
 };
 
-const stripInlineComment = (value) => {
-  let quote = null;
+const stripInlineComment = (value: string): string => {
+  let quote: string | null = null;
   for (let i = 0; i < value.length; i += 1) {
     const ch = value[i];
     if ((ch === '"' || ch === "'") && value[i - 1] !== "\\") {
@@ -97,10 +151,10 @@ const stripInlineComment = (value) => {
   return value.trim();
 };
 
-const splitInlineArray = (value) => {
-  const items = [];
+const splitInlineArray = (value: string): string[] => {
+  const items: string[] = [];
   let current = "";
-  let quote = null;
+  let quote: string | null = null;
   for (const ch of value) {
     if ((ch === '"' || ch === "'") && current.at(-1) !== "\\") {
       quote = quote === ch ? null : quote ?? ch;
@@ -116,7 +170,7 @@ const splitInlineArray = (value) => {
   return items;
 };
 
-const parseScalar = (raw) => {
+const parseScalar = (raw: string): YamlValue => {
   const value = stripInlineComment(raw);
   if (value === "") return "";
   if (value === "[]") return [];
@@ -135,13 +189,13 @@ const parseScalar = (raw) => {
   return value;
 };
 
-const parseFrontMatter = (src) => {
+const parseFrontMatter = (src: string): FrontMatterParseResult => {
   const lines = src.split(/\r?\n/);
   if (lines[0] !== "---") return { attrs: null, error: "missing front matter" };
   const end = lines.findIndex((line, index) => index > 0 && line === "---");
   if (end === -1) return { attrs: null, error: "front matter is not closed" };
 
-  const attrs = {};
+  const attrs: FrontMatter = {};
   for (let i = 1; i < end; i += 1) {
     const line = lines[i];
     if (line.trim() === "" || line.trimStart().startsWith("#")) continue;
@@ -154,7 +208,7 @@ const parseFrontMatter = (src) => {
       attrs[key] = parseScalar(rest);
       continue;
     }
-    const values = [];
+    const values: YamlValue[] = [];
     let cursor = i + 1;
     while (cursor < end) {
       const item = lines[cursor].match(/^\s+-\s+(.*)$/);
@@ -172,7 +226,7 @@ const parseFrontMatter = (src) => {
   return { attrs, error: null };
 };
 
-const normalizeInlineCode = (value) => {
+const normalizeInlineCode = (value: string | undefined): string => {
   const trimmed = (value ?? "").trim();
   if (trimmed.startsWith("`") && trimmed.endsWith("`")) {
     return trimmed.slice(1, -1).trim();
@@ -180,7 +234,7 @@ const normalizeInlineCode = (value) => {
   return trimmed;
 };
 
-const sectionContent = (src, heading) => {
+const sectionContent = (src: string, heading: string): string | null => {
   const lines = src.split(/\r?\n/);
   const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
   if (start === -1) return null;
@@ -190,7 +244,7 @@ const sectionContent = (src, heading) => {
   return lines.slice(start + 1, end === -1 ? lines.length : end).join("\n");
 };
 
-const hasSubstantiveContent = (content) => {
+const hasSubstantiveContent = (content: string | null): boolean => {
   if (!content) return false;
   const withoutEmptyTables = stripCodeBlocks(content)
     .split(/\r?\n/)
@@ -218,12 +272,22 @@ const hasSubstantiveContent = (content) => {
   return /[A-Za-z0-9一-龠ぁ-んァ-ン]/.test(cleaned);
 };
 
-const referencesInclude = (attrs, path) =>
+const referencesInclude = (attrs: FrontMatter, path: string): boolean =>
   Array.isArray(attrs.references) && attrs.references.includes(path);
 
-const add = (items, file, message) => items.push({ file, message });
+const add = (
+  items: ValidationItem[],
+  file: string,
+  message: string,
+): void => {
+  items.push({ file, message });
+};
 
-const validateFrontMatter = (file, attrs, errors) => {
+const validateFrontMatter = (
+  file: string,
+  attrs: FrontMatter,
+  errors: ValidationItem[],
+): void => {
   for (
     const key of [
       "title",
@@ -236,7 +300,7 @@ const validateFrontMatter = (file, attrs, errors) => {
       "references",
       "related_issues",
       "related_prs",
-    ]
+    ] as const
   ) {
     if (!(key in attrs)) {
       add(errors, file, `missing front matter field: ${key}`);
@@ -245,14 +309,22 @@ const validateFrontMatter = (file, attrs, errors) => {
   if ("qa_schema" in attrs && attrs.qa_schema !== QA_SCHEMA) {
     add(errors, file, `qa_schema must be ${QA_SCHEMA}`);
   }
-  if (attrs.qa_status && !QA_STATUS_VALUES.includes(attrs.qa_status)) {
+  if (
+    typeof attrs.qa_status === "string" &&
+    attrs.qa_status &&
+    !(QA_STATUS_VALUES as readonly string[]).includes(attrs.qa_status)
+  ) {
     add(
       errors,
       file,
       `qa_status must be one of ${QA_STATUS_VALUES.join(", ")}`,
     );
   }
-  if (attrs.risk && !RISKS.includes(attrs.risk)) {
+  if (
+    typeof attrs.risk === "string" &&
+    attrs.risk &&
+    !(RISKS as readonly string[]).includes(attrs.risk)
+  ) {
     add(errors, file, `risk must be one of ${RISKS.join(", ")}`);
   }
   if (!Array.isArray(attrs.references)) {
@@ -260,7 +332,12 @@ const validateFrontMatter = (file, attrs, errors) => {
   }
 };
 
-const validateTestMatrix = (file, src, errors, warnings) => {
+const validateTestMatrix = (
+  file: string,
+  src: string,
+  errors: ValidationItem[],
+  warnings: ValidationItem[],
+): void => {
   const matrix = sectionContent(src, "Test Matrix");
   if (matrix === null) return;
   const rows = matrix
@@ -275,7 +352,10 @@ const validateTestMatrix = (file, src, errors, warnings) => {
   for (const row of rows) {
     const cells = row.split("|").map((cell) => cell.trim()).filter(Boolean);
     const status = cells.at(-1);
-    if (status && !TEST_MATRIX_STATUS_VALUES.includes(status)) {
+    if (
+      status &&
+      !(TEST_MATRIX_STATUS_VALUES as readonly string[]).includes(status)
+    ) {
       add(
         errors,
         file,
@@ -298,10 +378,13 @@ const validateTestPlan = async ({
   slug,
   errors,
   warnings,
-}) => {
+}: ValidateTestPlanParams): Promise<void> => {
   const usesWhyFirstSchema = attrs.qa_schema === QA_SCHEMA;
 
-  if (!["planned", "in-progress"].includes(attrs.qa_status)) {
+  if (
+    typeof attrs.qa_status === "string" &&
+    !["planned", "in-progress"].includes(attrs.qa_status)
+  ) {
     add(
       errors,
       file,
@@ -370,7 +453,10 @@ const validateTestPlan = async ({
   }
   validateTestMatrix(file, src, errors, warnings);
 
-  if (["High", "Critical"].includes(attrs.risk)) {
+  if (
+    typeof attrs.risk === "string" &&
+    ["High", "Critical"].includes(attrs.risk)
+  ) {
     const highRisk = sectionContent(src, "High-risk Checklist");
     if (highRisk === null) {
       add(errors, file, "Risk High/Critical requires High-risk Checklist");
@@ -384,10 +470,10 @@ const validateTestPlan = async ({
   }
 };
 
-const sectionHasId = (src, heading, prefix) =>
+const sectionHasId = (src: string, heading: string, prefix: string): boolean =>
   new RegExp(`\\b${prefix}-\\d{3}\\b`).test(sectionContent(src, heading) ?? "");
 
-const isNoneLike = (content) => {
+const isNoneLike = (content: string): boolean => {
   const cleaned = stripCodeBlocks(content ?? "")
     .replace(/\|/g, " ")
     .replace(/[-:#`]/g, " ")
@@ -395,7 +481,7 @@ const isNoneLike = (content) => {
   return cleaned === "" || /^(None|N\/A|なし)$/i.test(cleaned);
 };
 
-const isExplicitNone = (content) => {
+const isExplicitNone = (content: string): boolean => {
   const cleaned = stripCodeBlocks(content ?? "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .trim();
@@ -409,7 +495,7 @@ const validateVerification = ({
   area,
   slug,
   errors,
-}) => {
+}: ValidateVerificationParams): void => {
   const usesWhyFirstSchema = attrs.qa_schema === QA_SCHEMA;
   const requiredHeadings = [
     "Summary",
@@ -443,8 +529,8 @@ const validateVerification = ({
   const verdict = verdictSection.match(
     /\bVerdict:\s*(PASS|PARTIAL|FAIL|BLOCKED)\b/,
   )
-    ?.[1];
-  if (!verdict || !VERDICTS.includes(verdict)) {
+    ?.[1] as Verdict | undefined;
+  if (!verdict || !(VERDICTS as readonly string[]).includes(verdict)) {
     add(errors, file, `Verdict must be one of ${VERDICTS.join(", ")}`);
   } else {
     const expectedStatus = VERDICT_STATUS[verdict];
@@ -456,7 +542,10 @@ const validateVerification = ({
       );
     }
   }
-  if (!["verified", "partial", "failed", "blocked"].includes(attrs.qa_status)) {
+  if (
+    typeof attrs.qa_status === "string" &&
+    !["verified", "partial", "failed", "blocked"].includes(attrs.qa_status)
+  ) {
     add(
       errors,
       file,
@@ -474,7 +563,8 @@ const validateVerification = ({
     );
   }
   if (
-    ["PARTIAL", "FAIL", "BLOCKED"].includes(verdict ?? "") &&
+    verdict &&
+    (["PARTIAL", "FAIL", "BLOCKED"] as readonly string[]).includes(verdict) &&
     !hasSubstantiveContent(residual) &&
     !hasSubstantiveContent(followUps)
   ) {
@@ -521,12 +611,12 @@ const validateVerification = ({
   }
 };
 
-const parseTodoTasks = (src) => {
+const parseTodoTasks = (src: string): TodoTask[] => {
   const stripped = stripCodeBlocks(src);
-  const tasks = [];
-  let current = null;
-  let currentField = null;
-  const flush = () => {
+  const tasks: TodoTask[] = [];
+  let current: TodoTask | null = null;
+  let currentField: string | null = null;
+  const flush = (): void => {
     if (current) tasks.push(current);
     current = null;
     currentField = null;
@@ -556,14 +646,16 @@ const parseTodoTasks = (src) => {
   return tasks;
 };
 
-const validateTodoConsistency = async (errors) => {
+const validateTodoConsistency = async (
+  errors: ValidationItem[],
+): Promise<void> => {
   const tasks = parseTodoTasks(await Deno.readTextFile(TODO_FILE));
   for (const task of tasks) {
     const label = task.fields.ID ?? task.fields.Title ?? "(unknown task)";
     const risk = task.fields.Risk;
     const intent = normalizeInlineCode(task.fields.Intent);
 
-    for (const field of ["QA", "Verification"]) {
+    for (const field of ["QA", "Verification"] as const) {
       const path = normalizeInlineCode(task.fields[field]);
       if (!path || path === "None") continue;
       if (!QA_PATH_RE.test(path)) {
@@ -598,11 +690,15 @@ const validateTodoConsistency = async (errors) => {
   }
 };
 
-const report = (prefix, items, logger) => {
-  const grouped = new Map();
+const report = (
+  prefix: string,
+  items: ValidationItem[],
+  logger: (message: string) => void,
+): void => {
+  const grouped = new Map<string, string[]>();
   for (const item of items) {
     if (!grouped.has(item.file)) grouped.set(item.file, []);
-    grouped.get(item.file).push(item.message);
+    grouped.get(item.file)!.push(item.message);
   }
   for (const [file, messages] of grouped) {
     logger(`${prefix}: ${file}`);
@@ -610,7 +706,7 @@ const report = (prefix, items, logger) => {
   }
 };
 
-const parseArgs = (args) => {
+const parseArgs = (args: string[]): ParsedArgs => {
   if (args.length === 0) return { roots: ["_docs/qa"], fixtureMode: false };
   if (args[0] === "--fixture") {
     return { roots: args.slice(1), fixtureMode: true };
@@ -618,7 +714,9 @@ const parseArgs = (args) => {
   return { roots: args, fixtureMode: false };
 };
 
-const collectMarkdownFiles = async function* (roots) {
+const collectMarkdownFiles = async function* (
+  roots: string[],
+): AsyncGenerator<string> {
   for (const root of roots) {
     const kind = await fileOrDir(root);
     if (kind === "file") {
@@ -629,7 +727,13 @@ const collectMarkdownFiles = async function* (roots) {
   }
 };
 
-const effectiveQaMatch = ({ file, src, attrs, fixtureMode, errors }) => {
+const effectiveQaMatch = ({
+  file,
+  src,
+  attrs,
+  fixtureMode,
+  errors,
+}: EffectiveQaMatchParams): RegExpMatchArray | null => {
   const effectivePath = fixtureMode && typeof attrs.fixture_path === "string"
     ? normalizePath(attrs.fixture_path)
     : file;
@@ -654,12 +758,12 @@ const effectiveQaMatch = ({ file, src, attrs, fixtureMode, errors }) => {
   const kind = sectionContent(src, "Verification Verdict") === null
     ? "test-plan"
     : "verification";
-  return [effectivePath, "Fixture", "fixture", kind];
+  return [effectivePath, "Fixture", "fixture", kind] as RegExpMatchArray;
 };
 
-const run = async () => {
-  const errors = [];
-  const warnings = [];
+const run = async (): Promise<void> => {
+  const errors: ValidationItem[] = [];
+  const warnings: ValidationItem[] = [];
   const { roots, fixtureMode } = parseArgs(Deno.args);
   const inScope = makeInScope(await loadScope());
 
@@ -707,7 +811,7 @@ const run = async () => {
   }
 };
 
-run().catch((err) => {
-  console.error(err);
+run().catch((err: unknown) => {
+  console.error(err instanceof Error ? err.message : String(err));
   Deno.exit(1);
 });

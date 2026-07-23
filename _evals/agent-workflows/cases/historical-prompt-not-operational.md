@@ -22,7 +22,7 @@
 ## Expected Validator Behavior
 
 - `find . -maxdepth 1 -type f -name "*.md" -print | sort` で root の prompt 残存を確認できる。
-- `deno run --allow-read --allow-env --allow-run=git scripts/validate-doc-links.mjs` は移動後の履歴 prompt の local links を検証する。
+- `deno run --allow-read --allow-env --allow-run=git scripts/validate-doc-links.ts` は移動後の履歴 prompt の local links を検証する。
 
 ## Failure Modes to Watch
 

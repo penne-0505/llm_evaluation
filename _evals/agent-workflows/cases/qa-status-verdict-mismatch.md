@@ -22,8 +22,8 @@ Verification evidence を読み、実態に合わせて `qa_status` と `Verdict
 
 ## Expected Validator Behavior
 
-- `deno run --allow-read scripts/validate-qa.mjs` は `qa_status` / `Verdict` mismatch を error にする。
-- `scripts/test-validators.mjs` は status-verdict-mismatch fixture が失敗することを確認する。
+- `deno run --allow-read scripts/validate-qa.ts` は `qa_status` / `Verdict` mismatch を error にする。
+- `scripts/test-validators.ts` は status-verdict-mismatch fixture が失敗することを確認する。
 
 ## Failure Modes to Watch
 

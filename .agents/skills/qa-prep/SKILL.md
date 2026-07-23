@@ -63,7 +63,7 @@ The QA test plan must include:
 
 | ID | Source | Requirement / Invariant | Test Type | Command / File | Expected Evidence | Status |
 |---|---|---|---|---|---|---|
-| AC-001 | TODO | Size >= M tasks require Plan / Intent / QA. | validator | `deno run --allow-read scripts/validate-todo.mjs` | Invalid task without QA fails validation. | planned |
+| AC-001 | TODO | Size >= M tasks require Plan / Intent / QA. | validator | `deno run --allow-read scripts/validate-todo.ts` | Invalid task without QA fails validation. | planned |
 
 Add an `INV-*` row only when the Intent defines that invariant. Do not turn a
 current numeric value, algorithm, or file layout into a test contract merely

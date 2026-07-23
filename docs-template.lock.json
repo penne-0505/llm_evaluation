@@ -1,1 +1,8 @@
-{"schema":1,"source":"https://github.com/penne-0505/docs_driven_dev_template.git","revision":{"tag":"v1.0.0","commit":"f71e9ab20466ea2972158334261f5ae2b2265754"}}
+{
+  "schema": 1,
+  "source": "https://github.com/penne-0505/docs_driven_dev_template.git",
+  "revision": {
+    "tag": "v1.1.0",
+    "commit": "9f4503030bd42521541a951adc79fe3aa40823c3"
+  }
+}

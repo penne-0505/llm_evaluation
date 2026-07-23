@@ -43,13 +43,13 @@ Risk: Medium.
 
 ## Test Strategy
 
-Use `validate-qa.mjs` in fixture mode.
+Use `validate-qa.ts` in fixture mode.
 
 ## Test Matrix
 
 | ID | Source | Requirement / Invariant | Test Type | Command / File | Expected Evidence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC-001 | fixture | Valid QA test-plan passes. | validator | `deno run --allow-read scripts/validate-qa.mjs --fixture _evals/validator-fixtures/qa/valid` | Validator exits 0. | planned |
+| AC-001 | fixture | Valid QA test-plan passes. | validator | `deno run --allow-read scripts/validate-qa.ts --fixture _evals/validator-fixtures/qa/valid` | Validator exits 0. | planned |
 
 ## Manual QA Checklist
 

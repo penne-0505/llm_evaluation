@@ -255,7 +255,7 @@ draft の stale 管理向け任意フィールド:
   "schema": 1,
   "source": "https://github.com/penne-0505/docs_driven_dev_template.git",
   "revision": {
-    "tag": "v1.0.0",
+    "tag": "v1.1.0",
     "commit": "<tagが解決するfull 40-character commit SHA>"
   }
 }
@@ -278,8 +278,8 @@ draft の stale 管理向け任意フィールド:
 - **`DD_SCOPE_BASE`**: 導入時点の git ref（commit / tag）を設定すると、`git diff --name-only --diff-filter=A <ref>...HEAD` で得た「追加されたファイル」のみを判定対象にする。既存ファイルは判定しない。一度導入後に既存ファイルを編集しても、既定ではスコープに入らない（追加のみ）。
 - **`DD_SCOPE_DIFF_FILTER`**: `DD_SCOPE_BASE` 使用時の git `--diff-filter` を上書きする。既定は `A`。既存 docs を編集した時点で管理対象にしたい導入先では `ACMR` を設定する。
 - **`DD_SCOPE_PATHS`**: 改行 / コロン区切りの明示パスリスト。CI で対象集合を自前計算する場合やテスト向け。優先順位は `DD_SCOPE_PATHS > DD_SCOPE_BASE > 未設定`。
-- **対象 validator**: `validate-frontmatter` / `validate-doc-links` / `validate-intent` / `validate-qa` がスコープを共有する。母集合決定は `scripts/scope.mjs` に集約されている。
-- **`TODO.md` は常時検証**: `validate-todo.mjs` はスコープの影響を受けない。運用台帳は導入時点から管理対象とする。
+- **対象 validator**: `validate-frontmatter` / `validate-doc-links` / `validate-intent` / `validate-qa` がスコープを共有する。母集合決定は `scripts/scope.ts` に集約されている。
+- **`TODO.md` は常時検証**: `validate-todo.ts` はスコープの影響を受けない。運用台帳は導入時点から管理対象とする。
 - **横断チェックの扱い**: リンク / references の整合チェックは判定の起点ファイルだけをスコープで絞り、参照先の存在確認はファイルシステム全体に対して行う。新規 doc から既存 doc へのリンクは壊れない。
 - **必要権限**: スコープ対応 validator の実行には `--allow-env` を、`DD_SCOPE_BASE`（git）使用時は加えて `--allow-run=git` を付与する。権限が無い場合は安全側（全走査）へフォールバックする。
 - **CI 設定**: `DD_SCOPE_BASE` を使う場合、baseline commit を参照できるよう `actions/checkout` で `fetch-depth: 0` を設定する。
