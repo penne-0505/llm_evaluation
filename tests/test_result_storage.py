@@ -430,7 +430,92 @@ class TestResultStorage(unittest.TestCase):
         self.assertTrue(saved_summary["exclude_unreliable_judges"])
         self.assertIsNone(saved_summary["avg_score"])
         self.assertIsNone(saved_summary["max_score"])
+        # Core-Bug-56: min must follow exclude-aware set (null when all excluded)
+        self.assertIsNone(saved_summary["min_score"])
 
+    def test_summary_min_score_uses_exclude_aware_scores(self):
+        """AC-001/003: min_score matches included judges, not raw all-judge min."""
+        benchmark_result = {
+            "run_id": "run-exclude-partial",
+            "target_model": "gpt-5.1",
+            "judge_models": ["judge-a", "judge-b", "judge-c"],
+            "judge_runs": 1,
+            "executed_at": "2026-07-23T04:00:00Z",
+            "exclude_unreliable_judges": True,
+            "average_score": 80.0,
+            "best_score": 85.0,
+            "score_aggregation": {
+                "average_score_before": 60.0,
+                "average_score_after": 80.0,
+                "best_score_before": 85.0,
+                "best_score_after": 85.0,
+                "excluded_judges": [
+                    {"judge_id": "judge-a", "reasons": ["high_variance"]},
+                ],
+                "included_judges": ["judge-b", "judge-c"],
+                "all_excluded": False,
+                "unreliable_candidates": [
+                    {"judge_id": "judge-a", "reasons": ["high_variance"]},
+                ],
+            },
+            "tasks": [
+                {
+                    "task_name": "01",
+                    "task_type": "fact",
+                    "input_prompt": "prompt",
+                    "response": "response",
+                    "judge_results": {
+                        "judge-a": {
+                            "aggregated": {
+                                "total_score_mean": 20,
+                                "total_score_std": 8,
+                                "critical_fail": False,
+                                "confidence_distribution": {
+                                    "high": 0,
+                                    "medium": 0,
+                                    "low": 0,
+                                },
+                            }
+                        },
+                        "judge-b": {
+                            "aggregated": {
+                                "total_score_mean": 75,
+                                "total_score_std": 1,
+                                "critical_fail": False,
+                                "confidence_distribution": {
+                                    "high": 1,
+                                    "medium": 0,
+                                    "low": 0,
+                                },
+                            }
+                        },
+                        "judge-c": {
+                            "aggregated": {
+                                "total_score_mean": 85,
+                                "total_score_std": 1,
+                                "critical_fail": False,
+                                "confidence_distribution": {
+                                    "high": 1,
+                                    "medium": 0,
+                                    "low": 0,
+                                },
+                            }
+                        },
+                    },
+                }
+            ],
+        }
+
+        saved_path = ResultStorage.save(benchmark_result)
+        summaries = ResultStorage.list_summaries()
+        saved_summary = next(
+            summary for summary in summaries if summary["filename"] == saved_path.name
+        )
+
+        self.assertEqual(saved_summary["avg_score"], 80.0)
+        self.assertEqual(saved_summary["max_score"], 85.0)
+        # All-judge min would be 20; exclude-aware min is 75
+        self.assertEqual(saved_summary["min_score"], 75.0)
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from core.app_paths import AppPaths
 from core.cost_estimator import summarize_task_timing, summarize_usage_records
+from core.judge_reliability import collect_total_scores, collect_unreliable_judges
 
 
 class ResultStorage:
@@ -171,6 +172,38 @@ class ResultStorage:
             return False
 
     @classmethod
+    def _summary_min_score(
+        cls,
+        tasks: List[Dict[str, Any]],
+        *,
+        total_scores: List[float],
+        exclude_unreliable: bool,
+        score_aggregation: Any,
+    ) -> Optional[float]:
+        """Derive list-summary min from the same score set as hero avg/max.
+
+        When exclude-ON, prefer ``score_aggregation.excluded_judges`` (or
+        recompute unreliable set) and return null if no included scores remain.
+        """
+        if not exclude_unreliable:
+            return min(total_scores) if total_scores else 0
+
+        excluded_ids: List[str] = []
+        if isinstance(score_aggregation, dict):
+            for entry in score_aggregation.get("excluded_judges") or []:
+                if isinstance(entry, dict) and entry.get("judge_id"):
+                    excluded_ids.append(str(entry["judge_id"]))
+            if score_aggregation.get("all_excluded"):
+                return None
+        else:
+            excluded_ids = list(collect_unreliable_judges(tasks).keys())
+
+        hero_scores = collect_total_scores(tasks, excluded_judges=excluded_ids)
+        if not hero_scores:
+            return None
+        return min(hero_scores)
+
+    @classmethod
     def _build_summary(
         cls, benchmark_result: Dict[str, Any], filepath: Path
     ) -> Dict[str, Any]:
@@ -214,7 +247,16 @@ class ResultStorage:
         else:
             max_score = max(total_scores) if total_scores else 0
 
-        min_score = min(total_scores) if total_scores else 0
+        # intent: DEC-004 (Core/exclude-unreliable-judges) — min uses the same
+        # exclude-aware score set as hero avg/max; all-excluded → null not 0.
+        min_score = cls._summary_min_score(
+            tasks,
+            total_scores=total_scores,
+            exclude_unreliable=bool(
+                benchmark_result.get("exclude_unreliable_judges", False)
+            ),
+            score_aggregation=benchmark_result.get("score_aggregation"),
+        )
 
         executed_at = benchmark_result.get("executed_at")
         if not executed_at:
