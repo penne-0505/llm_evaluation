@@ -165,11 +165,12 @@ class BenchmarkEngine:
     # intent: DEC-001 (Core/holistic-context-overflow) — tokenizer 未導入のため chars≈4/token で見積もり、未解決 model は小さめ default で API 拒否を避ける
     _CHARS_PER_TOKEN = 4
     _DEFAULT_CONTEXT_LIMIT_TOKENS = 32_768
-    _JUDGE_OUTPUT_RESERVE_TOKENS = 4096
-    # subject の completion 上限。reasoning 既定 ON では thinking と visible content が共有するため、
-    # 4096 だと content 空のまま打ち切られることがある。16384 は目標長ではなく打ち切り緩和。
-    # judge の 4096 は採点 JSON 用で別予算（本定数の対象外）。
+    # subject / judge の completion 上限。reasoning 既定 ON では thinking と visible content が
+    # 共有するため、4096 だと content（採点 JSON 含む）が空のまま打ち切られることがある。
+    # 16384 は目標長ではなく打ち切り緩和。judge 呼び出しと holistic 入力の出力予約を同一値にする。
     _SUBJECT_MAX_OUTPUT_TOKENS = 16384
+    _JUDGE_MAX_OUTPUT_TOKENS = 16384
+    _JUDGE_OUTPUT_RESERVE_TOKENS = _JUDGE_MAX_OUTPUT_TOKENS
     _CONTEXT_SAFETY_MARGIN_RATIO = 0.05
     _RESPONSE_TRUNCATE_MARKER = "\n...[truncated]"
     # より具体的な識別子を先に置く（部分一致）
@@ -1038,7 +1039,7 @@ class BenchmarkEngine:
                     system_prompt,
                     user_prompt,
                     judge_temperature,
-                    4096,
+                    self._JUDGE_MAX_OUTPUT_TOKENS,
                     extra_params,
                 )
                 return response

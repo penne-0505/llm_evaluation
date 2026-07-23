@@ -219,7 +219,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(subject_adapter.native_calls[0]["max_tokens"], 16384)
 
-    async def test_judge_max_tokens_remains_4096(self):
+    async def test_judge_max_tokens_is_16384(self):
         valid_response = json.dumps(
             {
                 "task_name": "test",
@@ -253,7 +253,15 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             system_prompt="system",
         )
 
-        self.assertEqual(judge_adapter.calls[0]["max_tokens"], 4096)
+        self.assertEqual(
+            judge_adapter.calls[0]["max_tokens"],
+            BenchmarkEngine._JUDGE_MAX_OUTPUT_TOKENS,
+        )
+        self.assertEqual(judge_adapter.calls[0]["max_tokens"], 16384)
+        self.assertEqual(
+            BenchmarkEngine._JUDGE_OUTPUT_RESERVE_TOKENS,
+            BenchmarkEngine._JUDGE_MAX_OUTPUT_TOKENS,
+        )
 
     async def test_fail_fast_skips_remaining_runs_after_threshold(self):
         subject_adapter = _StubAdapter(["subject-response"])
