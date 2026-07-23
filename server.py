@@ -2091,10 +2091,16 @@ def list_results() -> List[Dict[str, Any]]:
                             s.setdefault("strict_mode_preset_label", None)
                             s.setdefault("strict_mode_profile_id", None)
                             s.setdefault("strict_mode_profile_label", None)
-            # スコアを小数1桁に丸める
-            s["avg_score"] = round(s.get("avg_score", 0), 1)
-            s["max_score"] = round(s.get("max_score", 0), 1)
-            s["min_score"] = round(s.get("min_score", 0), 1)
+            # スコアを小数1桁に丸める。
+            # intent: DEC-004 (Core/exclude-unreliable-judges) — all-excluded 時は
+            # avg/max/min が null のまま一覧へ通し、0 に潰さない。
+            # dict.get(key, 0) は key が存在して値が None のとき None を返すため、
+            # round 前に None を明示分岐する。
+            for _score_key in ("avg_score", "max_score", "min_score"):
+                _score_val = s.get(_score_key, 0)
+                s[_score_key] = (
+                    None if _score_val is None else round(_score_val, 1)
+                )
         # キャッシュに欠落があった場合、再保存して次回以降は高速に
         if needs_reindex:
             try:

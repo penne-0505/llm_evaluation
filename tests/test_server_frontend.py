@@ -890,6 +890,79 @@ class TestResultDeletionApi(unittest.TestCase):
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(list_response.json(), [])
 
+    def test_list_results_preserves_null_scores_when_all_excluded(self):
+        """DEC-004: all-excluded null hero scores must not 500 /api/results."""
+        ResultStorage.save(
+            {
+                "run_id": "run-all-excluded-list",
+                "target_model": "gpt-5.1",
+                "judge_models": ["judge-a", "judge-b"],
+                "judge_runs": 1,
+                "executed_at": "2026-07-24T04:00:00Z",
+                "exclude_unreliable_judges": True,
+                "average_score": None,
+                "best_score": None,
+                "score_aggregation": {
+                    "average_score_before": 45.0,
+                    "average_score_after": None,
+                    "best_score_before": 50.0,
+                    "best_score_after": None,
+                    "excluded_judges": [
+                        {"judge_id": "judge-a", "reasons": ["high_variance"]},
+                        {"judge_id": "judge-b", "reasons": ["critical_fail"]},
+                    ],
+                    "included_judges": [],
+                    "all_excluded": True,
+                    "unreliable_candidates": [],
+                },
+                "tasks": [
+                    {
+                        "task_name": "01",
+                        "task_type": "fact",
+                        "input_prompt": "prompt",
+                        "response": "response",
+                        "judge_results": {
+                            "judge-a": {
+                                "aggregated": {
+                                    "total_score_mean": 50,
+                                    "total_score_std": 1,
+                                    "critical_fail": False,
+                                    "confidence_distribution": {
+                                        "high": 0,
+                                        "medium": 0,
+                                        "low": 0,
+                                    },
+                                }
+                            },
+                            "judge-b": {
+                                "aggregated": {
+                                    "total_score_mean": 40,
+                                    "total_score_std": 1,
+                                    "critical_fail": True,
+                                    "confidence_distribution": {
+                                        "high": 0,
+                                        "medium": 0,
+                                        "low": 0,
+                                    },
+                                }
+                            },
+                        },
+                    }
+                ],
+            }
+        )
+
+        client = TestClient(server.app)
+        response = client.get("/api/results")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(len(body), 1)
+        self.assertIsNone(body[0]["avg_score"])
+        self.assertIsNone(body[0]["max_score"])
+        self.assertIsNone(body[0]["min_score"])
+        self.assertTrue(body[0]["exclude_unreliable_judges"])
+
     def test_run_with_empty_target_model_returns_error(self):
         """空文字の target_model で run した場合、エラーが返されることを確認"""
         client = TestClient(server.app)
