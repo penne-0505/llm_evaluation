@@ -74,7 +74,10 @@ def _format_reasoning_details(details: Any) -> Optional[str]:
 
 
 def extract_api_reasoning_from_message(
-    message: Any, content: str
+    message: Any,
+    content: str,
+    *,
+    allow_tag_fallback: bool = True,
 ) -> Tuple[str, Optional[str]]:
     """
     Chat Completions message から API thinking を抽出し、パース用 text を正規化する。
@@ -83,6 +86,8 @@ def extract_api_reasoning_from_message(
     <thinking> tag fallback only when fields are empty; always strip tags for parse.
     intent: DEC-001 (Core/claude-gemini-judge-thinking) — same helper for Anthropic /
     Gemini via OpenRouter-normalized reasoning / reasoning_details (no native SDK).
+    intent: DEC-002 (Core/claude-gemini-judge-thinking) — allow_tag_fallback=False
+    when Gemini catalog is unknown (CC fields ok; no content-tag guessing).
     """
     cleaned_content, tag_reasoning = strip_thinking_tags(content or "")
 
@@ -96,7 +101,7 @@ def extract_api_reasoning_from_message(
             api_reasoning = _format_reasoning_details(details)
 
     # intent: DEC-003 — tag extract only when normalized CC fields are empty
-    if not api_reasoning:
+    if not api_reasoning and allow_tag_fallback:
         api_reasoning = tag_reasoning
 
     return cleaned_content, api_reasoning
@@ -227,8 +232,10 @@ class OpenRouterAdapter(LLMAdapter):
             raw_content = message.content or ""
             # intent: DEC-002 (Core/openai-judge-thinking) — stay on Chat Completions;
             # extract message.reasoning / reasoning_details (Responses API deferred)
-            text, api_reasoning = extract_api_reasoning_from_message(
-                message, raw_content
+            # intent: DEC-002 (Core/claude-gemini-judge-thinking) — gate Gemini
+            # no-reasoning extraction (no content-tag guessing as api_reasoning)
+            text, api_reasoning = self._extract_api_reasoning_gated(
+                normalized_model, message, raw_content
             )
             usage = getattr(response, "usage", None)
             return CompletionResult(
@@ -346,6 +353,59 @@ class OpenRouterAdapter(LLMAdapter):
         supports = "reasoning" in info.get("supported_parameters", [])
         always_on = normalized.endswith(":thinking")
         return supports and not always_on
+
+    def supports_reasoning(self, model: str) -> Optional[bool]:
+        """
+        OpenRouter catalog / model id から reasoning レスポンス抽出可否を返す。
+
+        Returns:
+            True: catalog に reasoning がある、または `:thinking` suffix
+            False: catalog 既知かつ reasoning 非サポート
+            None: catalog 未取得 / モデル未掲載
+
+        intent: DEC-002 (Core/claude-gemini-judge-thinking) — Gemini no-support gate
+        """
+        normalized = self._normalize_model_name(model)
+        if normalized.endswith(":thinking"):
+            return True
+        models = self._fetch_models_cache()
+        if models is None:
+            return None
+        info = models.get(normalized)
+        if not info:
+            return None
+        return "reasoning" in info.get("supported_parameters", [])
+
+    @staticmethod
+    def _is_gemini_model(model: str) -> bool:
+        normalized = OpenRouterAdapter._normalize_model_name(model).lower()
+        return normalized.startswith("google/gemini")
+
+    def _extract_api_reasoning_gated(
+        self, model: str, message: Any, raw_content: str
+    ) -> Tuple[str, Optional[str]]:
+        """
+        Gemini no-support 境界で抽出をゲートする。非 Gemini は従来どおり full extract。
+
+        intent: DEC-002 (Core/claude-gemini-judge-thinking)
+        - catalog 既知・reasoning なし: 抽出スキップ（api_reasoning=None）。タグは
+          パース安全のため strip のみ。
+        - catalog 不明の Gemini（:thinking なし）: CC fields は許可、tag fallback 禁止。
+        """
+        is_gemini = self._is_gemini_model(model)
+        if not is_gemini:
+            return extract_api_reasoning_from_message(message, raw_content)
+
+        support = self.supports_reasoning(model)
+        if support is True:
+            return extract_api_reasoning_from_message(message, raw_content)
+        if support is False:
+            cleaned, _ = strip_thinking_tags(raw_content or "")
+            return cleaned, None
+        # catalog unknown: CC ok, no tag guessing
+        return extract_api_reasoning_from_message(
+            message, raw_content, allow_tag_fallback=False
+        )
 
     def _supports_parameter(self, model: str, parameter: str) -> Optional[bool]:
         """OpenRouter catalog が既知なら、未対応 parameter を送信しない。"""

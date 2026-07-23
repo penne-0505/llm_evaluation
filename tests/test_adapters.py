@@ -514,23 +514,147 @@ def test_openrouter_gemini_thinking_model_extracts_reasoning():
     print("✓ Gemini thinking → api_reasoning")
 
 
+def test_openrouter_gemini_reasoning_catalog_allows_fields_and_tags():
+    """AC-002 / Bug-53: catalog 上 reasoning サポート Gemini は fields/tags とも抽出"""
+    print("\n=== Gemini reasoning-support catalog 抽出 ===")
+    OpenRouterAdapter._models_cache = {
+        "google/gemini-2.5-flash": {
+            "id": "google/gemini-2.5-flash",
+            "supported_parameters": ["reasoning", "max_tokens", "temperature"],
+        },
+    }
+    try:
+        adapter = _make_openrouter_adapter_with_message(
+            content=(
+                "<thinking>gemini tag path</thinking>\n"
+                '{"task_name":"test","total_score":70,"confidence":"medium"}'
+            ),
+            reasoning=None,
+            reasoning_details=None,
+        )
+        assert adapter.supports_reasoning("google/gemini-2.5-flash") is True
+        result = adapter.complete_with_model_result(
+            model="google/gemini-2.5-flash",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+        assert result.api_reasoning == "gemini tag path"
+        assert "<thinking>" not in result.text
+        assert '"total_score":70' in result.text
+
+        adapter_field = _make_openrouter_adapter_with_message(
+            content='{"task_name":"test","total_score":71}',
+            reasoning="gemini field path",
+        )
+        result_field = adapter_field.complete_with_model_result(
+            model="google/gemini-2.5-flash",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+        assert result_field.api_reasoning == "gemini field path"
+        print("✓ Gemini reasoning-support → fields/tags extract")
+    finally:
+        OpenRouterAdapter._models_cache = None
+
+
 def test_openrouter_gemini_non_thinking_empty_api_reasoning():
     """AC-002 / DEC-002: 非 thinking Gemini は空 api_reasoning、text は返す"""
     print("\n=== Gemini 非 thinking no-support ===")
-    judge_json = '{"task_name":"test","total_score":55,"confidence":"low"}'
-    adapter = _make_openrouter_adapter_with_message(
-        content=judge_json,
-        reasoning=None,
-        reasoning_details=None,
-    )
-    result = adapter.complete_with_model_result(
-        model="google/gemini-2.0-flash-001",
-        system_prompt="sys",
-        user_prompt="user",
-    )
-    assert result.text == judge_json
-    assert result.api_reasoning is None
-    print("✓ Gemini non-thinking → empty api_reasoning")
+    OpenRouterAdapter._models_cache = {
+        "google/gemini-2.0-flash-001": {
+            "id": "google/gemini-2.0-flash-001",
+            "supported_parameters": ["max_tokens", "temperature"],
+        },
+    }
+    try:
+        judge_json = '{"task_name":"test","total_score":55,"confidence":"low"}'
+        adapter = _make_openrouter_adapter_with_message(
+            content=judge_json,
+            reasoning=None,
+            reasoning_details=None,
+        )
+        result = adapter.complete_with_model_result(
+            model="google/gemini-2.0-flash-001",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+        assert result.text == judge_json
+        assert result.api_reasoning is None
+        print("✓ Gemini non-thinking → empty api_reasoning")
+    finally:
+        OpenRouterAdapter._models_cache = None
+
+
+def test_openrouter_gemini_no_reasoning_catalog_ignores_thinking_tags():
+    """Bug-53 / DEC-002: catalog 非サポート Gemini は tag を api_reasoning にしない（strip はする）"""
+    print("\n=== Gemini no-reasoning catalog gates tag extraction ===")
+    OpenRouterAdapter._models_cache = {
+        "google/gemini-2.0-flash-001": {
+            "id": "google/gemini-2.0-flash-001",
+            "supported_parameters": ["max_tokens", "temperature", "tools"],
+        },
+    }
+    try:
+        adapter = _make_openrouter_adapter_with_message(
+            content=(
+                "<thinking>should not become api_reasoning</thinking>\n"
+                '{"task_name":"test","total_score":55,"confidence":"low"}'
+            ),
+            reasoning=None,
+            reasoning_details=None,
+        )
+        assert adapter.supports_reasoning("google/gemini-2.0-flash-001") is False
+        result = adapter.complete_with_model_result(
+            model="google/gemini-2.0-flash-001",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+        assert result.api_reasoning is None
+        assert "<thinking>" not in result.text
+        assert result.text == (
+            '{"task_name":"test","total_score":55,"confidence":"low"}'
+        )
+        print("✓ Gemini no-reasoning → strip tags, api_reasoning None")
+    finally:
+        OpenRouterAdapter._models_cache = None
+
+
+def test_openrouter_gemini_unknown_catalog_allows_cc_not_tags():
+    """Bug-53: catalog 不明 Gemini は CC fields のみ許可、tag fallback 禁止"""
+    print("\n=== Gemini unknown catalog: CC ok, tags gated ===")
+    # 空 cache = ネットワークなしで「モデル未掲載 / unknown」を模擬
+    OpenRouterAdapter._models_cache = {}
+    try:
+        adapter_tags = _make_openrouter_adapter_with_message(
+            content=(
+                "<thinking>guessed tag</thinking>\n"
+                '{"task_name":"test","total_score":40}'
+            ),
+            reasoning=None,
+            reasoning_details=None,
+        )
+        assert adapter_tags.supports_reasoning("google/gemini-2.0-flash-001") is None
+        result_tags = adapter_tags.complete_with_model_result(
+            model="google/gemini-2.0-flash-001",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+        assert result_tags.api_reasoning is None
+        assert "<thinking>" not in result_tags.text
+
+        adapter_cc = _make_openrouter_adapter_with_message(
+            content='{"task_name":"test","total_score":41}',
+            reasoning="present cc field",
+        )
+        result_cc = adapter_cc.complete_with_model_result(
+            model="google/gemini-2.0-flash-001",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+        assert result_cc.api_reasoning == "present cc field"
+        print("✓ Gemini unknown catalog → CC yes, tags no")
+    finally:
+        OpenRouterAdapter._models_cache = None
 
 
 def test_openrouter_omits_none_or_unsupported_temperature():
@@ -794,7 +918,10 @@ def run_all_tests():
         test_openrouter_claude_thinking_suffix_extracts_reasoning_without_extra_params()
         test_openrouter_claude_opt_in_extracts_anthropic_reasoning_details()
         test_openrouter_gemini_thinking_model_extracts_reasoning()
+        test_openrouter_gemini_reasoning_catalog_allows_fields_and_tags()
         test_openrouter_gemini_non_thinking_empty_api_reasoning()
+        test_openrouter_gemini_no_reasoning_catalog_ignores_thinking_tags()
+        test_openrouter_gemini_unknown_catalog_allows_cc_not_tags()
         test_openrouter_omits_none_or_unsupported_temperature()
         test_lmstudio_omits_none_temperature()
         test_extra_body_passed_to_lmstudio()

@@ -41,7 +41,10 @@ provider 別の取得可否と no-support 境界は本 Intent で決める。
 ### DEC-002: Gemini 非 thinking モデルは no-support とし空 api_reasoning で完走する
 
 - **What**: OpenRouter catalog で `reasoning` 非サポートの Gemini judge モデルは thinking 抽出を
-  試みない。run には `api_reasoning` を付けない（または null）。judge 採点は従来どおり。
+  試みない（CC fields も content `<thinking>` tag fallback も `api_reasoning` にしない）。
+  パース安全のため content 内の thinking タグは strip のみ行う。run には `api_reasoning` を
+  付けない（または null）。judge 採点は従来どおり。catalog 未取得時は CC fields のみ許可し、
+  tag fallback は禁止する。`:thinking` suffix または catalog 上 `reasoning` サポートは抽出対象。
 - **Why**: Survey 上、thinking 出力は thinking 対応モデルに限定される。非対応モデルで content から
   推測抽出すると誤表示リスクが高い。
 - **Change freedom**: catalog に `reasoning` が追加されたモデルはサポート対象へ移行できる。
