@@ -111,12 +111,14 @@ OpenRouter 経由の評価は credit 消費が重い。公式プロバイダの 
 - **What**: 初回 seed（欠落時の再 seed）で次を常駐させる。いずれも `builtin=True`、削除不可、
   key のみクリア可。display_name / pricing_profile の上書きは可（OpenRouter の `profile=openrouter`
   と公式 base_url 初期値は維持方針）。
+
   | id | kind | 既定 base_url | pricing_profile | profile |
   | --- | --- | --- | --- | --- |
   | `openrouter` | openai_compatible | `https://openrouter.ai/api/v1` | openrouter | openrouter |
   | `openai` | openai_compatible | `https://api.openai.com/v1` | openai | （なし） |
   | `google-ai-studio` | openai_compatible | `https://generativelanguage.googleapis.com/v1beta/openai/` | google | （なし） |
   | `anthropic` | anthropic | 公式デフォルト（省略可） | anthropic | （なし） |
+
   ユーザーはこれ以外の openai_compatible / anthropic を追加登録できる。Groq / DeepSeek 等は初版に含めない。
 - **Why**: 動機の公式 credit 経路（OpenAI / Google / Anthropic）と既存 OpenRouter を、手打ち
   base_url なしで選べるようにする。網羅リストは保守コストと誤った pricing_profile 付与を増やす。
