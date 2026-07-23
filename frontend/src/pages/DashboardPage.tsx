@@ -12,9 +12,12 @@ import {
     ChevronLeft, ChevronRight, AlertCircle, ArrowRight,
 } from 'lucide-react';
 import { buildResultDetailPath } from '../lib/resultRoutes';
-import { mean, stddev } from '../lib/stats';
-import { formatTimeRoi, runProcessingDurationMs } from '../lib/timeRoi';
+import { formatTimeRoi } from '../lib/timeRoi';
 import { formatHeroScore, isHeroScoreAvailable } from '../lib/judgeReliability';
+import {
+    buildModelAggregates,
+    type ModelAggregate,
+} from '../lib/modelAggregates';
 import Button from '../components/Button';
 
 const PAGE_SIZE = 4;
@@ -34,21 +37,6 @@ type PresetOption = {
     id: string;
     label: string;
     count: number;
-};
-
-type ModelAggregate = {
-    id: string;
-    name: string;
-    shortName: string;
-    avgScore: number;
-    bestScore: number;
-    variability: number;
-    runCount: number;
-    latest: string;
-    avgCostPer1m?: number;
-    avgExecutionTimeMs?: number;
-    /** Dominant preset among this model's runs (for color when filter is OFF). */
-    dominantPresetId: string;
 };
 
 type StrictModeProfile = {
@@ -72,7 +60,8 @@ const PRESET_PALETTE = [
     '#6b9e7a',
 ];
 
-function scoreBarColor(score: number): string {
+function scoreBarColor(score: number | null | undefined): string {
+    if (!isHeroScoreAvailable(score)) return '#3a3a38';
     if (score >= 80) return '#7cc474';
     if (score >= 60) return '#d4a84b';
     return '#c45c5c';
@@ -185,82 +174,6 @@ function filterByPreset(runs: EvaluationRun[], presetFilter: string): Evaluation
         return runs;
     }
     return runs.filter((run) => getRunPresetId(run) === presetFilter);
-}
-
-function dominantPresetId(runs: EvaluationRun[]): string {
-    const counts = new Map<string, number>();
-    runs.forEach((run) => {
-        const id = getRunPresetId(run);
-        counts.set(id, (counts.get(id) || 0) + 1);
-    });
-    let best = UNCLASSIFIED_PRESET_ID;
-    let bestCount = -1;
-    counts.forEach((count, id) => {
-        if (count > bestCount) {
-            best = id;
-            bestCount = count;
-        }
-    });
-    return best;
-}
-
-function buildModelAggregates(runs: EvaluationRun[]): ModelAggregate[] {
-    const map = new Map<string, {
-        name: string;
-        scores: number[];
-        best: number;
-        latest: string;
-        costPer1m: number[];
-        executionTimes: number[];
-        runs: EvaluationRun[];
-    }>();
-
-    runs.forEach((run) => {
-        const entry = map.get(run.subjectModelId) || {
-            name: run.subjectModelName,
-            scores: [],
-            best: 0,
-            latest: '',
-            costPer1m: [],
-            executionTimes: [],
-            runs: [],
-        };
-        if (isHeroScoreAvailable(run.averageScore)) {
-            entry.scores.push(run.averageScore);
-        }
-        if (isHeroScoreAvailable(run.bestScore)) {
-            entry.best = Math.max(entry.best, run.bestScore);
-        }
-        if (!entry.latest || run.timestamp > entry.latest) {
-            entry.latest = run.timestamp;
-        }
-        if (typeof run.subjectCostPer1mTokensUsd === 'number') {
-            entry.costPer1m.push(run.subjectCostPer1mTokensUsd);
-        }
-        // intent: DEC-004 (Core/time-roi-task-timing) — wall-clock ではなく処理時間合算
-        const processingMs = runProcessingDurationMs(run);
-        if (typeof processingMs === 'number' && processingMs > 0) {
-            entry.executionTimes.push(processingMs);
-        }
-        entry.runs.push(run);
-        map.set(run.subjectModelId, entry);
-    });
-
-    return Array.from(map.entries())
-        .map(([id, entry]) => ({
-            id,
-            name: entry.name,
-            shortName: entry.name.length > 16 ? `${entry.name.slice(0, 14)}…` : entry.name,
-            avgScore: entry.scores.length > 0 ? Math.round(mean(entry.scores) * 10) / 10 : 0,
-            bestScore: entry.best,
-            variability: entry.scores.length > 1 ? Math.round(stddev(entry.scores) * 10) / 10 : 0,
-            runCount: entry.runs.length,
-            latest: entry.latest,
-            avgCostPer1m: entry.costPer1m.length > 0 ? Number(mean(entry.costPer1m).toFixed(6)) : undefined,
-            avgExecutionTimeMs: entry.executionTimes.length > 0 ? Number(mean(entry.executionTimes).toFixed(0)) : undefined,
-            dominantPresetId: dominantPresetId(entry.runs),
-        }))
-        .sort((a, b) => b.avgScore - a.avgScore);
 }
 
 function buildStrictModeProfiles(runs: EvaluationRun[]): StrictModeProfile[] {
@@ -566,7 +479,11 @@ function PresetLegend({
 }
 
 function ModelScoreChart({ data, scopeLabel }: { data: ModelAggregate[]; scopeLabel: string }) {
-    const chartData = data.slice(0, 20);
+    // Bar width needs a number; null hero uses 0 height + tertiary fill (DEC-004).
+    const chartData = data.slice(0, 20).map((entry) => ({
+        ...entry,
+        chartAvgScore: isHeroScoreAvailable(entry.avgScore) ? entry.avgScore : 0,
+    }));
 
     return (
         <section className="space-y-3 animate-fade-up stagger-2">
@@ -594,10 +511,13 @@ function ModelScoreChart({ data, scopeLabel }: { data: ModelAggregate[]; scopeLa
                             }}
                             formatter={(_v, _n, props) => {
                                 const payload = props.payload as ModelAggregate;
-                                return [`平均 ${payload.avgScore} ±${payload.variability} ・ ${payload.runCount}回 ・ 最高 ${payload.bestScore}`, payload.name];
+                                return [
+                                    `平均 ${formatHeroScore(payload.avgScore)} ±${payload.variability} ・ ${payload.runCount}回 ・ 最高 ${formatHeroScore(payload.bestScore)}`,
+                                    payload.name,
+                                ];
                             }}
                         />
-                        <Bar dataKey="avgScore" radius={[3, 3, 0, 0]}>
+                        <Bar dataKey="chartAvgScore" radius={[3, 3, 0, 0]}>
                             {chartData.map((entry, index) => <Cell key={index} fill={scoreBarColor(entry.avgScore)} />)}
                         </Bar>
                     </BarChart>
@@ -621,9 +541,14 @@ function CostEfficiencyChart({
     presetOptions: PresetOption[];
 }) {
     const roiData = data
-        .filter((entry) => typeof entry.avgCostPer1m === 'number')
+        .filter(
+            (entry) =>
+                typeof entry.avgCostPer1m === 'number' &&
+                isHeroScoreAvailable(entry.avgScore),
+        )
         .map((entry) => ({
             ...entry,
+            avgScore: entry.avgScore as number,
             y: entry.avgCostPer1m as number,
             z: Math.max(entry.runCount, 1),
         }))
@@ -673,7 +598,10 @@ function CostEfficiencyChart({
                                 }}
                                 formatter={(_v, _n, props) => {
                                     const payload = props.payload as ModelAggregate & { y: number };
-                                    return [`平均 ${payload.avgScore} ±${payload.variability} ・ ${formatUsd(payload.y)}/1M`, payload.name];
+                                    return [
+                                        `平均 ${formatHeroScore(payload.avgScore)} ±${payload.variability} ・ ${formatUsd(payload.y)}/1M`,
+                                        payload.name,
+                                    ];
                                 }}
                             />
                             <Scatter data={roiData}>
@@ -792,7 +720,7 @@ function StrictModeLeaderboard({
                                                 <td className="px-4 py-3 text-center">
                                                     <div className="flex flex-col items-center leading-tight">
                                                         <span className={`data-display ${scoreTextColor(row.avgScore)}`}>
-                                                            {row.avgScore.toFixed(1)}
+                                                            {formatHeroScore(row.avgScore)}
                                                         </span>
                                                         <span className="text-[10px] text-text-tertiary">
                                                             ±{row.variability.toFixed(1)}
@@ -801,7 +729,7 @@ function StrictModeLeaderboard({
                                                 </td>
                                                 <td className="px-4 py-3 text-center">
                                                     <span className={`data-display ${scoreTextColor(row.bestScore)}`}>
-                                                        {row.bestScore.toFixed(1)}
+                                                        {formatHeroScore(row.bestScore)}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-center text-text-secondary">
@@ -1098,11 +1026,11 @@ function AggregationTable({ data, scopeLabel }: { data: ModelAggregate[]; scopeL
                                 <td className="px-4 py-2.5 text-center text-text-secondary">{row.runCount}</td>
                                 <td className="px-4 py-2.5 text-center">
                                     <div className="flex flex-col items-center leading-tight">
-                                        <span className={`data-display ${scoreTextColor(row.avgScore)}`}>{row.avgScore.toFixed(1)}</span>
+                                        <span className={`data-display ${scoreTextColor(row.avgScore)}`}>{formatHeroScore(row.avgScore)}</span>
                                         <span className="text-[10px] text-text-tertiary">±{row.variability.toFixed(1)}</span>
                                     </div>
                                 </td>
-                                <td className="px-4 py-2.5 text-center"><span className={`data-display ${scoreTextColor(row.bestScore)}`}>{row.bestScore.toFixed(1)}</span></td>
+                                <td className="px-4 py-2.5 text-center"><span className={`data-display ${scoreTextColor(row.bestScore)}`}>{formatHeroScore(row.bestScore)}</span></td>
                                 <td className="px-4 py-2.5 text-center text-text-secondary">{formatUsd(row.avgCostPer1m)}</td>
                                 <td className="px-4 py-2.5 text-center text-text-secondary">{formatDuration(row.avgExecutionTimeMs)}</td>
                                 <td className="px-4 py-2.5 text-center text-text-secondary">{formatTimeRoi(row.avgScore, row.avgExecutionTimeMs)}</td>
