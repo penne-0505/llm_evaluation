@@ -10,8 +10,8 @@ import {
     saveOpenRouterAdminKey,
 } from '../api/client';
 import { useSettingsStore } from '../store/settingsStore';
-import type { Provider, ToolMode } from '../types';
-import { PROVIDER_LABELS } from '../types';
+import type { ProviderKind, RegistryProvider, ToolMode } from '../types';
+import { providerDisplayName } from '../types';
 import { getStrictModeIssues } from '../lib/strictMode';
 import { TASK_TYPE_LABELS, TASK_TYPE_STYLE } from '../lib/taskTypeStyles';
 import {
@@ -30,10 +30,9 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Button from '../components/Button';
 
-const CLOUD_PROVIDERS: Provider[] = ['openrouter'];
-
 type ModelPickerProps = {
     availableModels: ReturnType<typeof useSettingsStore.getState>['availableModels'];
+    registryProviders: RegistryProvider[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
     placeholder: string;
@@ -45,6 +44,7 @@ type ModelPickerProps = {
 
 function ModelPicker({
     availableModels,
+    registryProviders,
     open,
     onOpenChange,
     placeholder,
@@ -62,15 +62,39 @@ function ModelPicker({
         onOpenChange(nextOpen);
     }, [onOpenChange]);
 
+    const labelFor = useCallback(
+        (providerId: string) => providerDisplayName(providerId, registryProviders),
+        [registryProviders],
+    );
+
     const filteredModels = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
         if (!normalizedQuery) return availableModels;
         return availableModels.filter((m) =>
             m.name.toLowerCase().includes(normalizedQuery)
             || m.id.toLowerCase().includes(normalizedQuery)
-            || PROVIDER_LABELS[m.provider].toLowerCase().includes(normalizedQuery)
+            || labelFor(m.provider).toLowerCase().includes(normalizedQuery)
         );
-    }, [availableModels, query]);
+    }, [availableModels, query, labelFor]);
+
+    const groupedModels = useMemo(() => {
+        const groups: { provider: string; label: string; models: typeof filteredModels }[] = [];
+        const indexByProvider = new Map<string, number>();
+        for (const model of filteredModels) {
+            let idx = indexByProvider.get(model.provider);
+            if (idx === undefined) {
+                idx = groups.length;
+                indexByProvider.set(model.provider, idx);
+                groups.push({
+                    provider: model.provider,
+                    label: labelFor(model.provider),
+                    models: [],
+                });
+            }
+            groups[idx].models.push(model);
+        }
+        return groups;
+    }, [filteredModels, labelFor]);
 
     const displayValue = open ? query : selectedLabel;
 
@@ -119,26 +143,33 @@ function ModelPicker({
                             モデルが見つかりません
                         </div>
                     )}
-                    {filteredModels.map((m) => {
-                        const selected = isSelected(m.id);
-                        return (
-                            <Button
-                                key={m.id}
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => onSelect(m.id)}
-                                className={`w-full text-left px-3 py-2 text-[13px] hover:bg-surface-hover transition-colors flex items-center gap-2.5 ${selected ? 'text-amber' : 'text-text-primary'}`}
-                            >
-                                {multi ? (
-                                    <div className={`shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${selected ? 'bg-amber border-amber' : 'border-border-focus'}`}>
-                                        {selected && <Check size={9} className="text-bg" />}
-                                    </div>
-                                ) : null}
-                                <span className="flex-1 min-w-0 truncate">{m.name}</span>
-                                <span className="shrink-0 text-[11px] text-text-tertiary">{PROVIDER_LABELS[m.provider]}</span>
-                            </Button>
-                        );
-                    })}
+                    {groupedModels.map((group) => (
+                        <div key={group.provider}>
+                            <div className="sticky top-0 px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-text-tertiary bg-surface border-b border-border/60">
+                                {group.label}
+                            </div>
+                            {group.models.map((m) => {
+                                const selected = isSelected(m.id);
+                                return (
+                                    <Button
+                                        key={m.id}
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => onSelect(m.id)}
+                                        className={`w-full text-left px-3 py-2 text-[13px] hover:bg-surface-hover transition-colors flex items-center gap-2.5 ${selected ? 'text-amber' : 'text-text-primary'}`}
+                                    >
+                                        {multi ? (
+                                            <div className={`shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${selected ? 'bg-amber border-amber' : 'border-border-focus'}`}>
+                                                {selected && <Check size={9} className="text-bg" />}
+                                            </div>
+                                        ) : null}
+                                        <span className="flex-1 min-w-0 truncate">{m.name}</span>
+                                        <span className="shrink-0 text-[11px] text-text-tertiary">{group.label}</span>
+                                    </Button>
+                                );
+                            })}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
@@ -458,64 +489,117 @@ function StrictSpec({ label, value }: { label: string; value: string }) {
     );
 }
 
-/* ===================== API KEY SECTION ===================== */
+/* ===================== API KEY / PROVIDER REGISTRY SECTION ===================== */
 function ApiKeySection() {
-    const { apiKeys, setApiKey, deleteApiKey } = useSettingsStore();
-    const [drafts, setDrafts] = useState<Partial<Record<Provider, string>>>({});
+    const {
+        apiKeys,
+        setApiKey,
+        deleteApiKey,
+        registryProviders,
+        addCustomProvider,
+        removeCustomProvider,
+        registryLoading,
+    } = useSettingsStore();
+    const [drafts, setDrafts] = useState<Record<string, string>>({});
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newKind, setNewKind] = useState<ProviderKind>('openai_compatible');
+    const [newBaseUrl, setNewBaseUrl] = useState('');
+    const [adding, setAdding] = useState(false);
+    const [addError, setAddError] = useState<string | null>(null);
 
-    const handleSave = (provider: Provider) => {
-        const val = drafts[provider];
+    const handleSave = (providerId: string) => {
+        const val = drafts[providerId];
         if (!val || !val.trim()) return;
-        setApiKey(provider, val.trim());
-        setDrafts((d) => ({ ...d, [provider]: '' }));
+        void setApiKey(providerId, val.trim());
+        setDrafts((d) => ({ ...d, [providerId]: '' }));
     };
 
-    const connectedCount = Object.values(apiKeys).filter((e) => e?.isValid).length;
+    const connectedCount = registryProviders.filter((p) => p.hasKey).length;
+    const totalCount = registryProviders.length;
+
+    const handleAdd = async () => {
+        const name = newName.trim();
+        if (!name) return;
+        if (newKind === 'openai_compatible' && !newBaseUrl.trim()) {
+            setAddError('OpenAI 互換には base URL が必要です');
+            return;
+        }
+        setAdding(true);
+        setAddError(null);
+        const created = await addCustomProvider({
+            displayName: name,
+            kind: newKind,
+            baseUrl: newKind === 'openai_compatible' ? newBaseUrl.trim() : undefined,
+        });
+        setAdding(false);
+        if (!created) {
+            setAddError('プロバイダの追加に失敗しました');
+            return;
+        }
+        setNewName('');
+        setNewBaseUrl('');
+        setNewKind('openai_compatible');
+        setShowAddForm(false);
+    };
 
     return (
         <section className="space-y-3 animate-fade-up stagger-1">
             <div className="flex items-center justify-between">
-                <h2 className="section-label">API Key</h2>
+                <h2 className="section-label">プロバイダ / API Key</h2>
                 <span className="text-[11px] text-text-tertiary">
-                    {connectedCount}/{CLOUD_PROVIDERS.length} 接続済み
+                    {registryLoading ? '読込中…' : `${connectedCount}/${totalCount || '—'} 接続済み`}
                 </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {CLOUD_PROVIDERS.map((provider, i) => {
-                    const entry = apiKeys[provider];
-                    const draft = drafts[provider] || '';
-                    const hasKey = !!entry;
+                {registryProviders.map((provider, i) => {
+                    const entry = apiKeys[provider.id];
+                    const draft = drafts[provider.id] || '';
+                    const hasKey = provider.hasKey || !!entry?.isValid;
 
                     return (
                         <div
-                            key={provider}
-                            className={`card p-4 transition-all duration-150 animate-fade-up ${hasKey && entry.isValid ? 'accent-bar-high' : hasKey ? 'accent-bar-low' : 'accent-bar-ice'}`}
+                            key={provider.id}
+                            className={`card p-4 transition-all duration-150 animate-fade-up ${hasKey && (!entry || entry.isValid) ? 'accent-bar-high' : entry && !entry.isValid ? 'accent-bar-low' : 'accent-bar-ice'}`}
                             style={{ animationDelay: `${(i + 2) * 30}ms` }}
                         >
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-[13px] font-medium text-text-primary">
-                                    {PROVIDER_LABELS[provider]}
-                                </span>
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="min-w-0">
+                                    <span className="text-[13px] font-medium text-text-primary">
+                                        {provider.displayName}
+                                    </span>
+                                    <p className="text-[10px] text-text-tertiary mt-0.5 truncate">
+                                        {provider.kind}
+                                        {provider.baseUrl ? ` · ${provider.baseUrl}` : ''}
+                                        {provider.builtin ? ' · 組み込み' : ''}
+                                    </p>
+                                </div>
                                 {hasKey ? (
-                                    entry.isValid ? (
-                                        <span className="flex items-center gap-1 text-[11px] text-score-high">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-score-high inline-block" />
-                                            接続済み
-                                        </span>
-                                    ) : (
-                                        <span className="flex items-center gap-1 text-[11px] text-score-low">
+                                    entry && !entry.isValid ? (
+                                        <span className="flex items-center gap-1 text-[11px] text-score-low shrink-0">
                                             <span className="w-1.5 h-1.5 rounded-full bg-score-low inline-block" />
                                             エラー
                                         </span>
+                                    ) : (
+                                        <span className="flex items-center gap-1 text-[11px] text-score-high shrink-0">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-score-high inline-block" />
+                                            接続済み
+                                        </span>
                                     )
                                 ) : (
-                                    <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
+                                    <span className="flex items-center gap-1 text-[11px] text-text-tertiary shrink-0">
                                         <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary inline-block" />
                                         未設定
                                     </span>
                                 )}
                             </div>
+
+                            {provider.id === 'google-ai-studio' && (
+                                <p className="mb-3 text-[11px] leading-5 text-text-secondary">
+                                    base URL は組み込み済みです。Google AI Studio の Gemini API キーを貼り付けてください。
+                                </p>
+                            )}
 
                             {entry?.error && (
                                 <div className="mb-3 p-2 rounded bg-danger/8 border border-danger/15 text-[11px] text-score-low">
@@ -527,12 +611,12 @@ function ApiKeySection() {
                                 <input
                                     type="password"
                                     value={draft}
-                                    onChange={(e) => setDrafts((d) => ({ ...d, [provider]: e.target.value }))}
+                                    onChange={(e) => setDrafts((d) => ({ ...d, [provider.id]: e.target.value }))}
                                     placeholder={hasKey ? '••••••••' : 'API Key を入力'}
                                     className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
                                 />
                                 <Button
-                                    onClick={() => handleSave(provider)}
+                                    onClick={() => handleSave(provider.id)}
                                     disabled={!draft.trim()}
                                     className="px-3 py-1.5 bg-amber text-bg rounded text-[12px] font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:bg-amber-hover transition-colors duration-150"
                                 >
@@ -540,16 +624,81 @@ function ApiKeySection() {
                                 </Button>
                                 {hasKey && (
                                     <Button
-                                        onClick={() => deleteApiKey(provider)}
+                                        onClick={() => void deleteApiKey(provider.id)}
                                         className="px-2 py-1.5 rounded border border-border bg-surface-hover/70 text-text-secondary hover:border-border-focus hover:bg-surface-hover hover:text-text-primary transition-colors duration-150"
+                                        aria-label={`${provider.displayName} のキーを削除`}
                                     >
                                         <Trash2 size={14} />
+                                    </Button>
+                                )}
+                                {!provider.builtin && (
+                                    <Button
+                                        onClick={() => void removeCustomProvider(provider.id)}
+                                        className="px-2 py-1.5 rounded border border-border bg-surface-hover/70 text-text-secondary hover:border-danger/40 hover:text-score-low transition-colors duration-150"
+                                        aria-label={`${provider.displayName} を削除`}
+                                        title="プロバイダを削除"
+                                    >
+                                        <X size={14} />
                                     </Button>
                                 )}
                             </div>
                         </div>
                     );
                 })}
+
+                <div className="card p-4 accent-bar-ice md:col-span-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[13px] font-medium text-text-primary">カスタムプロバイダを追加</span>
+                        <Button
+                            type="button"
+                            onClick={() => setShowAddForm((v) => !v)}
+                            className="flex items-center gap-1 text-[12px] text-amber hover:text-amber-hover"
+                        >
+                            <Plus size={14} />
+                            {showAddForm ? '閉じる' : '追加'}
+                        </Button>
+                    </div>
+                    {showAddForm && (
+                        <div className="space-y-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                    value={newName}
+                                    onChange={(e) => setNewName(e.target.value)}
+                                    placeholder="表示名（例: DeepSeek）"
+                                    className="bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40"
+                                />
+                                <select
+                                    value={newKind}
+                                    onChange={(e) => setNewKind(e.target.value as ProviderKind)}
+                                    className="bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary focus:outline-none focus:border-amber/40"
+                                >
+                                    <option value="openai_compatible">OpenAI 互換</option>
+                                    <option value="anthropic">Anthropic</option>
+                                </select>
+                            </div>
+                            {newKind === 'openai_compatible' && (
+                                <input
+                                    value={newBaseUrl}
+                                    onChange={(e) => setNewBaseUrl(e.target.value)}
+                                    placeholder="base URL（例: https://api.example.com/v1）"
+                                    className="w-full bg-bg border border-border rounded px-3 py-1.5 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40"
+                                />
+                            )}
+                            {addError && (
+                                <p className="text-[11px] text-score-low">{addError}</p>
+                            )}
+                            <Button
+                                type="button"
+                                onClick={() => void handleAdd()}
+                                disabled={adding || !newName.trim()}
+                                className="px-3 py-1.5 bg-amber text-bg rounded text-[12px] font-medium disabled:opacity-30"
+                            >
+                                {adding ? '追加中…' : '登録'}
+                            </Button>
+                        </div>
+                    )}
+                </div>
+
                 <LMStudioCard className="md:col-span-2" />
             </div>
         </section>
@@ -859,6 +1008,7 @@ function ModelSelectionSection() {
         setFreeTextSubject,
         addFreeTextJudge,
         removeFreeTextJudge,
+        registryProviders,
     } = useSettingsStore();
 
     const [judgeInput, setJudgeInput] = useState('');
@@ -904,6 +1054,7 @@ function ModelSelectionSection() {
                     {hasCatalogModels ? (
                         <ModelPicker
                             availableModels={availableModels}
+                            registryProviders={registryProviders}
                             open={subjectOpen}
                             onOpenChange={setSubjectOpen}
                             placeholder="モデルを選択"
@@ -961,7 +1112,7 @@ function ModelSelectionSection() {
                                 {strictPreset.judgeModels.map((judge) => (
                                     <span key={judge.id} className="flex items-center gap-1 rounded bg-surface-hover px-2 py-1 text-[11px] text-text-secondary">
                                         <span>{judge.label}</span>
-                                        <span className="text-text-tertiary">· {PROVIDER_LABELS[judge.provider]}</span>
+                                        <span className="text-text-tertiary">· {providerDisplayName(judge.provider, registryProviders)}</span>
                                     </span>
                                 ))}
                             </div>
@@ -970,6 +1121,7 @@ function ModelSelectionSection() {
                         <div className="space-y-2">
                             <ModelPicker
                                 availableModels={availableModels}
+                                registryProviders={registryProviders}
                                 open={judgeOpen}
                                 onOpenChange={setJudgeOpen}
                                 placeholder="評価モデルを選択"
@@ -1044,6 +1196,7 @@ function HolisticSection() {
         freeTextHolisticJudges,
         addFreeTextHolisticJudge,
         removeFreeTextHolisticJudge,
+        registryProviders,
     } = useSettingsStore();
     const [holisticJudgeOpen, setHolisticJudgeOpen] = useState(false);
     const [holisticJudgeInput, setHolisticJudgeInput] = useState('');
@@ -1086,6 +1239,7 @@ function HolisticSection() {
                         <div className="space-y-2">
                             <ModelPicker
                                 availableModels={availableModels}
+                                registryProviders={registryProviders}
                                 open={holisticJudgeOpen}
                                 onOpenChange={setHolisticJudgeOpen}
                                 placeholder="包括評価モデルを選択（任意）"

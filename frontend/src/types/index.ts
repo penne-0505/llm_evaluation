@@ -1,10 +1,38 @@
 // === Providers ===
-export type Provider = 'openrouter' | 'lmstudio';
+/** registry id または lmstudio。カタログは任意の registry id を返し得る。 */
+export type Provider = string;
 
-export const PROVIDER_LABELS: Record<Provider, string> = {
+export type ProviderKind = 'openai_compatible' | 'anthropic';
+
+export type PricingProfile = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'none';
+
+export interface RegistryProvider {
+    id: string;
+    displayName: string;
+    kind: ProviderKind;
+    baseUrl?: string;
+    pricingProfile: PricingProfile;
+    profile?: string;
+    builtin: boolean;
+    hasKey: boolean;
+}
+
+export const PROVIDER_LABELS: Record<string, string> = {
     openrouter: 'OpenRouter',
     lmstudio: 'LM Studio',
+    openai: 'OpenAI',
+    'google-ai-studio': 'Google AI Studio',
+    anthropic: 'Anthropic',
 };
+
+export function providerDisplayName(
+    providerId: string,
+    registry?: RegistryProvider[],
+): string {
+    const fromRegistry = registry?.find((p) => p.id === providerId)?.displayName;
+    if (fromRegistry) return fromRegistry;
+    return PROVIDER_LABELS[providerId] ?? providerId;
+}
 
 export interface ApiKeyEntry {
     provider: Provider;

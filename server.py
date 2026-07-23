@@ -12,6 +12,7 @@ import logging
 import os
 import time
 import traceback
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
@@ -22,7 +23,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from adapters import get_adapter_for_model, get_available_judge_adapters
+from adapters import (
+    get_adapter_for_model,
+    get_available_judge_adapters,
+    resolve_api_key_for_model,
+)
 from core import BenchmarkEngine, GroundingCorpusStore, ResultStorage
 from core.app_paths import AppPaths
 from core.cost_estimator import (
@@ -36,6 +41,7 @@ from core.logging_utils import configure_logging
 from core.model_catalog import ModelCatalog
 from core.openrouter_admin import OpenRouterAdminError, fetch_credits
 from core.provider_config_store import ProviderConfigStore
+from core.provider_registry import ProviderEntry, ProviderRegistry
 from core.secrets_store import SecretsStore
 from core.selection_store import SelectionStore
 from core.strict_mode import (
@@ -48,7 +54,27 @@ LOG_FILE_PATH = configure_logging()
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="LLM Benchmark API", version="1.0.0")
+_registry_bootstrapped = False
+
+
+def _bootstrap_provider_registry() -> None:
+    """起動時に builtin seed と secrets 写像を確保する。"""
+    global _registry_bootstrapped
+    if _registry_bootstrapped:
+        return
+    # intent: DEC-010/008 — seed + OPENROUTER 等の aliases
+    ProviderRegistry.list_providers()
+    SecretsStore.ensure_builtin_secret_aliases()
+    _registry_bootstrapped = True
+
+
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    _bootstrap_provider_registry()
+    yield
+
+
+app = FastAPI(title="LLM Benchmark API", version="1.0.0", lifespan=_app_lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -389,12 +415,14 @@ def _load_holistic_tasks() -> List[Dict[str, Any]]:
 
 
 def _resolve_subject_key(model_name: str, api_keys: Dict[str, str]) -> Optional[str]:
-    model_lower = model_name.lower()
-    if any(model_lower.startswith(p) for p in ["openrouter/", "or/"]):
-        return api_keys.get("openrouter")
-    if model_lower.startswith("lmstudio/"):
-        return api_keys.get("lmstudio")
-    return None
+    return resolve_api_key_for_model(model_name, api_keys)
+
+
+def _provider_public_dict(entry: ProviderEntry) -> Dict[str, Any]:
+    """ProviderEntry → API 応答（key は含めない）。"""
+    data = entry.to_dict()
+    data["has_key"] = bool(SecretsStore.load_provider_secret(entry.id))
+    return data
 
 
 def _lmstudio_config_response() -> Dict[str, Any]:
@@ -732,6 +760,26 @@ class ApiKeyClearRequest(BaseModel):
     openrouter: bool = False
 
 
+class ProviderKeyRequest(BaseModel):
+    key: str
+
+
+class ProviderCreateRequest(BaseModel):
+    display_name: str
+    kind: str
+    base_url: Optional[str] = None
+    pricing_profile: Optional[str] = None
+    profile: Optional[str] = None
+
+
+class ProviderUpdateRequest(BaseModel):
+    display_name: Optional[str] = None
+    base_url: Optional[str] = None
+    clear_base_url: bool = False
+    pricing_profile: Optional[str] = None
+    profile: Optional[str] = None
+
+
 class SelectionSaveRequest(BaseModel):
     target_model: Optional[str] = None
     judge_models: List[str] = []
@@ -895,23 +943,168 @@ def save_grounding_corpus(req: GroundingCorpusRequest) -> Dict[str, Any]:
 
 @app.get("/api/keys/status")
 def get_keys_status() -> Dict[str, Any]:
-    """各プロバイダーのAPIキー設定状況を返す"""
-    existing = SecretsStore.load_existing()
+    """registry 各プロバイダのキー有無（値は返さない）。lmstudio は別エンドポイント。"""
+    _bootstrap_provider_registry()
+    providers = {
+        entry.id: bool(SecretsStore.load_provider_secret(entry.id))
+        for entry in ProviderRegistry.list_providers()
+    }
     return {
-        provider: bool(existing.get(provider))
-        for provider in ["openrouter"]
+        "openrouter": bool(providers.get("openrouter")),
+        "providers": providers,
     }
 
 
 @app.post("/api/keys")
 def save_keys(req: ApiKeySaveRequest) -> Dict[str, str]:
-    """APIキーを保存する"""
+    """APIキーを保存する（後方互換: openrouter）。"""
     values = req.model_dump()
     if not any(values.values()):
         raise HTTPException(status_code=400, detail="APIキーが入力されていません")
     SecretsStore.save(values)
     load_dotenv(override=True)
     return {"status": "ok"}
+
+
+@app.delete("/api/keys")
+def clear_keys(req: ApiKeyClearRequest) -> Dict[str, str]:
+    """指定プロバイダーのAPIキーを削除する（後方互換: openrouter）。"""
+    providers = req.model_dump()
+    if not any(providers.values()):
+        raise HTTPException(
+            status_code=400, detail="削除するプロバイダを選択してください"
+        )
+    SecretsStore.clear(providers)
+    load_dotenv(override=True)
+    return {"status": "ok"}
+
+
+@app.get("/api/providers")
+def list_providers() -> Dict[str, Any]:
+    _bootstrap_provider_registry()
+    return {
+        "providers": [
+            _provider_public_dict(entry)
+            for entry in ProviderRegistry.list_providers()
+        ]
+    }
+
+
+@app.post("/api/providers")
+def create_provider(req: ProviderCreateRequest) -> Dict[str, Any]:
+    _bootstrap_provider_registry()
+    try:
+        entry = ProviderRegistry.add(
+            display_name=req.display_name,
+            kind=req.kind,  # type: ignore[arg-type]
+            base_url=req.base_url,
+            pricing_profile=req.pricing_profile,  # type: ignore[arg-type]
+            profile=req.profile,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _provider_public_dict(entry)
+
+
+@app.patch("/api/providers/{provider_id}")
+def update_provider(provider_id: str, req: ProviderUpdateRequest) -> Dict[str, Any]:
+    _bootstrap_provider_registry()
+    try:
+        entry = ProviderRegistry.update(
+            provider_id,
+            display_name=req.display_name,
+            base_url=req.base_url,
+            clear_base_url=req.clear_base_url,
+            pricing_profile=req.pricing_profile,  # type: ignore[arg-type]
+            profile=req.profile,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _provider_public_dict(entry)
+
+
+@app.delete("/api/providers/{provider_id}")
+def delete_provider(provider_id: str) -> Dict[str, str]:
+    _bootstrap_provider_registry()
+    try:
+        ProviderRegistry.delete(provider_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    SecretsStore.clear_provider_secret(provider_id)
+    load_dotenv(override=True)
+    return {"status": "ok"}
+
+
+@app.post("/api/providers/{provider_id}/key")
+def save_provider_key(provider_id: str, req: ProviderKeyRequest) -> Dict[str, str]:
+    _bootstrap_provider_registry()
+    entry = ProviderRegistry.get(provider_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"provider not found: {provider_id}")
+    key = req.key.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="APIキーが入力されていません")
+    SecretsStore.save_provider_secret(provider_id, key)
+    load_dotenv(override=True)
+    return {"status": "ok"}
+
+
+@app.delete("/api/providers/{provider_id}/key")
+def clear_provider_key(provider_id: str) -> Dict[str, str]:
+    _bootstrap_provider_registry()
+    entry = ProviderRegistry.get(provider_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"provider not found: {provider_id}")
+    SecretsStore.clear_provider_secret(provider_id)
+    load_dotenv(override=True)
+    return {"status": "ok"}
+
+
+@app.post("/api/providers/{provider_id}/test")
+def test_provider_connection(provider_id: str) -> Dict[str, Any]:
+    """接続テスト（models 一覧または最小 complete）。key はエコーしない。"""
+    _bootstrap_provider_registry()
+    entry = ProviderRegistry.get(provider_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"provider not found: {provider_id}")
+    api_key = SecretsStore.load_provider_secret(provider_id)
+    if not api_key:
+        raise HTTPException(status_code=400, detail="APIキーが未設定です")
+
+    probe_model = f"{provider_id}/probe"
+    adapter = get_adapter_for_model(probe_model, api_key=api_key)
+    if adapter is None or not adapter.is_available():
+        return {"ok": False, "error": "アダプタを初期化できません（base_url 等を確認）"}
+
+    try:
+        if entry.kind == "openai_compatible" and entry.base_url:
+            models = ModelCatalog._fetch_openai_compatible_models(
+                {
+                    "provider_id": provider_id,
+                    "base_url": entry.base_url,
+                    "api_key": api_key,
+                }
+            )
+            return {"ok": True, "model_count": len(models)}
+
+        adapter.complete(
+            system_prompt="Reply with ok.",
+            user_prompt="ping",
+            temperature=0.0,
+            max_tokens=8,
+        )
+        return {"ok": True}
+    except Exception as exc:
+        logger.warning("provider connection test failed id=%s error=%s", provider_id, exc)
+        # intent-invariant: INV-002 — エラー文言に key を含めない
+        message = str(exc)
+        if api_key and api_key in message:
+            message = "接続テストに失敗しました"
+        return {"ok": False, "error": message}
 
 
 @app.get("/api/lmstudio/config")
@@ -942,19 +1135,6 @@ def save_lmstudio_config(req: LMStudioConfigRequest) -> Dict[str, Any]:
 def clear_lmstudio_config() -> Dict[str, str]:
     ProviderConfigStore.clear_provider("lmstudio")
     SecretsStore.clear_provider_secret("lmstudio")
-    load_dotenv(override=True)
-    return {"status": "ok"}
-
-
-@app.delete("/api/keys")
-def clear_keys(req: ApiKeyClearRequest) -> Dict[str, str]:
-    """指定プロバイダーのAPIキーを削除する"""
-    providers = req.model_dump()
-    if not any(providers.values()):
-        raise HTTPException(
-            status_code=400, detail="削除するプロバイダを選択してください"
-        )
-    SecretsStore.clear(providers)
     load_dotenv(override=True)
     return {"status": "ok"}
 

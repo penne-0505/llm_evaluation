@@ -175,7 +175,13 @@ PowerShell から以下を実行すると、frontend build と PyInstaller bundl
 
 - `.env` は任意です。UI から保存した API キーだけでも動作します。
 - UI から保存した API キーはユーザーごとの app data 配下に永続化されます。
-- LM Studio の server URL は app data / config 配下の `provider_config.json` に保存されます。
+- Settings の **Cloud providers** は名前付き registry です。組み込み:
+  - OpenRouter（`openrouter/...` モデル ID 互換）
+  - OpenAI（`https://api.openai.com/v1`）
+  - Google AI Studio（OpenAI 互換 endpoint。Gemini API キーを設定）
+  - Anthropic（Messages API）
+- 追加の OpenAI 互換エンドポイントも、表示名・base URL・API キーで登録できます。
+- LM Studio の server URL は app data / config 配下の `provider_config.json` に保存されます（registry とは別枠）。
 - LM Studio の API Token を使う場合は app data / config 配下の `secrets.toml` に保存されます。
 - OpenRouter の残高確認用 `OPENROUTER_MANAGEMENT_KEY` は、推論用 `OPENROUTER_API_KEY` と分離して設定できます。
 - `.env` を使う場合は `.env.example` をコピーして設定してください。
@@ -187,8 +193,9 @@ cp .env.example .env
 
 ### 保存先
 
+- Provider registry: app data / config 配下の `provider_registry.json`
 - API キー: app data / config 配下の `secrets.toml`
-- Provider 設定: app data / config 配下の `provider_config.json`
+- Provider 設定（LM Studio）: app data / config 配下の `provider_config.json`
 - OpenRouter Management Key: app data / config 配下の `secrets.toml` 内 `OPENROUTER_MANAGEMENT_KEY`
 - モデルキャッシュ: app data 配下の `models/models.json`
 - 前回のモデル/タスク選択: app data 配下の `models/last_selection.json`
@@ -246,7 +253,7 @@ user override の配置先:
 実行結果は app data 配下の `results/YYYYMMDD_HHMMSS_<model_name>.json` として保存されます。
 結果JSONには `execution_duration_ms` が含まれ、評価パイプライン全体の実行時間をミリ秒で記録します。
 各 task には `subject_usage`、各 judge run には `usage` が保存されます。さらに結果全体には `usage_summary`、`estimated_cost_usd`、`cost_estimate_status` が追加され、usage が取れた呼び出しと価格が分かるモデルについて推定コストを保存します。
-推定コストは現状 OpenRouter モデルで優先的に対応しており、価格不明なモデルは `cost_estimate_status: partial` または `unavailable` になります。
+推定コストは、registry の `pricing_profile` に従います。OpenRouter はカタログ価格、OpenAI / Anthropic / Google はリポジトリ内静的表、未マップ・表外モデルは `cost_estimate_status: partial` または `unavailable`（0 円扱いにはしません）。
 結果JSONには `strict_mode` も保存されます。正式な Strict Mode は Settings で `Strict` を選んだうえで official preset を満たした run だけが `requested: true` / `enforced: true` になり、Dashboard の Strict Mode leaderboard 集計対象になります。
 official preset v2 は `task_ids=01..11`、`judge_models=[openrouter/anthropic/claude-sonnet-5, openrouter/openai/gpt-5.6-terra, openrouter/google/gemini-3.5-flash]`、`judge_runs=3`、`subject_temperature=0.45`、bundled prompt / rubric / judge_system_prompt 固定です。
 Strict Mode の judge 3モデルはすべて OpenRouter 経由で呼び出され、OpenAI / Anthropic / Gemini の native provider へ自動で切り替えることはしません。

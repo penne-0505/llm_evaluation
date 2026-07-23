@@ -83,14 +83,59 @@ class TestCostEstimator(unittest.TestCase):
         self.assertEqual(summary["totals"]["pricing_status"], "available")
         self.assertAlmostEqual(summary["totals"]["estimated_cost_usd"], 0.00085, places=8)
 
-    def test_summarize_benchmark_usage_estimates_openai_cost_via_openrouter_catalog(self):
-        """OpenAI 直接接続でも OpenRouter カタログをフォールバックして価格推定できる"""
-        # OpenRouter カタログに openai/gpt-5.4 の価格情報を追加
+    def test_summarize_benchmark_usage_estimates_openai_cost_via_static_table(self):
+        """OpenAI profile は静的表で推定する（AC-007）。"""
+        tasks = [
+            {
+                "subject_usage": {
+                    "provider": "openai",
+                    "model": "gpt-4o",
+                    "input_tokens": 2_000_000,
+                    "output_tokens": 1_000_000,
+                    "total_tokens": 3_000_000,
+                },
+                "judge_results": {},
+            }
+        ]
+
+        summary = summarize_benchmark_usage(tasks)
+
+        self.assertEqual(summary["totals"]["call_count"], 1)
+        self.assertEqual(summary["totals"]["pricing_status"], "available")
+        # gpt-4o: $2.5 / $10 per 1M → 2*2.5 + 1*10 = 15.0
+        self.assertAlmostEqual(summary["totals"]["estimated_cost_usd"], 15.0, places=8)
+        self.assertEqual(summary["calls"][0]["pricing_source"], "openai_static")
+
+    def test_summarize_benchmark_usage_estimates_google_cost_via_static_table(self):
+        """google-ai-studio / gemini は google 静的表で推定する。"""
+        tasks = [
+            {
+                "subject_usage": {
+                    "provider": "google-ai-studio",
+                    "model": "gemini-1.5-pro",
+                    "input_tokens": 1_000_000,
+                    "output_tokens": 1_000_000,
+                    "total_tokens": 2_000_000,
+                },
+                "judge_results": {},
+            }
+        ]
+
+        summary = summarize_benchmark_usage(tasks)
+
+        self.assertEqual(summary["totals"]["call_count"], 1)
+        self.assertEqual(summary["totals"]["pricing_status"], "available")
+        # $1.25 + $5.0 per 1M
+        self.assertAlmostEqual(summary["totals"]["estimated_cost_usd"], 6.25, places=8)
+        self.assertEqual(summary["calls"][0]["pricing_source"], "google_static")
+
+    def test_inv001_openai_profile_ignores_openrouter_catalog(self):
+        """INV-001: 公式 profile は OR カタログに同名があっても openrouter_catalog を使わない。"""
         cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
-        cache["providers"]["openrouter"]["models"].append("openrouter/openai/gpt-5.4")
+        cache["providers"]["openrouter"]["models"].append("openrouter/openai/mystery-model")
         cache["providers"]["openrouter"]["entries"].append(
             {
-                "id": "openrouter/openai/gpt-5.4",
+                "id": "openrouter/openai/mystery-model",
                 "pricing": {"prompt": "0.000005", "completion": "0.000015"},
             }
         )
@@ -100,7 +145,7 @@ class TestCostEstimator(unittest.TestCase):
             {
                 "subject_usage": {
                     "provider": "openai",
-                    "model": "gpt-5.4",
+                    "model": "mystery-model",
                     "input_tokens": 2000,
                     "output_tokens": 1000,
                     "total_tokens": 3000,
@@ -110,48 +155,12 @@ class TestCostEstimator(unittest.TestCase):
         ]
 
         summary = summarize_benchmark_usage(tasks)
-
-        self.assertEqual(summary["totals"]["call_count"], 1)
-        self.assertEqual(summary["totals"]["input_tokens"], 2000)
-        self.assertEqual(summary["totals"]["output_tokens"], 1000)
-        self.assertEqual(summary["totals"]["pricing_status"], "available")
-        # (2000 * 0.000005) + (1000 * 0.000015) = 0.01 + 0.015 = 0.025
-        self.assertAlmostEqual(summary["totals"]["estimated_cost_usd"], 0.025, places=8)
-
-    def test_summarize_benchmark_usage_estimates_gemini_cost_via_openrouter_catalog(self):
-        """Gemini 直接接続でも OpenRouter カタログ（google/...）をフォールバックして価格推定できる"""
-        cache = json.loads(self.cache_path.read_text(encoding="utf-8"))
-        cache["providers"]["openrouter"]["models"].append("openrouter/google/gemini-1.5-pro")
-        cache["providers"]["openrouter"]["entries"].append(
-            {
-                "id": "openrouter/google/gemini-1.5-pro",
-                "pricing": {"prompt": "0.000001", "completion": "0.000002"},
-            }
-        )
-        self.cache_path.write_text(json.dumps(cache), encoding="utf-8")
-
-        tasks = [
-            {
-                "subject_usage": {
-                    "provider": "gemini",
-                    "model": "gemini-1.5-pro",
-                    "input_tokens": 3000,
-                    "output_tokens": 1500,
-                    "total_tokens": 4500,
-                },
-                "judge_results": {},
-            }
-        ]
-
-        summary = summarize_benchmark_usage(tasks)
-
-        self.assertEqual(summary["totals"]["call_count"], 1)
-        self.assertEqual(summary["totals"]["pricing_status"], "available")
-        # (3000 * 0.000001) + (1500 * 0.000002) = 0.003 + 0.003 = 0.006
-        self.assertAlmostEqual(summary["totals"]["estimated_cost_usd"], 0.006, places=8)
+        self.assertEqual(summary["totals"]["pricing_status"], "unavailable")
+        self.assertIsNone(summary["totals"]["estimated_cost_usd"])
+        self.assertIn("openai:mystery-model", summary["totals"]["unpriced_models"])
 
     def test_summarize_benchmark_usage_openai_model_unpriced_fallback_fails(self):
-        """OpenRouter カタログに存在しないモデルは価格未設定となる"""
+        """静的表に無い OpenAI モデルは価格未設定となる"""
         tasks = [
             {
                 "subject_usage": {

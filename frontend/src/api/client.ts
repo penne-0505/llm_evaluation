@@ -20,6 +20,9 @@ import type {
     TaskType,
     ToolMode,
     ToolTraceStep,
+    RegistryProvider,
+    ProviderKind,
+    PricingProfile,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -58,31 +61,130 @@ export async function fetchTasks(): Promise<Task[]> {
 }
 
 // ---------------------------------------------------------------------------
-// API Keys
+// API Keys / Provider registry
 // ---------------------------------------------------------------------------
 
 export interface KeyStatus {
     openrouter: boolean;
+    providers?: Record<string, boolean>;
 }
 
 export async function fetchKeyStatus(): Promise<KeyStatus> {
     return apiFetch<KeyStatus>('/keys/status');
 }
 
+/** 後方互換: openrouter のみ。registry は saveProviderKey を使う。 */
 export async function saveKey(
     provider: Provider,
     key: string,
 ): Promise<void> {
-    await apiFetch<{ status: string }>('/keys', {
-        method: 'POST',
-        body: JSON.stringify({ [provider]: key }),
-    });
+    if (provider === 'openrouter') {
+        await apiFetch<{ status: string }>('/keys', {
+            method: 'POST',
+            body: JSON.stringify({ [provider]: key }),
+        });
+        return;
+    }
+    await saveProviderKey(provider, key);
 }
 
 export async function deleteKey(provider: Provider): Promise<void> {
-    await apiFetch<{ status: string }>('/keys', {
+    if (provider === 'openrouter') {
+        await apiFetch<{ status: string }>('/keys', {
+            method: 'DELETE',
+            body: JSON.stringify({ [provider]: true }),
+        });
+        return;
+    }
+    await deleteProviderKey(provider);
+}
+
+interface RawRegistryProvider {
+    id: string;
+    display_name: string;
+    kind: ProviderKind;
+    base_url?: string;
+    pricing_profile: PricingProfile;
+    profile?: string;
+    builtin: boolean;
+    has_key: boolean;
+}
+
+function mapRegistryProvider(raw: RawRegistryProvider): RegistryProvider {
+    return {
+        id: raw.id,
+        displayName: raw.display_name,
+        kind: raw.kind,
+        baseUrl: raw.base_url,
+        pricingProfile: raw.pricing_profile,
+        profile: raw.profile,
+        builtin: raw.builtin,
+        hasKey: raw.has_key,
+    };
+}
+
+export async function fetchProviders(): Promise<RegistryProvider[]> {
+    const raw = await apiFetch<{ providers: RawRegistryProvider[] }>('/providers');
+    return (raw.providers || []).map(mapRegistryProvider);
+}
+
+export async function createProvider(input: {
+    displayName: string;
+    kind: ProviderKind;
+    baseUrl?: string;
+    pricingProfile?: PricingProfile;
+}): Promise<RegistryProvider> {
+    const raw = await apiFetch<RawRegistryProvider>('/providers', {
+        method: 'POST',
+        body: JSON.stringify({
+            display_name: input.displayName,
+            kind: input.kind,
+            ...(input.baseUrl ? { base_url: input.baseUrl } : {}),
+            ...(input.pricingProfile ? { pricing_profile: input.pricingProfile } : {}),
+        }),
+    });
+    return mapRegistryProvider(raw);
+}
+
+export async function updateProvider(
+    providerId: string,
+    patch: {
+        displayName?: string;
+        baseUrl?: string;
+        clearBaseUrl?: boolean;
+        pricingProfile?: PricingProfile;
+    },
+): Promise<RegistryProvider> {
+    const raw = await apiFetch<RawRegistryProvider>(`/providers/${encodeURIComponent(providerId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+            ...(patch.displayName !== undefined ? { display_name: patch.displayName } : {}),
+            ...(patch.baseUrl !== undefined ? { base_url: patch.baseUrl } : {}),
+            ...(patch.clearBaseUrl ? { clear_base_url: true } : {}),
+            ...(patch.pricingProfile !== undefined
+                ? { pricing_profile: patch.pricingProfile }
+                : {}),
+        }),
+    });
+    return mapRegistryProvider(raw);
+}
+
+export async function deleteProvider(providerId: string): Promise<void> {
+    await apiFetch<{ status: string }>(`/providers/${encodeURIComponent(providerId)}`, {
         method: 'DELETE',
-        body: JSON.stringify({ [provider]: true }),
+    });
+}
+
+export async function saveProviderKey(providerId: string, key: string): Promise<void> {
+    await apiFetch<{ status: string }>(`/providers/${encodeURIComponent(providerId)}/key`, {
+        method: 'POST',
+        body: JSON.stringify({ key }),
+    });
+}
+
+export async function deleteProviderKey(providerId: string): Promise<void> {
+    await apiFetch<{ status: string }>(`/providers/${encodeURIComponent(providerId)}/key`, {
+        method: 'DELETE',
     });
 }
 
@@ -193,8 +295,9 @@ const PROVIDER_MAP: Record<string, Provider> = {
 };
 
 function getModelDisplayName(provider: Provider, id: string): string {
-    if (provider === 'lmstudio' && id.startsWith('lmstudio/')) {
-        return id.slice('lmstudio/'.length);
+    const prefix = `${provider}/`;
+    if (id.startsWith(prefix)) {
+        return id.slice(prefix.length);
     }
     return id;
 }
@@ -203,8 +306,7 @@ export async function fetchModels(force = false): Promise<ModelsResult> {
     const raw = await apiFetch<RawModelsResponse>(`/models${force ? '?force=true' : ''}`);
     const models: Model[] = [];
     for (const [providerKey, data] of Object.entries(raw.providers || {})) {
-        const provider = PROVIDER_MAP[providerKey];
-        if (!provider) continue;
+        const provider = PROVIDER_MAP[providerKey] ?? providerKey;
         for (const id of data.models || []) {
             models.push({ id, name: getModelDisplayName(provider, id), provider });
         }

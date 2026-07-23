@@ -82,6 +82,10 @@ class AppPaths:
         return cls.config_dir() / "provider_config.json"
 
     @classmethod
+    def provider_registry_file(cls) -> Path:
+        return cls.config_dir() / "provider_registry.json"
+
+    @classmethod
     def overrides_dir(cls) -> Path:
         return cls.data_dir() / "overrides"
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.model_catalog import ModelCatalog
+from core.provider_registry import ProviderRegistry
 
 
 def _iso(dt: datetime) -> str:
@@ -20,8 +21,12 @@ class TestModelCatalogTTL(unittest.TestCase):
         self._tmp_dir = tempfile.TemporaryDirectory()
         self.cache_path = Path(self._tmp_dir.name) / "models.json"
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
+        self._registry_path = Path(self._tmp_dir.name) / "provider_registry.json"
+        self._orig_registry_path = ProviderRegistry.FILE_PATH
+        ProviderRegistry.FILE_PATH = self._registry_path
 
     def tearDown(self) -> None:
+        ProviderRegistry.FILE_PATH = self._orig_registry_path
         self._tmp_dir.cleanup()
 
     def _write_cache(self, payload: dict) -> None:

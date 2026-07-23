@@ -771,6 +771,89 @@ class TestLMStudioConfigApi(unittest.TestCase):
         clear_secret_mock.assert_called_once_with("lmstudio")
 
 
+class TestProviderRegistryApi(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self._orig_registry = server.ProviderRegistry.FILE_PATH
+        self._orig_secrets = server.SecretsStore.FILE_PATH
+        server.ProviderRegistry.FILE_PATH = Path(self._tmp.name) / "providers.json"
+        server.SecretsStore.FILE_PATH = Path(self._tmp.name) / "secrets.toml"
+        server._registry_bootstrapped = False
+
+    def tearDown(self) -> None:
+        server.ProviderRegistry.FILE_PATH = self._orig_registry
+        server.SecretsStore.FILE_PATH = self._orig_secrets
+        server._registry_bootstrapped = False
+
+    def test_list_providers_includes_builtins_without_keys(self) -> None:
+        client = TestClient(server.app)
+        response = client.get("/api/providers")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        ids = [p["id"] for p in body["providers"]]
+        self.assertEqual(
+            ids[:4],
+            ["openrouter", "openai", "google-ai-studio", "anthropic"],
+        )
+        for provider in body["providers"]:
+            self.assertIn("has_key", provider)
+            self.assertNotIn("key", provider)
+            self.assertFalse(any("sk-" in str(v) for v in provider.values()))
+
+    def test_keys_status_includes_providers_map(self) -> None:
+        client = TestClient(server.app)
+        response = client.get("/api/keys/status")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("openrouter", body)
+        self.assertIn("providers", body)
+        self.assertIn("openai", body["providers"])
+
+    def test_save_and_clear_provider_key(self) -> None:
+        client = TestClient(server.app)
+        save = client.post("/api/providers/openai/key", json={"key": "sk-test-openai"})
+        self.assertEqual(save.status_code, 200)
+        status = client.get("/api/keys/status").json()
+        self.assertTrue(status["providers"]["openai"])
+        listed = client.get("/api/providers").json()
+        openai_entry = next(p for p in listed["providers"] if p["id"] == "openai")
+        self.assertTrue(openai_entry["has_key"])
+        self.assertNotIn("sk-test-openai", json.dumps(listed))
+
+        clear = client.delete("/api/providers/openai/key")
+        self.assertEqual(clear.status_code, 200)
+        status_after = client.get("/api/keys/status").json()
+        self.assertFalse(status_after["providers"]["openai"])
+
+    def test_create_and_delete_custom_provider(self) -> None:
+        client = TestClient(server.app)
+        created = client.post(
+            "/api/providers",
+            json={
+                "display_name": "My Compat",
+                "kind": "openai_compatible",
+                "base_url": "https://example.com/v1",
+            },
+        )
+        self.assertEqual(created.status_code, 200)
+        body = created.json()
+        self.assertEqual(body["id"], "my-compat")
+        self.assertFalse(body["builtin"])
+        self.assertFalse(body["has_key"])
+
+        deleted = client.delete(f"/api/providers/{body['id']}")
+        self.assertEqual(deleted.status_code, 200)
+
+        listed = client.get("/api/providers").json()
+        self.assertNotIn(body["id"], [p["id"] for p in listed["providers"]])
+
+    def test_cannot_delete_builtin(self) -> None:
+        client = TestClient(server.app)
+        response = client.delete("/api/providers/openrouter")
+        self.assertEqual(response.status_code, 400)
+
+
 class TestResultDeletionApi(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp_dir = tempfile.TemporaryDirectory()

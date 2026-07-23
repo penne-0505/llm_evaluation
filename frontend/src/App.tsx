@@ -14,17 +14,17 @@ function RouteFallback() {
 }
 
 export default function App() {
-  const refreshKeyStatus = useSettingsStore((s) => s.refreshKeyStatus);
+  const refreshProviders = useSettingsStore((s) => s.refreshProviders);
   const refreshModels = useSettingsStore((s) => s.refreshModels);
   const refreshTasks = useSettingsStore((s) => s.refreshTasks);
   const refreshStrictPreset = useSettingsStore((s) => s.refreshStrictPreset);
 
   useEffect(() => {
-    refreshKeyStatus();
+    refreshProviders();
     refreshModels();
     refreshTasks();
     refreshStrictPreset();
-  }, [refreshKeyStatus, refreshModels, refreshTasks, refreshStrictPreset]);
+  }, [refreshProviders, refreshModels, refreshTasks, refreshStrictPreset]);
 
   return (
     <BrowserRouter>

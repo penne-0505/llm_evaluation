@@ -10,6 +10,9 @@ import type {
     StrictModePreset,
     ToolMode,
     ExecutionPreset,
+    RegistryProvider,
+    ProviderKind,
+    PricingProfile,
 } from '../types';
 import {
     captureExecutionPresetConfig,
@@ -23,12 +26,27 @@ import {
     fetchModels,
     fetchKeyStatus,
     fetchStrictModePreset,
-    saveKey as apiSaveKey,
-    deleteKey as apiDeleteKey,
+    fetchProviders,
+    createProvider as apiCreateProvider,
+    deleteProvider as apiDeleteProvider,
+    saveProviderKey,
+    deleteProviderKey,
 } from '../api/client';
 
 interface SettingsState {
-    // API Keys
+    // Provider registry
+    registryProviders: RegistryProvider[];
+    registryLoading: boolean;
+    refreshProviders: () => Promise<void>;
+    addCustomProvider: (input: {
+        displayName: string;
+        kind: ProviderKind;
+        baseUrl?: string;
+        pricingProfile?: PricingProfile;
+    }) => Promise<RegistryProvider | null>;
+    removeCustomProvider: (providerId: string) => Promise<boolean>;
+
+    // API Keys (registry id → status; key 本体は保持しない)
     apiKeys: Partial<Record<Provider, ApiKeyEntry>>;
     setApiKey: (provider: Provider, key: string) => Promise<void>;
     deleteApiKey: (provider: Provider) => Promise<void>;
@@ -102,8 +120,6 @@ interface SettingsState {
     deleteExecutionPreset: (id: string) => void;
 }
 
-type CloudProvider = Exclude<Provider, 'lmstudio'>;
-
 function createExecutionPresetId(): string {
     if (typeof globalThis.crypto?.randomUUID === 'function') {
         return globalThis.crypto.randomUUID();
@@ -114,19 +130,69 @@ function createExecutionPresetId(): string {
 export const useSettingsStore = create<SettingsState>()(
     persist(
         (set, get) => ({
+            // --- Provider registry ---
+            registryProviders: [],
+            registryLoading: false,
+
+            refreshProviders: async () => {
+                set({ registryLoading: true });
+                try {
+                    const providers = await fetchProviders();
+                    const newKeys: Partial<Record<Provider, ApiKeyEntry>> = {};
+                    for (const p of providers) {
+                        if (p.hasKey) {
+                            newKeys[p.id] = {
+                                provider: p.id,
+                                key: '••••••••',
+                                isValid: true,
+                            };
+                        }
+                    }
+                    set({
+                        registryProviders: providers,
+                        apiKeys: newKeys,
+                        registryLoading: false,
+                    });
+                } catch {
+                    set({ registryLoading: false });
+                }
+            },
+
+            addCustomProvider: async (input) => {
+                try {
+                    const created = await apiCreateProvider(input);
+                    await get().refreshProviders();
+                    return created;
+                } catch {
+                    return null;
+                }
+            },
+
+            removeCustomProvider: async (providerId) => {
+                try {
+                    await apiDeleteProvider(providerId);
+                    await get().refreshProviders();
+                    return true;
+                } catch {
+                    return false;
+                }
+            },
+
             // --- API Keys ---
             apiKeys: {},
 
             setApiKey: async (provider, key) => {
                 try {
-                    await apiSaveKey(provider, key);
+                    await saveProviderKey(provider, key);
                     set((s) => ({
                         apiKeys: {
                             ...s.apiKeys,
                             [provider]: { provider, key: '••••••••', isValid: true },
                         },
+                        registryProviders: s.registryProviders.map((p) =>
+                            p.id === provider ? { ...p, hasKey: true } : p,
+                        ),
                     }));
-                    // モデル一覧も再取得（新しいキーでプロバイダーが使えるようになる可能性）
                     get().refreshModels();
                 } catch (err) {
                     set((s) => ({
@@ -145,11 +211,16 @@ export const useSettingsStore = create<SettingsState>()(
 
             deleteApiKey: async (provider) => {
                 try {
-                    await apiDeleteKey(provider);
+                    await deleteProviderKey(provider);
                     set((s) => {
                         const next = { ...s.apiKeys };
                         delete next[provider];
-                        return { apiKeys: next };
+                        return {
+                            apiKeys: next,
+                            registryProviders: s.registryProviders.map((p) =>
+                                p.id === provider ? { ...p, hasKey: false } : p,
+                            ),
+                        };
                     });
                 } catch {
                     // 削除失敗は静かに無視
@@ -159,14 +230,20 @@ export const useSettingsStore = create<SettingsState>()(
             refreshKeyStatus: async () => {
                 try {
                     const status = await fetchKeyStatus();
-                    const providers: CloudProvider[] = ['openrouter'];
+                    const providerMap = status.providers ?? { openrouter: status.openrouter };
                     const newKeys: Partial<Record<Provider, ApiKeyEntry>> = {};
-                    for (const p of providers) {
-                        if (status[p]) {
-                            newKeys[p] = { provider: p, key: '••••••••', isValid: true };
+                    for (const [id, hasKey] of Object.entries(providerMap)) {
+                        if (hasKey) {
+                            newKeys[id] = { provider: id, key: '••••••••', isValid: true };
                         }
                     }
-                    set({ apiKeys: newKeys });
+                    set((s) => ({
+                        apiKeys: newKeys,
+                        registryProviders: s.registryProviders.map((p) => ({
+                            ...p,
+                            hasKey: Boolean(providerMap[p.id]),
+                        })),
+                    }));
                 } catch {
                     // ステータス取得失敗は静かに無視
                 }

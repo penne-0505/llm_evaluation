@@ -97,13 +97,15 @@ def test_get_all_available_adapters():
     """全アダプタ取得関数のテスト"""
     print("\n=== 全アダプタ取得テスト ===")
 
-    # APIキーなし + LM Studio base_url なし
+    # APIキーなし + LM Studio base_url なし（secrets ファイル / registry 副作用を遮断）
     with (
         patch.dict(os.environ, {}, clear=True),
         patch(
             "adapters.lmstudio_adapter.ProviderConfigStore.load_provider",
             return_value={},
         ),
+        patch("adapters.SecretsStore.load_provider_secret", return_value=None),
+        patch("adapters.ProviderRegistry.list_providers", return_value=[]),
     ):
         adapters = get_all_available_adapters()
         assert len(adapters) == 0, "APIキーなしで空の辞書"
@@ -116,6 +118,8 @@ def test_get_all_available_adapters():
             "adapters.lmstudio_adapter.ProviderConfigStore.load_provider",
             return_value={},
         ),
+        patch("adapters.SecretsStore.load_provider_secret", return_value=None),
+        patch("adapters.ProviderRegistry.list_providers", return_value=[]),
     ):
         adapters = get_all_available_adapters()
         assert len(adapters) == 1, "1つのAPIキーで1つのアダプタ"
