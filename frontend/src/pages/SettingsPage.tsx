@@ -6,8 +6,12 @@ import {
     fetchLMStudioConfig,
     fetchOpenRouterAdminStatus,
     fetchOpenRouterCredits,
+    fetchRateLimits,
+    resetRateLimits,
     saveLMStudioConfig,
     saveOpenRouterAdminKey,
+    saveRateLimits,
+    type RateLimitProviderConfig,
 } from '../api/client';
 import { useSettingsStore } from '../store/settingsStore';
 import type { ProviderKind, RegistryProvider, ToolMode } from '../types';
@@ -195,6 +199,7 @@ export default function SettingsPage() {
             <EvaluationModeSection />
             <ExecutionPresetSection />
             <ApiKeySection />
+            <RateLimitSection />
             <OpenRouterAdminSection />
             <ModelSelectionSection />
             <EvalParamsSection />
@@ -203,6 +208,191 @@ export default function SettingsPage() {
             <TaskSelectionSection />
             <RunLinkSection />
         </div>
+    );
+}
+
+function RateLimitSection() {
+    const [providers, setProviders] = useState<Record<string, RateLimitProviderConfig>>({});
+    const [drafts, setDrafts] = useState<Record<string, { max_requests: string; window_seconds: string }>>({});
+    const [maxConcurrent, setMaxConcurrent] = useState(3);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const applyResponse = useCallback((data: Awaited<ReturnType<typeof fetchRateLimits>>) => {
+        setProviders(data.providers);
+        setMaxConcurrent(data.max_concurrent_jobs);
+        const next: Record<string, { max_requests: string; window_seconds: string }> = {};
+        for (const [id, cfg] of Object.entries(data.providers)) {
+            next[id] = {
+                max_requests: String(cfg.max_requests),
+                window_seconds: String(cfg.window_seconds),
+            };
+        }
+        setDrafts(next);
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const data = await fetchRateLimits();
+                if (!cancelled) applyResponse(data);
+            } catch (e) {
+                if (!cancelled) {
+                    setError(e instanceof Error ? e.message : 'レート制限の取得に失敗しました');
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [applyResponse]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setError(null);
+        try {
+            const body: Record<string, { max_requests: number; window_seconds: number }> = {};
+            for (const [id, draft] of Object.entries(drafts)) {
+                const maxRequests = Number(draft.max_requests);
+                const windowSeconds = Number(draft.window_seconds);
+                if (!Number.isFinite(maxRequests) || !Number.isFinite(windowSeconds)) {
+                    throw new Error(`${id}: 数値を入力してください`);
+                }
+                body[id] = {
+                    max_requests: Math.max(1, Math.floor(maxRequests)),
+                    window_seconds: Math.max(1, Math.floor(windowSeconds)),
+                };
+            }
+            const data = await saveRateLimits(body);
+            applyResponse(data);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : '保存に失敗しました');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleReset = async () => {
+        setSaving(true);
+        setError(null);
+        try {
+            const data = await resetRateLimits();
+            applyResponse(data);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'リセットに失敗しました');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const ids = Object.keys(providers).sort();
+
+    return (
+        <section className="space-y-3 animate-fade-up stagger-1">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <h2 className="section-label">プロバイダ レート制限</h2>
+                    <p className="text-[11px] text-text-tertiary mt-1">
+                        窓秒数あたりの最大リクエスト数。同時評価ジョブ上限は {maxConcurrent} 本（サーバ固定）。
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => void handleReset()}
+                        disabled={saving || loading}
+                        className="rounded-md border border-border px-2.5 py-1.5 text-[11px] text-text-secondary hover:text-text-primary disabled:opacity-40"
+                    >
+                        推奨に戻す
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void handleSave()}
+                        disabled={saving || loading}
+                        className="inline-flex items-center gap-1 rounded-md bg-amber px-2.5 py-1.5 text-[11px] font-medium text-bg disabled:opacity-40"
+                    >
+                        <Save size={12} />
+                        保存
+                    </button>
+                </div>
+            </div>
+
+            {error && (
+                <p className="text-[12px] text-score-low">{error}</p>
+            )}
+
+            {loading ? (
+                <p className="text-[12px] text-text-tertiary">読込中…</p>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {ids.map((id) => {
+                        const cfg = providers[id];
+                        const draft = drafts[id] ?? {
+                            max_requests: String(cfg.max_requests),
+                            window_seconds: String(cfg.window_seconds),
+                        };
+                        return (
+                            <div key={id} className="card p-4 space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[13px] font-medium text-text-primary">{id}</span>
+                                    <span className="text-[10px] text-text-tertiary">
+                                        {cfg.is_default ? '推奨デフォルト' : '上書き中'}
+                                        {' · 推奨 '}
+                                        {cfg.recommended.max_requests}/{cfg.recommended.window_seconds}s
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <label className="space-y-1">
+                                        <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+                                            max requests
+                                        </span>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={draft.max_requests}
+                                            onChange={(e) =>
+                                                setDrafts((prev) => ({
+                                                    ...prev,
+                                                    [id]: {
+                                                        ...draft,
+                                                        max_requests: e.target.value,
+                                                    },
+                                                }))
+                                            }
+                                            className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text-primary"
+                                        />
+                                    </label>
+                                    <label className="space-y-1">
+                                        <span className="text-[10px] text-text-tertiary uppercase tracking-wider">
+                                            window seconds
+                                        </span>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={draft.window_seconds}
+                                            onChange={(e) =>
+                                                setDrafts((prev) => ({
+                                                    ...prev,
+                                                    [id]: {
+                                                        ...draft,
+                                                        window_seconds: e.target.value,
+                                                    },
+                                                }))
+                                            }
+                                            className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-text-primary"
+                                        />
+                                    </label>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </section>
     );
 }
 

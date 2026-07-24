@@ -30,6 +30,7 @@ from adapters import (
 )
 from core import BenchmarkEngine, GroundingCorpusStore, ResultStorage
 from core.app_paths import AppPaths
+from core.active_run_registry import ActiveRunRegistry
 from core.cost_estimator import (
     summarize_benchmark_usage,
     summarize_judge_usage,
@@ -43,6 +44,7 @@ from core.model_catalog import ModelCatalog
 from core.openrouter_admin import OpenRouterAdminError, fetch_credits
 from core.provider_config_store import ProviderConfigStore
 from core.provider_registry import ProviderEntry, ProviderRegistry
+from core.rate_limit_store import RateLimitStore
 from core.secrets_store import SecretsStore
 from core.selection_store import SelectionStore
 from core.strict_mode import (
@@ -1233,6 +1235,15 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
       {"type": "error", "message": str, "traceback": str}
     """
     run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{req.target_model}"
+    # intent: DEC-001 (Core/concurrent-evaluation-jobs) — 同時上限 3 をサーバ強制
+    if not ActiveRunRegistry.try_start(run_id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"同時実行上限（{ActiveRunRegistry.MAX_CONCURRENT}本）に達しています。"
+                "完了またはキャンセル後に再実行してください。"
+            ),
+        )
     run_started_at = time.perf_counter()
     _cancel_flags[run_id] = False
 
@@ -1917,6 +1928,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
             )
         finally:
             _cancel_flags.pop(run_id, None)
+            ActiveRunRegistry.finish(run_id)
 
     return StreamingResponse(
         event_stream(),
@@ -1926,6 +1938,71 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/api/run/active")
+async def list_active_runs() -> Dict[str, Any]:
+    """同時実行中の評価ジョブ数と run_id 一覧を返す。"""
+    return {
+        "active_count": ActiveRunRegistry.active_count(),
+        "max_concurrent": ActiveRunRegistry.MAX_CONCURRENT,
+        "run_ids": ActiveRunRegistry.active_run_ids(),
+    }
+
+
+class RateLimitProviderUpdate(BaseModel):
+    max_requests: int
+    window_seconds: int
+
+
+class RateLimitsPutRequest(BaseModel):
+    providers: Dict[str, RateLimitProviderUpdate]
+
+
+@app.get("/api/rate-limits")
+async def get_rate_limits() -> Dict[str, Any]:
+    """プロバイダ別レート制限（実効値・推奨・上書き有無）。"""
+    registry_ids = [entry.id for entry in ProviderRegistry.list_providers()]
+    if "lmstudio" not in registry_ids:
+        registry_ids.append("lmstudio")
+    return {
+        "providers": RateLimitStore.list_effective(registry_ids),
+        "max_concurrent_jobs": ActiveRunRegistry.MAX_CONCURRENT,
+    }
+
+
+@app.put("/api/rate-limits")
+async def put_rate_limits(req: RateLimitsPutRequest) -> Dict[str, Any]:
+    """レート制限上書きを保存する（secret は含めない）。"""
+    providers = {
+        pid: {
+            "max_requests": body.max_requests,
+            "window_seconds": body.window_seconds,
+        }
+        for pid, body in req.providers.items()
+    }
+    RateLimitStore.save_overrides(providers)
+    # 次回 acquire から新設定を読む（タイムスタンプ履歴はそのまま）
+    registry_ids = [entry.id for entry in ProviderRegistry.list_providers()]
+    if "lmstudio" not in registry_ids:
+        registry_ids.append("lmstudio")
+    return {
+        "providers": RateLimitStore.list_effective(registry_ids),
+        "max_concurrent_jobs": ActiveRunRegistry.MAX_CONCURRENT,
+    }
+
+
+@app.post("/api/rate-limits/reset")
+async def reset_rate_limits() -> Dict[str, Any]:
+    """上書きを消し、推奨デフォルトへ戻す。"""
+    RateLimitStore.clear_overrides()
+    registry_ids = [entry.id for entry in ProviderRegistry.list_providers()]
+    if "lmstudio" not in registry_ids:
+        registry_ids.append("lmstudio")
+    return {
+        "providers": RateLimitStore.list_effective(registry_ids),
+        "max_concurrent_jobs": ActiveRunRegistry.MAX_CONCURRENT,
+    }
 
 
 @app.post("/api/run/cancel")

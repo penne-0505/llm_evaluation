@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { useRunStore } from './runStore.ts';
+import { useRunStore, MAX_CONCURRENT_JOBS } from './runStore.ts';
 import type { EvaluationRun } from '../types/index.ts';
 
 const completedRun: EvaluationRun = {
@@ -66,4 +66,19 @@ test('holistic progress is kept separately from standard task progress', () => {
         currentTaskId: 'style',
         message: '包括評価 1/1: 実行中',
     });
+});
+
+test('allows up to MAX_CONCURRENT_JOBS running jobs and rejects more', () => {
+    const store = useRunStore.getState();
+    store.resetAll();
+    for (let i = 0; i < MAX_CONCURRENT_JOBS; i += 1) {
+        store.startJob(`job_${i}`, `model_${i}`, 10);
+    }
+    assert.equal(store.runningCount(), MAX_CONCURRENT_JOBS);
+    assert.equal(store.canStartAnother(), false);
+    store.startJob('job_overflow', 'model_x', 10);
+    assert.equal(useRunStore.getState().jobs.length, MAX_CONCURRENT_JOBS);
+    useRunStore.getState().completeJob('job_0', completedRun);
+    assert.equal(useRunStore.getState().runningCount(), MAX_CONCURRENT_JOBS - 1);
+    assert.equal(useRunStore.getState().canStartAnother(), true);
 });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
 import { Settings, Play, BarChart3, LayoutDashboard } from 'lucide-react';
-import { useRunStore } from '../store/runStore';
+import { useRunStore, MAX_CONCURRENT_JOBS } from '../store/runStore';
 
 const NAV_ITEMS = [
     { to: '/settings', label: '設定', icon: Settings },
@@ -12,18 +12,20 @@ const NAV_ITEMS = [
 
 export default function Layout() {
     const location = useLocation();
-    const status = useRunStore((state) => state.status);
-    const progress = useRunStore((state) => state.progress);
-    const runId = useRunStore((state) => state.runId);
+    const jobs = useRunStore((state) => state.jobs);
+    const runningJobs = jobs.filter((j) => j.status === 'running' && j.progress);
+    const primary = runningJobs[0] ?? null;
+    const progress = primary?.progress ?? null;
+    const runId = primary?.runId ?? null;
     const [liveElapsedMs, setLiveElapsedMs] = useState(progress?.elapsedMs ?? 0);
-    const isRunning = status === 'running' && !!progress;
+    const isRunning = runningJobs.length > 0;
     const showRunIndicator = isRunning && location.pathname !== '/run';
     const startedAtMs = progress?.startedAtMs ?? 0;
     const elapsedMs = isRunning ? liveElapsedMs : progress?.elapsedMs ?? 0;
     const totalTaskCount = (progress?.completedTaskCount ?? 0) + (progress?.activeTaskCount ?? 0) + (progress?.queuedTaskCount ?? 0);
 
     useEffect(() => {
-        if (!isRunning) {
+        if (!isRunning || !startedAtMs) {
             return;
         }
         const syncElapsed = () => {
@@ -37,11 +39,10 @@ export default function Layout() {
             window.cancelAnimationFrame(frame);
             window.clearInterval(timer);
         };
-    }, [isRunning, startedAtMs]);
+    }, [isRunning, startedAtMs, primary?.jobId]);
 
     return (
         <div className="flex h-screen overflow-hidden">
-            {/* Ambient Amber Glow */}
             <div
                 className="fixed pointer-events-none z-0"
                 style={{
@@ -53,11 +54,9 @@ export default function Layout() {
                 }}
             />
 
-            {/* Sidebar */}
             <aside
                 className="shrink-0 w-[220px] bg-surface border-r border-border flex flex-col z-10 relative"
             >
-                {/* Logo */}
                 <div className="px-4 py-5 overflow-hidden">
                     <div className="whitespace-nowrap overflow-hidden">
                         <h1 className="text-[13px] font-semibold text-text-primary font-display">
@@ -67,7 +66,6 @@ export default function Layout() {
                     </div>
                 </div>
 
-                {/* Navigation */}
                 <nav className="flex-1 px-2 space-y-0.5 mt-2">
                     {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
                         <NavLink
@@ -88,7 +86,6 @@ export default function Layout() {
                     ))}
                 </nav>
 
-                {/* Footer */}
                 <div className="px-3 py-3 border-t border-border">
                     <p className="text-[9px] text-text-tertiary whitespace-nowrap">
                         v1.0.0 · 試作版
@@ -96,7 +93,6 @@ export default function Layout() {
                 </div>
             </aside>
 
-            {/* Main Content */}
             <main className="flex-1 overflow-y-auto bg-bg relative">
                 {showRunIndicator && (
                     <div className="sticky top-0 z-20 flex justify-end px-8 pt-4">
@@ -105,7 +101,9 @@ export default function Layout() {
                             className="inline-flex items-center gap-3 rounded-md border border-amber/20 bg-surface/95 px-3 py-2 text-[11px] text-text-secondary backdrop-blur hover:border-amber/35 hover:text-text-primary transition-colors"
                         >
                             <span className="inline-flex h-2 w-2 rounded-full bg-amber animate-pulse-amber" />
-                            <span className="font-display uppercase tracking-[0.18em] text-[9px] text-amber">実行中</span>
+                            <span className="font-display uppercase tracking-[0.18em] text-[9px] text-amber">
+                                実行中 {runningJobs.length}/{MAX_CONCURRENT_JOBS}
+                            </span>
                             <span>{progress?.completedTaskCount || 0}/{totalTaskCount || 0} タスク</span>
                             <span>{formatElapsed(elapsedMs)}</span>
                             {runId && (

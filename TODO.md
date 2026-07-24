@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 65` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 67` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -395,4 +395,32 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## In Progress
 
-- (empty)
+### Core-Feat-66: [Feat] Concurrent evaluation jobs with provider rate limits
+
+- **Title**: [Feat] Concurrent evaluation jobs with provider rate limits
+- **ID**: Core-Feat-66
+- **Priority**: P1
+- **Size**: L
+- **Risk**: High
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: 設定違いの評価ジョブを最大 3 本まで同時実行でき、Run 画面では進行ボード一式をジョブとして縦積みし、プロバイダ別レート制限（Settings 編集可・推奨デフォルト内蔵）で発行を抑える。
+- **Acceptance Criteria**:
+  - AC-001: 最大 3 本まで設定違いの評価を同時起動でき、4 本目はサーバが拒否する。
+  - AC-002: Run 画面で各ジョブが進行ボード一式として縦積み表示され、個別キャンセルできる。
+  - AC-003: 全ジョブの LLM 呼び出しがプロバイダ別レート制限を共有し、窓内上限を超えて発行しない。
+  - AC-004: Settings でプロバイダごとに制限を編集・保存でき、未設定時は推奨デフォルトが効く。
+  - AC-005: ジョブ 1 本のみのとき、進行ボード体験は現行と同等である。
+- **Steps**:
+  1. [x] Plan / Intent / QA を確認する
+  2. [x] 共有 ProviderRateLimiter と設定ストア / API を実装する
+  3. [x] active run registry（上限 3）を `/run` に接続する
+  4. [x] multi-job store とジョブ縦積み UI、Settings 編集 UI を実装する
+  5. [x] Test Matrix に従い検証し verification を残す（Verdict PARTIAL: Manual QA deferred）
+- **Description**:
+  - Context: 単一 runStore 前提をやめ、同時比較用に 2〜3 ジョブ並列が欲しい。同時起動時の stampede を避けるため初版からプロバイダ単位の共有レート制限を入れる。
+  - Notes: UI-Feat-61（presence）と進行ボード表面を共有する。presence はジョブ内カード局所のまま共存。verification PARTIAL — 実 API 複数ジョブ Manual QA は deferred。
+- **Plan**: `_docs/plan/Core/concurrent-evaluation-jobs/plan.md`
+- **Intent**: `_docs/intent/Core/concurrent-evaluation-jobs/decision.md`
+- **QA**: `_docs/qa/Core/concurrent-evaluation-jobs/test-plan.md`
+- **Verification**: `_docs/qa/Core/concurrent-evaluation-jobs/verification.md`

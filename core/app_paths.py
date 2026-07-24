@@ -86,6 +86,11 @@ class AppPaths:
         return cls.config_dir() / "provider_registry.json"
 
     @classmethod
+    def rate_limits_file(cls) -> Path:
+        # intent: DEC-004 (Core/concurrent-evaluation-jobs) — 非 secret の制限上書きのみ
+        return cls.config_dir() / "rate_limits.json"
+
+    @classmethod
     def overrides_dir(cls) -> Path:
         return cls.data_dir() / "overrides"
 

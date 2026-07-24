@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSettingsStore } from '../store/settingsStore';
-import { useRunStore } from '../store/runStore';
+import { useRunStore, MAX_CONCURRENT_JOBS, type RunJob } from '../store/runStore';
 import { useHistoryStore } from '../store/historyStore';
 import { getStrictModeIssues } from '../lib/strictMode';
 import { startBenchmarkSSE, type SSEConnection } from '../api/sse';
@@ -25,6 +25,7 @@ import {
     computePreRunEstimate,
     formatPreRunCost,
 } from '../lib/preRunEstimate';
+import type { HolisticRunProgress } from '../types';
 
 function formatTime(ms: number): string {
     const s = Math.floor(ms / 1000);
@@ -60,15 +61,20 @@ export default function RunPage() {
         judgeParallel, setJudgeParallel,
     } = useSettingsStore();
     const {
-        status, progress, holisticProgress, result, resultFilePath, cancelRequested, errorMessage, runId,
-        startRun, requestCancel, reset, setResult,
+        jobs,
+        startJob,
+        requestJobCancel,
+        dismissJob,
+        setResult,
+        canStartAnother,
+        runningCount,
     } = useRunStore();
     const { runs: historyRuns, initialize: initializeHistory } = useHistoryStore();
 
-    const sseRef = useRef<SSEConnection | null>(null);
+    const sseMapRef = useRef<Map<string, SSEConnection>>(new Map());
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const cancelRequestRunIdRef = useRef<string | null>(null);
-    const [, setTick] = useState(0); // timer re-render用
+    const cancelRequestedIdsRef = useRef<Set<string>>(new Set());
+    const [nowMs, setNowMs] = useState(0);
     const [creditsConfigured, setCreditsConfigured] = useState(false);
     const [remainingCredits, setRemainingCredits] = useState<number | null>(null);
     const [creditsLoading, setCreditsLoading] = useState(true);
@@ -100,16 +106,22 @@ export default function RunPage() {
         subjectTemperature: evalParams.subjectTemperature,
     });
     const strictReady = !isStrict || strictIssues.length === 0;
-    const canStart = (subjectModelId || freeTextSubject) && effectiveJudgeNames.length > 0 && selectedTasks.length > 0 && strictReady;
-    const liveElapsedMs = status === 'running' && progress?.startedAtMs
-        ? Date.now() - progress.startedAtMs
-        : progress?.elapsedMs ?? 0;
+    const canStart =
+        !!(subjectModelId || freeTextSubject)
+        && effectiveJudgeNames.length > 0
+        && selectedTasks.length > 0
+        && strictReady
+        && canStartAnother();
+    const anyRunning = runningCount() > 0;
 
     const cleanup = useCallback(() => {
         if (timerRef.current) clearInterval(timerRef.current);
         timerRef.current = null;
-        sseRef.current = null;
-        cancelRequestRunIdRef.current = null;
+        for (const conn of sseMapRef.current.values()) {
+            conn.abort();
+        }
+        sseMapRef.current.clear();
+        cancelRequestedIdsRef.current.clear();
     }, []);
 
     const loadCredits = useCallback(async () => {
@@ -161,7 +173,7 @@ export default function RunPage() {
     );
 
     useEffect(() => {
-        if (status !== 'running' || !creditsConfigured) {
+        if (!anyRunning || !creditsConfigured) {
             return;
         }
 
@@ -170,20 +182,36 @@ export default function RunPage() {
         }, 60_000);
 
         return () => clearInterval(intervalId);
-    }, [status, creditsConfigured, loadCredits]);
+    }, [anyRunning, creditsConfigured, loadCredits]);
+
+    useEffect(() => {
+        if (!anyRunning) {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+            return;
+        }
+        const tick = () => setNowMs(Date.now());
+        tick();
+        if (!timerRef.current) {
+            timerRef.current = setInterval(tick, 200);
+        }
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        };
+    }, [anyRunning]);
 
     const handleStart = () => {
-        startRun(totalSteps);
-        cancelRequestRunIdRef.current = null;
-
-        // SSE タイマー — 経過時間の更新
-        timerRef.current = setInterval(() => {
-            setTick((t) => t + 1);
-        }, 200);
-
-        // SSE ストリーム開始
+        if (!canStartAnother()) return;
+        const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const targetModel = subjectModel?.id || freeTextSubject;
-        sseRef.current = startBenchmarkSSE({
+        startJob(jobId, targetModel, totalSteps);
+
+        const conn = startBenchmarkSSE({
             targetModel,
             judgeModels: effectiveJudgeIds,
             holisticJudgeModels: effectiveHolisticJudgeIds,
@@ -198,35 +226,37 @@ export default function RunPage() {
             excludeUnreliableJudges,
             subjectParallel,
             judgeParallel,
-        });
-    };
-
-    const handleCancel = async () => {
-        requestCancel();
+        }, jobId);
+        sseMapRef.current.set(jobId, conn);
     };
 
     useEffect(() => {
-        if (!cancelRequested || !runId) {
-            return;
+        for (const job of jobs) {
+            if (!job.cancelRequested || !job.runId) continue;
+            if (cancelRequestedIdsRef.current.has(job.jobId)) continue;
+            cancelRequestedIdsRef.current.add(job.jobId);
+            void apiCancelRun(job.runId).catch(() => {
+                cancelRequestedIdsRef.current.delete(job.jobId);
+            });
         }
-        if (cancelRequestRunIdRef.current === runId) {
-            return;
-        }
+    }, [jobs]);
 
-        cancelRequestRunIdRef.current = runId;
-        void apiCancelRun(runId).catch(() => {
-            cancelRequestRunIdRef.current = null;
-        });
-    }, [cancelRequested, runId]);
-
-    const handleReset = () => {
-        cleanup();
-        reset();
+    const handleJobCancel = (jobId: string) => {
+        requestJobCancel(jobId);
     };
+
+    const handleDismissJob = (jobId: string) => {
+        const conn = sseMapRef.current.get(jobId);
+        conn?.abort();
+        sseMapRef.current.delete(jobId);
+        cancelRequestedIdsRef.current.delete(jobId);
+        dismissJob(jobId);
+    };
+
+    const showConfig = canStartAnother();
 
     return (
         <div className="space-y-8 animate-fade-up">
-            {/* Hero */}
             <div className="hero-glow relative py-2">
                 <div className="relative z-10 flex items-start justify-between gap-4">
                     <div>
@@ -240,8 +270,15 @@ export default function RunPage() {
                                     strict
                                 </span>
                             )}
+                            {anyRunning && (
+                                <span className="rounded-full border border-amber/25 bg-amber-dim px-2 py-0.5 text-[10px] text-amber">
+                                    {runningCount()}/{MAX_CONCURRENT_JOBS} 実行中
+                                </span>
+                            )}
                         </div>
-                        <p className="text-text-secondary mt-1 text-[13px]">現在の設定でベンチマークを実行します</p>
+                        <p className="text-text-secondary mt-1 text-[13px]">
+                            設定違いの評価を最大 {MAX_CONCURRENT_JOBS} 本まで同時に実行できます
+                        </p>
                     </div>
                     <RunCreditBadge
                         configured={creditsConfigured}
@@ -252,8 +289,7 @@ export default function RunPage() {
                 </div>
             </div>
 
-            {/* ===== IDLE ===== */}
-            {status === 'idle' && (
+            {showConfig && (
                 <div className="space-y-4 animate-fade-up stagger-2">
                     {/* Checklist */}
                     <div className="card p-5">
@@ -396,7 +432,6 @@ export default function RunPage() {
                         </button>
                     </div>
 
-                    {/* Stats */}
                     <div className="card p-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <Stat label="総ステップ" value={String(totalSteps)} highlight />
@@ -409,9 +444,11 @@ export default function RunPage() {
                     {!canStart && (
                         <div className="flex items-center gap-2 p-3 bg-score-low/8 border border-score-low/15 rounded-md text-[12px] text-score-low">
                             <XCircle size={14} />
-                            {isStrict && strictIssues.length > 0
-                                ? `Strict Mode 条件を満たしていません: ${strictIssues[0]}`
-                                : '実行前に、被験モデル、評価モデルを1つ以上、タスクを1つ以上設定してください。'}
+                            {!canStartAnother()
+                                ? `同時実行上限（${MAX_CONCURRENT_JOBS}本）に達しています`
+                                : isStrict && strictIssues.length > 0
+                                    ? `Strict Mode 条件を満たしていません: ${strictIssues[0]}`
+                                    : '実行前に、被験モデル、評価モデルを1つ以上、タスクを1つ以上設定してください。'}
                         </div>
                     )}
 
@@ -421,135 +458,176 @@ export default function RunPage() {
                         className="w-full py-3.5 bg-amber text-bg rounded-md text-[13px] font-display font-bold flex items-center justify-center gap-2 hover:bg-amber-hover disabled:bg-surface disabled:text-text-tertiary disabled:border disabled:border-border disabled:cursor-not-allowed transition-all duration-200 hover:shadow-[0_0_24px_rgba(226,168,75,0.15)]"
                     >
                         <Play size={16} />
-                        評価を開始
+                        {anyRunning
+                            ? `さらに評価を開始 (${runningCount()}/${MAX_CONCURRENT_JOBS})`
+                            : '評価を開始'}
                     </Button>
                 </div>
             )}
 
-            {/* ===== RUNNING ===== */}
-            {status === 'running' && progress && (
-                <div className="space-y-4 animate-fade-in">
-                    <div className="card p-6 space-y-6">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                            <span className="section-label text-[9px]">進行ボード</span>
-                            <div className="flex items-center gap-3">
-                                <Button
-                                    onClick={handleCancel}
-                                    disabled={cancelRequested}
-                                    className="inline-flex items-center gap-1.5 rounded border border-score-low/30 bg-score-low/10 px-3 py-1.5 text-[12px] text-score-low transition-colors duration-150 hover:border-score-low/50 hover:bg-score-low/15 disabled:opacity-40"
-                                >
-                                    <Square size={13} />
-                                    {cancelRequested ? 'キャンセル中...' : 'キャンセル'}
-                                </Button>
-                                <span className="text-[11px] text-text-tertiary">
-                                    {progress.completedTaskCount} / {selectedTasks.length}{runHolistic ? '+' : ''} タスク完了
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                            <RunSummaryStat label="完了" value={String(progress.completedTaskCount)} />
-                            <RunSummaryStat label="実行中" value={String(progress.activeTaskCount)} highlight />
-                            <RunSummaryStat label="待機中" value={String(progress.queuedTaskCount)} />
-                            <RunSummaryStat label="経過時間" value={formatTime(liveElapsedMs)} />
-                            <RunEtaStat
-                                etaMs={progress.etaMs}
-                                etaStatus={progress.etaStatus}
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 items-stretch">
-                            <TaskLane
-                                title="待機中"
-                                count={progress.queuedTaskCount}
-                                tasks={progress.queuedTasks}
-                                emptyMessage="待機中のタスクはありません。"
-                            />
-                            <TaskLane
-                                title="実行中"
-                                count={progress.activeTaskCount}
-                                tasks={progress.activeTasks}
-                                emptyMessage="現在実行中のタスクはありません。"
-                                emphasize
-                            />
-                            <TaskLane
-                                title="完了"
-                                count={progress.completedTaskCount}
-                                tasks={progress.completedTasks}
-                                emptyMessage="完了したタスクはここに表示されます。"
-                            />
-                        </div>
-
-                        {holisticProgress && (
-                            <HolisticProgressCard progress={holisticProgress} />
-                        )}
-                    </div>
-
+            {!showConfig && (
+                <div className="flex items-center gap-2 p-3 bg-amber-dim/40 border border-amber/20 rounded-md text-[12px] text-text-secondary">
+                    同時実行上限（{MAX_CONCURRENT_JOBS}本）に達しています。完了またはキャンセル後に追加起動できます。
                 </div>
             )}
 
-            {/* ===== COMPLETED ===== */}
-            {status === 'completed' && result && (
-                <div className="space-y-4 animate-fade-up">
-                    <div className={`card p-8 text-center space-y-4 ${scoreGlow(result.averageScore)}`}>
+            {/* Job stack — 進行ボード一式を縦に積む */}
+            <div className="space-y-6">
+                {jobs.map((job) => (
+                    <JobPanel
+                        key={job.jobId}
+                        job={job}
+                        nowMs={nowMs}
+                        selectedTaskCount={selectedTasks.length}
+                        runHolistic={runHolistic}
+                        totalSteps={totalSteps}
+                        onCancel={() => handleJobCancel(job.jobId)}
+                        onDismiss={() => handleDismissJob(job.jobId)}
+                        onViewResult={() => {
+                            if (job.result) {
+                                setResult(job.result);
+                                navigate('/results');
+                            }
+                        }}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function JobPanel({
+    job,
+    nowMs,
+    selectedTaskCount,
+    runHolistic,
+    totalSteps,
+    onCancel,
+    onDismiss,
+    onViewResult,
+}: {
+    job: RunJob;
+    nowMs: number;
+    selectedTaskCount: number;
+    runHolistic: boolean;
+    totalSteps: number;
+    onCancel: () => void;
+    onDismiss: () => void;
+    onViewResult: () => void;
+}) {
+    const progress = job.progress;
+    const liveElapsedMs = job.status === 'running' && progress?.startedAtMs && nowMs > 0
+        ? Math.max(0, nowMs - progress.startedAtMs)
+        : progress?.elapsedMs ?? 0;
+
+    return (
+        <section className="space-y-3 animate-fade-in">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                    <p className="section-label text-[9px]">ジョブ</p>
+                    <p className="data-display truncate text-[13px] text-text-primary">{job.label}</p>
+                    {job.runId && (
+                        <p className="text-[10px] text-text-tertiary mt-0.5">{job.runId}</p>
+                    )}
+                </div>
+                <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[10px] uppercase tracking-wider text-text-secondary">
+                    {job.status}
+                </span>
+            </div>
+
+            {job.status === 'running' && progress && (
+                <div className="card p-6 space-y-6">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                        <span className="section-label text-[9px]">進行ボード</span>
+                        <div className="flex items-center gap-3">
+                            <Button
+                                onClick={onCancel}
+                                disabled={job.cancelRequested}
+                                className="inline-flex items-center gap-1.5 rounded border border-score-low/30 bg-score-low/10 px-3 py-1.5 text-[12px] text-score-low transition-colors duration-150 hover:border-score-low/50 hover:bg-score-low/15 disabled:opacity-40"
+                            >
+                                <Square size={13} />
+                                {job.cancelRequested ? 'キャンセル中...' : 'キャンセル'}
+                            </Button>
+                            <span className="text-[11px] text-text-tertiary">
+                                {progress.completedTaskCount} / {selectedTaskCount}{runHolistic ? '+' : ''} タスク完了
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <RunSummaryStat label="完了" value={String(progress.completedTaskCount)} />
+                        <RunSummaryStat label="実行中" value={String(progress.activeTaskCount)} highlight />
+                        <RunSummaryStat label="待機中" value={String(progress.queuedTaskCount)} />
+                        <RunSummaryStat label="経過時間" value={formatTime(liveElapsedMs)} />
+                        <RunEtaStat
+                            etaMs={progress.etaMs}
+                            etaStatus={progress.etaStatus}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 items-stretch">
+                        <TaskLane
+                            title="待機中"
+                            count={progress.queuedTaskCount}
+                            tasks={progress.queuedTasks}
+                            emptyMessage="待機中のタスクはありません。"
+                        />
+                        <TaskLane
+                            title="実行中"
+                            count={progress.activeTaskCount}
+                            tasks={progress.activeTasks}
+                            emptyMessage="現在実行中のタスクはありません。"
+                            emphasize
+                        />
+                        <TaskLane
+                            title="完了"
+                            count={progress.completedTaskCount}
+                            tasks={progress.completedTasks}
+                            emptyMessage="完了したタスクはここに表示されます。"
+                        />
+                    </div>
+
+                    {job.holisticProgress && (
+                        <HolisticProgressCard progress={job.holisticProgress} />
+                    )}
+                </div>
+            )}
+
+            {job.status === 'completed' && job.result && (
+                <div className="space-y-4">
+                    <div className={`card p-8 text-center space-y-4 ${scoreGlow(job.result.averageScore)}`}>
                         <CheckCircle2 size={32} className="text-score-high mx-auto" />
                         <h2 className="text-[15px] font-display font-bold text-text-primary">評価完了</h2>
                         <p className="text-[12px] text-text-secondary">
-                            {result.taskResults.length}タスク · {result.judgeModels.length}評価モデル
+                            {job.result.taskResults.length}タスク · {job.result.judgeModels.length}評価モデル
                         </p>
-
-                        {/* Big Score */}
                         <div className="py-3">
-                            <CountUpScore value={result.averageScore} />
+                            <CountUpScore value={job.result.averageScore} />
                         </div>
-
-                        {result.scoreAggregation?.allExcluded && (
-                            <p className="text-[12px] text-score-low">
-                                すべての評価モデルが除外されたため、総合点は N/A です
-                            </p>
-                        )}
-
-                        {resultFilePath && (
-                            <p className="data-display text-[11px] text-text-tertiary">{resultFilePath}</p>
+                        {job.resultFilePath && (
+                            <p className="data-display text-[11px] text-text-tertiary">{job.resultFilePath}</p>
                         )}
                     </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                        <Stat
-                            label="平均点"
-                            value={result.averageScore === null || result.averageScore === undefined ? 'N/A' : String(result.averageScore)}
-                            color={scoreColor(result.averageScore)}
-                        />
-                        <Stat
-                            label="最高点"
-                            value={result.bestScore === null || result.bestScore === undefined ? 'N/A' : String(result.bestScore)}
-                            color={scoreColor(result.bestScore)}
-                        />
-                        <Stat label="タスク数" value={String(result.taskResults.length)} />
-                    </div>
-
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Button
-                            onClick={() => { setResult(result); navigate('/results'); }}
-                            className="flex-1 py-2.5 bg-amber text-bg rounded-md text-[13px] font-display font-semibold flex items-center justify-center gap-2 hover:bg-amber-hover transition-all duration-200 hover:shadow-[0_0_24px_rgba(226,168,75,0.15)]"
+                            onClick={onViewResult}
+                            className="flex-1 py-2.5 bg-amber text-bg rounded-md text-[13px] font-display font-semibold flex items-center justify-center gap-2 hover:bg-amber-hover transition-all duration-200"
                         >
                             <ArrowRight size={14} />
                             結果を見る
                         </Button>
                         <Button
-                            onClick={handleReset}
-                            className="py-2.5 px-4 rounded-md border border-amber/30 bg-amber-dim/40 text-[13px] font-medium text-text-primary flex items-center justify-center gap-2 hover:border-amber/45 hover:bg-amber-dim/60 transition-colors duration-150"
+                            onClick={onDismiss}
+                            className="py-2.5 px-4 rounded-md border border-border text-[13px] text-text-secondary hover:text-text-primary"
                         >
-                            <Play size={14} />
-                            新しく実行
+                            閉じる
                         </Button>
                     </div>
                 </div>
             )}
 
-            {/* ===== CANCELLED ===== */}
-            {status === 'cancelled' && (
-                <div className="space-y-4 animate-fade-up">
+            {job.status === 'cancelled' && (
+                <div className="space-y-4">
                     <div className="card p-8 text-center space-y-3">
                         <XCircle size={32} className="text-score-mid mx-auto" />
                         <h2 className="text-[15px] font-display font-bold text-text-primary">評価をキャンセルしました</h2>
@@ -558,38 +636,37 @@ export default function RunPage() {
                         </p>
                     </div>
                     <Button
-                        onClick={handleReset}
-                        className="w-full py-2.5 border border-border rounded-md text-[12px] text-text-secondary hover:text-text-primary hover:border-border-focus flex items-center justify-center gap-2 transition-colors duration-150"
+                        onClick={onDismiss}
+                        className="w-full py-2.5 border border-border rounded-md text-[12px] text-text-secondary hover:text-text-primary"
                     >
-                        <Play size={13} /> 最初からやり直す
+                        閉じる
                     </Button>
                 </div>
             )}
 
-            {/* ===== ERROR ===== */}
-            {status === 'error' && (
-                <div className="space-y-4 animate-fade-up">
+            {job.status === 'error' && (
+                <div className="space-y-4">
                     <div className="card p-8 text-center space-y-3 accent-bar-low">
                         <AlertCircle size={32} className="text-score-low mx-auto" />
                         <h2 className="text-[15px] font-display font-bold text-text-primary">評価に失敗しました</h2>
-                        <p className="text-[12px] text-text-secondary">{errorMessage}</p>
+                        <p className="text-[12px] text-text-secondary">{job.errorMessage}</p>
                     </div>
                     <Button
-                        onClick={handleReset}
-                        className="w-full py-2.5 border border-border rounded-md text-[12px] text-text-secondary hover:text-text-primary hover:border-border-focus flex items-center justify-center gap-2 transition-colors duration-150"
+                        onClick={onDismiss}
+                        className="w-full py-2.5 border border-border rounded-md text-[12px] text-text-secondary hover:text-text-primary"
                     >
-                        <Play size={13} /> 最初からやり直す
+                        閉じる
                     </Button>
                 </div>
             )}
-        </div>
+        </section>
     );
 }
 
 function HolisticProgressCard({
     progress,
 }: {
-    progress: NonNullable<ReturnType<typeof useRunStore.getState>['holisticProgress']>;
+    progress: HolisticRunProgress;
 }) {
     const processedTaskCount = progress.completedTaskCount + progress.failedTaskCount;
     const statusLabel = progress.status === 'completed'

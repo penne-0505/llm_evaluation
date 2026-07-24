@@ -932,3 +932,37 @@ export async function cancelRun(runId: string): Promise<void> {
         method: 'POST',
     });
 }
+
+export interface RateLimitProviderConfig {
+    max_requests: number;
+    window_seconds: number;
+    is_default: boolean;
+    recommended: {
+        max_requests: number;
+        window_seconds: number;
+    };
+}
+
+export interface RateLimitsResponse {
+    providers: Record<string, RateLimitProviderConfig>;
+    max_concurrent_jobs: number;
+}
+
+export async function fetchRateLimits(): Promise<RateLimitsResponse> {
+    return apiFetch<RateLimitsResponse>('/rate-limits');
+}
+
+export async function saveRateLimits(
+    providers: Record<string, { max_requests: number; window_seconds: number }>,
+): Promise<RateLimitsResponse> {
+    return apiFetch<RateLimitsResponse>('/rate-limits', {
+        method: 'PUT',
+        body: JSON.stringify({ providers }),
+    });
+}
+
+export async function resetRateLimits(): Promise<RateLimitsResponse> {
+    return apiFetch<RateLimitsResponse>('/rate-limits/reset', {
+        method: 'POST',
+    });
+}

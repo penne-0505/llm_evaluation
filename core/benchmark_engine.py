@@ -12,10 +12,26 @@ from adapters import CompletionResult, LLMAdapter, LLMError
 from adapters.base import NativeToolCall, NativeToolsNotSupportedError, strip_thinking_tags
 from core.json_parser import JudgeResponseParser, ParseError
 from core.model_parameter_support import should_send_temperature
+from core.provider_rate_limiter import ProviderRateLimiter
 from core.result_aggregator import ResultAggregator
 from core.tool_runtime import LocalToolRuntime, ToolCall, ToolRuntimeConfig, parse_tool_call
 
 logger = logging.getLogger(__name__)
+
+
+def _provider_id_for_model(model_name: str, adapter: LLMAdapter) -> str:
+    """モデル ID または adapter.PROVIDER から rate-limit キーを取る。
+
+    adapters.parse_model_provider と同等の prefix 規則。循環 import 回避のため局所実装。
+    """
+    name = str(model_name or "").strip()
+    if "/" in name:
+        prefix, _rest = name.split("/", 1)
+        lower = prefix.lower()
+        if lower == "or":
+            return "openrouter"
+        return lower
+    return getattr(adapter, "PROVIDER", None) or "unknown"
 
 
 @dataclass
@@ -449,6 +465,7 @@ class BenchmarkEngine:
                 user_prompt=input_prompt,
                 temperature=temperature,
                 cancel_checker=cancel_checker,
+                progress_callback=progress_callback,
             )
             return SubjectRunResult(result=response, tool_trace=[])
 
@@ -496,6 +513,12 @@ class BenchmarkEngine:
             if cancel_checker:
                 cancel_checker()
 
+            await self._await_provider_rate_slot(
+                self.subject_model,
+                self.subject_adapter,
+                cancel_checker=cancel_checker,
+                progress_callback=progress_callback,
+            )
             native_result = await asyncio.to_thread(
                 self.subject_adapter.complete_with_model_native_tools,
                 self.subject_model,
@@ -524,6 +547,7 @@ class BenchmarkEngine:
                     usage_records=usage_records,
                     temperature=temperature,
                     cancel_checker=cancel_checker,
+                    progress_callback=progress_callback,
                 )
 
             # assistant メッセージをそのままmessages配列へ追加
@@ -598,6 +622,7 @@ class BenchmarkEngine:
                 user_prompt=user_prompt,
                 temperature=temperature,
                 cancel_checker=cancel_checker,
+                progress_callback=progress_callback,
             )
             usage_records.append(response)
             tool_call = parse_tool_call(response.text)
@@ -616,6 +641,7 @@ class BenchmarkEngine:
                     usage_records=usage_records,
                     temperature=temperature,
                     cancel_checker=cancel_checker,
+                    progress_callback=progress_callback,
                 )
 
             if progress_callback:
@@ -643,14 +669,42 @@ class BenchmarkEngine:
             subject_prompt=user_prompt,
         )
 
+    async def _await_provider_rate_slot(
+        self,
+        model_name: str,
+        adapter: LLMAdapter,
+        *,
+        cancel_checker: Optional[Callable[[], None]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        # intent: DEC-003/005 (Core/concurrent-evaluation-jobs) — 発行前に共有枠を取得
+        provider_id = _provider_id_for_model(model_name, adapter)
+
+        def _on_waiting() -> None:
+            if progress_callback:
+                progress_callback(f"レート制限待ち ({provider_id})...")
+
+        await ProviderRateLimiter.acquire(
+            provider_id,
+            cancel_checker=cancel_checker,
+            on_waiting=_on_waiting,
+        )
+
     async def _complete_subject_once(
         self,
         user_prompt: str,
         temperature: float,
         cancel_checker: Optional[Callable[[], None]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> CompletionResult:
         if cancel_checker:
             cancel_checker()
+        await self._await_provider_rate_slot(
+            self.subject_model,
+            self.subject_adapter,
+            cancel_checker=cancel_checker,
+            progress_callback=progress_callback,
+        )
         extra_params = None
         if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
             extra_params = {"reasoning": {"effort": "high"}}
@@ -691,12 +745,14 @@ class BenchmarkEngine:
         usage_records: List[CompletionResult],
         temperature: float,
         cancel_checker: Optional[Callable[[], None]],
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> SubjectRunResult:
         final_prompt = self._build_tool_budget_final_prompt(input_prompt, tool_trace)
         response = await self._complete_subject_once(
             user_prompt=final_prompt,
             temperature=temperature,
             cancel_checker=cancel_checker,
+            progress_callback=progress_callback,
         )
         usage_records.append(response)
         return SubjectRunResult(
@@ -916,6 +972,7 @@ class BenchmarkEngine:
                             system_prompt=system_prompt,
                             user_prompt=user_prompt,
                             cancel_checker=cancel_checker,
+                            progress_callback=progress_callback,
                         )
                         last_response = response
                         try:
@@ -1001,6 +1058,7 @@ class BenchmarkEngine:
         user_prompt: str,
         max_retries: int = 1,
         cancel_checker: Optional[Callable[[], None]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> CompletionResult:
         """
         judge呼び出し（リトライ付き）
@@ -1033,6 +1091,12 @@ class BenchmarkEngine:
                 extra_params = None
                 if adapter.is_reasoning_opt_in(model_name):
                     extra_params = {"reasoning": {"effort": "high"}}
+                await self._await_provider_rate_slot(
+                    model_name,
+                    adapter,
+                    cancel_checker=cancel_checker,
+                    progress_callback=progress_callback,
+                )
                 response = await asyncio.to_thread(
                     adapter.complete_with_model_result,
                     model_name,

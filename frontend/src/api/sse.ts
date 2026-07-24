@@ -24,13 +24,12 @@ export interface SSEConnection {
 
 /**
  * ベンチマーク実行を開始し SSE ストリームを購読する。
- * runStore / historyStore への dispatch はここで行う。
+ * jobId 単位で runStore へ dispatch する。
  */
-export function startBenchmarkSSE(params: RunParams): SSEConnection {
+export function startBenchmarkSSE(params: RunParams, jobId: string): SSEConnection {
     const controller = new AbortController();
     const startTime = Date.now();
 
-    // 非同期で SSE を読む
     (async () => {
         try {
             const res = await fetch('/api/run', {
@@ -42,13 +41,13 @@ export function startBenchmarkSSE(params: RunParams): SSEConnection {
 
             if (!res.ok) {
                 const text = await res.text();
-                useRunStore.getState().setError(`API ${res.status}: ${text}`);
+                useRunStore.getState().setJobError(jobId, `API ${res.status}: ${text}`);
                 return;
             }
 
             const reader = res.body?.getReader();
             if (!reader) {
-                useRunStore.getState().setError('レスポンス本文がありません');
+                useRunStore.getState().setJobError(jobId, 'レスポンス本文がありません');
                 return;
             }
 
@@ -61,7 +60,6 @@ export function startBenchmarkSSE(params: RunParams): SSEConnection {
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
-                // 最後の不完全行をバッファに残す
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
@@ -72,13 +70,11 @@ export function startBenchmarkSSE(params: RunParams): SSEConnection {
                     try {
                         const event = JSON.parse(jsonStr) as Record<string, unknown>;
                         try {
-                            handleSSEEvent(event, startTime);
+                            handleSSEEvent(jobId, event, startTime);
                         } catch (eventError) {
-                            // Intentionally kept: frontend runtime errors during SSE event handling
-                            // are logged to the browser console so developers can diagnose stream
-                            // parsing or state-update issues without depending on the backend logs.
                             console.error('SSE event handling failed', eventError, event);
-                            useRunStore.getState().setError(
+                            useRunStore.getState().setJobError(
+                                jobId,
                                 eventError instanceof Error
                                     ? `SSE イベント処理に失敗しました: ${eventError.message}`
                                     : 'SSE イベント処理に失敗しました',
@@ -91,14 +87,12 @@ export function startBenchmarkSSE(params: RunParams): SSEConnection {
                     }
                 }
             }
-
-            // ストリーム終了時にまだ running なら完了扱いにはしない（サーバー側で complete/error/cancelled が送られるはず）
         } catch (err: unknown) {
             if (err instanceof DOMException && err.name === 'AbortError') {
-                // ユーザーキャンセル — runStore.cancelRun() は呼び出し元で処理済み
                 return;
             }
-            useRunStore.getState().setError(
+            useRunStore.getState().setJobError(
+                jobId,
                 err instanceof Error ? err.message : 'SSE 接続に失敗しました',
             );
         }
@@ -107,11 +101,8 @@ export function startBenchmarkSSE(params: RunParams): SSEConnection {
     return { abort: () => controller.abort() };
 }
 
-// ---------------------------------------------------------------------------
-// Event handlers
-// ---------------------------------------------------------------------------
-
 function handleSSEEvent(
+    jobId: string,
     event: Record<string, unknown>,
     startTime: number,
 ): void {
@@ -119,11 +110,11 @@ function handleSSEEvent(
 
     switch (event.type) {
         case 'run_id':
-            store.setRunId(event.run_id as string);
+            store.setJobRunId(jobId, event.run_id as string);
             break;
 
         case 'progress':
-            store.updateProgress({
+            store.updateJobProgress(jobId, {
                 currentStep: event.current as number,
                 totalSteps: event.total as number,
                 currentTaskIndex: event.task_index as number,
@@ -144,7 +135,7 @@ function handleSSEEvent(
             break;
 
         case 'holistic_progress':
-            store.updateHolisticProgress({
+            store.updateJobHolisticProgress(jobId, {
                 status: normalizeHolisticStatus(event.status),
                 completedTaskCount: (event.completed_task_count as number) || 0,
                 failedTaskCount: (event.failed_task_count as number) || 0,
@@ -162,17 +153,17 @@ function handleSSEEvent(
             const savedPath = event.saved_path as string;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const evalRun = convertBenchmarkResult(rawResult as any);
-            store.completeRun(evalRun, savedPath);
+            store.completeJob(jobId, evalRun, savedPath);
             useHistoryStore.getState().upsertRun(evalRun);
             break;
         }
 
         case 'cancelled':
-            store.cancelRun();
+            store.cancelJob(jobId);
             break;
 
         case 'error':
-            store.setError(event.message as string);
+            store.setJobError(jobId, event.message as string);
             break;
     }
 }
