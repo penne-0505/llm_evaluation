@@ -14,10 +14,18 @@ test('formatDurationMs formats as m s', () => {
     assert.equal(formatDurationMs(undefined), 'N/A');
 });
 
-test('formatEtaDisplay labels measured vs step fallback vs unavailable', () => {
+test('formatEtaDisplay labels measured vs history vs step fallback vs unavailable', () => {
     assert.deepStrictEqual(formatEtaDisplay(12000, 'measured'), {
         value: '0m 12s',
-        label: '推定（実測平均）',
+        label: '推定（実測ペース）',
+    });
+    assert.deepStrictEqual(formatEtaDisplay(45000, 'history_blend'), {
+        value: '0m 45s',
+        label: '推定（実測+履歴）',
+    });
+    assert.deepStrictEqual(formatEtaDisplay(30000, 'history'), {
+        value: '0m 30s',
+        label: '推定（履歴）',
     });
     assert.deepStrictEqual(formatEtaDisplay(45000, 'step_fallback'), {
         value: '0m 45s',

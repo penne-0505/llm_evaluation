@@ -208,7 +208,13 @@ function normalizeHolisticStatus(status: unknown): 'started' | 'running' | 'comp
 }
 
 function normalizeEtaStatus(status: unknown): EtaStatus {
-    if (status === 'measured' || status === 'step_fallback' || status === 'unavailable') {
+    if (
+        status === 'measured' ||
+        status === 'history_blend' ||
+        status === 'history' ||
+        status === 'step_fallback' ||
+        status === 'unavailable'
+    ) {
         return status;
     }
     return 'unavailable';

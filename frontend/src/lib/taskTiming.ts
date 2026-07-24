@@ -14,7 +14,11 @@ export function formatDurationMs(ms: number | null | undefined): string {
 export function etaStatusLabel(status: EtaStatus | undefined): string {
     switch (status) {
         case 'measured':
-            return '推定（実測平均）';
+            return '推定（実測ペース）';
+        case 'history_blend':
+            return '推定（実測+履歴）';
+        case 'history':
+            return '推定（履歴）';
         case 'step_fallback':
             return '推定（step ベース）';
         case 'unavailable':

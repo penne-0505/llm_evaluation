@@ -231,51 +231,50 @@ class TestRunProgressSnapshot(unittest.TestCase):
             2,
         )
 
-    def test_progress_eta_uses_completed_task_average(self):
+    def test_progress_eta_uses_wall_pace_not_task_timing(self):
         eta = server._compute_progress_eta(
-            completed_timings=[
-                {"subject_duration_ms": 1000, "judge_duration_ms": 2000},
-                {"subject_duration_ms": 500, "judge_duration_ms": 1500},
-            ],
+            completed_task_count=2,
             remaining_task_count=2,
-            elapsed_ms=10000,
+            elapsed_ms=10_000,
             current_step=4,
             total_steps=10,
+            history_summaries=[],
         )
-        # avg = (3000 + 2000) / 2 = 2500; remaining 2 → 5000
+        # wall pace: 10000/2*2 = 10000 (not task_timing average)
         self.assertEqual(eta["eta_status"], "measured")
-        self.assertEqual(eta["eta_ms"], 5000)
+        self.assertEqual(eta["eta_ms"], 10_000)
 
-    def test_progress_eta_step_fallback_only_when_no_completed_timings(self):
+    def test_progress_eta_step_fallback_only_when_no_completed_and_no_history(self):
         step_eta = server._compute_progress_eta(
-            completed_timings=[],
+            completed_task_count=0,
             remaining_task_count=3,
             elapsed_ms=4000,
             current_step=2,
             total_steps=8,
+            history_summaries=[],
         )
         self.assertEqual(step_eta["eta_status"], "step_fallback")
         self.assertEqual(step_eta["eta_ms"], 12000)
 
         measured = server._compute_progress_eta(
-            completed_timings=[
-                {"subject_duration_ms": 1000, "judge_duration_ms": 1000},
-            ],
+            completed_task_count=1,
             remaining_task_count=3,
             elapsed_ms=4000,
             current_step=2,
             total_steps=8,
+            history_summaries=[],
         )
         self.assertEqual(measured["eta_status"], "measured")
-        self.assertEqual(measured["eta_ms"], 6000)
+        self.assertEqual(measured["eta_ms"], 12_000)
 
     def test_progress_eta_unavailable_without_measurements_or_steps(self):
         eta = server._compute_progress_eta(
-            completed_timings=[],
+            completed_task_count=0,
             remaining_task_count=3,
             elapsed_ms=0,
             current_step=0,
             total_steps=8,
+            history_summaries=[],
         )
         self.assertEqual(eta["eta_status"], "unavailable")
         self.assertIsNone(eta["eta_ms"])
@@ -283,26 +282,24 @@ class TestRunProgressSnapshot(unittest.TestCase):
     def test_progress_eta_measured_zero_only_when_remaining_is_zero(self):
         # AC: remaining > 0 なら measured 0 にならない
         eta = server._compute_progress_eta(
-            completed_timings=[
-                {"subject_duration_ms": 1000, "judge_duration_ms": 1000},
-            ],
+            completed_task_count=1,
             remaining_task_count=1,
             elapsed_ms=5000,
             current_step=4,
             total_steps=10,
+            history_summaries=[],
         )
         self.assertEqual(eta["eta_status"], "measured")
-        self.assertEqual(eta["eta_ms"], 2000)
+        self.assertEqual(eta["eta_ms"], 5000)
         self.assertNotEqual(eta["eta_ms"], 0)
 
         done = server._compute_progress_eta(
-            completed_timings=[
-                {"subject_duration_ms": 1000, "judge_duration_ms": 1000},
-            ],
+            completed_task_count=1,
             remaining_task_count=0,
             elapsed_ms=5000,
             current_step=10,
             total_steps=10,
+            history_summaries=[],
         )
         self.assertEqual(done["eta_status"], "measured")
         self.assertEqual(done["eta_ms"], 0)
@@ -334,15 +331,16 @@ class TestRunProgressSnapshot(unittest.TestCase):
         self.assertEqual(remaining, 2)
 
         eta = server._compute_progress_eta(
-            completed_timings=[standard["task_timing"]],
+            completed_task_count=1,
             remaining_task_count=remaining,
             elapsed_ms=9000,
             current_step=5,
             total_steps=12,
+            history_summaries=[],
         )
         self.assertEqual(eta["eta_status"], "measured")
         self.assertNotEqual(eta["eta_ms"], 0)
-        self.assertEqual(eta["eta_ms"], 6000)  # avg 3000 × 2
+        self.assertEqual(eta["eta_ms"], 18_000)  # 9000/1*2
 
     def test_remaining_task_count_ignores_holistic_before_phase_starts(self):
         standard = server._initial_task_progress_state("01", 0, ["judge-a"])

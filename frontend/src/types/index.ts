@@ -325,7 +325,12 @@ export interface HolisticRunProgress {
     message: string;
 }
 
-export type EtaStatus = 'measured' | 'step_fallback' | 'unavailable';
+export type EtaStatus =
+    | 'measured'
+    | 'history_blend'
+    | 'history'
+    | 'step_fallback'
+    | 'unavailable';
 
 export interface RunProgress {
     startedAtMs?: number;

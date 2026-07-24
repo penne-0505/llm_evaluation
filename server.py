@@ -38,6 +38,7 @@ from core.cost_estimator import (
 )
 from core.judge_reliability import compute_score_aggregation
 from core.logging_utils import configure_logging
+from core.progress_eta import compute_progress_eta as _compute_progress_eta_core
 from core.model_catalog import ModelCatalog
 from core.openrouter_admin import OpenRouterAdminError, fetch_credits
 from core.provider_config_store import ProviderConfigStore
@@ -510,7 +511,7 @@ def _remaining_task_count_for_eta(
 ) -> int:
     """ETA 用の残タスク数。standard lane に holistic 残件を加算する。
 
-    intent: Core-Bug-54 / DEC-002 (Core/task-duration-eta) —
+    intent: DEC-002 (Core/task-duration-eta) —
     standard 完了後も holistic 未完了なら remaining=0 の measured 0 にしない。
     snapshot の active/queued は standard-only（DEC-001 holistic-run-progress）のまま。
     """
@@ -531,47 +532,38 @@ def _remaining_task_count_for_eta(
 
 def _compute_progress_eta(
     *,
-    completed_timings: List[Dict[str, Any]],
+    completed_task_count: int,
     remaining_task_count: int,
     elapsed_ms: int,
     current_step: int,
     total_steps: int,
+    history_summaries: Optional[List[Dict[str, Any]]] = None,
+    subject_model: str = "",
+    task_count: int = 0,
+    judge_count: int = 0,
+    subject_run_count: int = 1,
+    judge_run_count: int = 1,
+    now_ms: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """同一 run 内の完了タスク実測を優先し、不足時のみ step 比率へフォールバックする。
+    """Wall-clock remaining ETA with heavy in-run pace and weak history prior.
 
-    intent: DEC-002 (Core/task-duration-eta) — 履歴平均は使わず、本 run の実測 / step のみ。
+    intent: DEC-002 (Core/task-duration-eta) — wait remaining; measured dominates;
+    history is similarity-weighted prior on SSE (not task_timing average).
     """
-    if completed_timings:
-        totals = []
-        for timing in completed_timings:
-            if not isinstance(timing, dict):
-                continue
-            subject_ms = int(timing.get("subject_duration_ms") or 0)
-            judge_ms = int(timing.get("judge_duration_ms") or 0)
-            totals.append(subject_ms + judge_ms)
-        if totals:
-            if remaining_task_count <= 0:
-                return {"eta_ms": 0, "eta_status": "measured"}
-            average_ms = sum(totals) / len(totals)
-            return {
-                "eta_ms": int(average_ms * remaining_task_count),
-                "eta_status": "measured",
-            }
-
-    # intent: DEC-002/003 — 完了 0 件のときだけ step 比率。確定値風に見せないため status を分離する。
-    if (
-        not completed_timings
-        and current_step > 0
-        and total_steps > current_step
-        and elapsed_ms > 0
-    ):
-        remaining_steps = total_steps - current_step
-        return {
-            "eta_ms": int((elapsed_ms / current_step) * remaining_steps),
-            "eta_status": "step_fallback",
-        }
-
-    return {"eta_ms": None, "eta_status": "unavailable"}
+    return _compute_progress_eta_core(
+        completed_task_count=completed_task_count,
+        remaining_task_count=remaining_task_count,
+        elapsed_ms=elapsed_ms,
+        current_step=current_step,
+        total_steps=total_steps,
+        history_summaries=history_summaries,
+        subject_model=subject_model,
+        task_count=task_count,
+        judge_count=judge_count,
+        subject_run_count=subject_run_count,
+        judge_run_count=judge_run_count,
+        now_ms=now_ms,
+    )
 
 
 def _holistic_subject_response_text(task_result: Dict[str, Any]) -> str:
@@ -1402,6 +1394,13 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 for idx, task_info in enumerate(selected)
             ]
 
+            # ETA history prior: load once per run (DEC-002 wall prior).
+            try:
+                eta_history_summaries = ResultStorage.list_summaries()
+            except Exception:
+                logger.exception("failed to load result summaries for progress ETA")
+                eta_history_summaries = []
+
             # SSE 送信用キュー（非同期コールバック → イベントストリームへ）
             progress_queue: asyncio.Queue[Optional[Dict[str, Any]]] = asyncio.Queue()
 
@@ -1418,13 +1417,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 if increment_step:
                     progress_current += 1
                 snapshot = _build_progress_snapshot(task_states)
-                completed_timings = [
-                    state["task_timing"]
-                    for state in task_states
-                    if state.get("task_kind", "standard") == "standard"
-                    and state.get("phase") == "completed"
-                    and isinstance(state.get("task_timing"), dict)
-                ]
+                completed_task_count = int(snapshot.get("completed_task_count") or 0)
                 remaining_task_count = _remaining_task_count_for_eta(
                     snapshot=snapshot,
                     task_states=task_states,
@@ -1432,11 +1425,17 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 )
                 elapsed_ms = int((time.perf_counter() - run_started_at) * 1000)
                 eta = _compute_progress_eta(
-                    completed_timings=completed_timings,
+                    completed_task_count=completed_task_count,
                     remaining_task_count=remaining_task_count,
                     elapsed_ms=elapsed_ms,
                     current_step=progress_current,
                     total_steps=total_steps,
+                    history_summaries=eta_history_summaries,
+                    subject_model=req.target_model,
+                    task_count=total_tasks,
+                    judge_count=len(judge_adapters),
+                    subject_run_count=subject_runs,
+                    judge_run_count=req.judge_runs,
                 )
                 progress_queue.put_nowait(
                     {
