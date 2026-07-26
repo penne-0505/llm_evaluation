@@ -332,7 +332,6 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - **QA**: `_docs/qa/Core/openrouter-preferred-host/test-plan.md`
 - **Verification**: `_docs/qa/Core/openrouter-preferred-host/verification.md`
 
-
 ### Core-Test-49: [Test] Live Manual QA for OpenAI judge api_reasoning UI
 
 - **Title**: [Test] Live Manual QA for OpenAI judge api_reasoning UI
@@ -421,7 +420,6 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - **Verification**: None
 
 ## In Progress
-
 
 ### Core-Feat-66: [Feat] Concurrent evaluation jobs with provider rate limits
 
