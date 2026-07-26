@@ -42,6 +42,10 @@ from core.logging_utils import configure_logging
 from core.progress_eta import compute_progress_eta as _compute_progress_eta_core
 from core.model_catalog import ModelCatalog
 from core.openrouter_admin import OpenRouterAdminError, fetch_credits
+from core.openrouter_preferred_host import (
+    OpenRouterEndpointsError,
+    fetch_model_endpoints,
+)
 from core.provider_config_store import ProviderConfigStore
 from core.provider_registry import ProviderEntry, ProviderRegistry
 from core.rate_limit_store import RateLimitStore
@@ -800,6 +804,8 @@ class RunRequest(BaseModel):
     exclude_unreliable_judges: bool = False
     subject_parallel: bool = True
     judge_parallel: bool = True
+    # intent: DEC-002 (Core/openrouter-preferred-host) — model id → host slug
+    preferred_hosts: Dict[str, str] = {}
 
     def clamped_subject_runs(self) -> int:
         return BenchmarkEngine.clamp_subject_runs(self.subject_runs)
@@ -1177,6 +1183,30 @@ def get_openrouter_credits() -> Dict[str, Any]:
     }
 
 
+@app.get("/api/openrouter/endpoints")
+def get_openrouter_endpoints(model_id: str) -> Dict[str, Any]:
+    """OpenRouter model endpoints（ホスト一覧＋指標）を返す。
+
+    intent: DEC-004 (Core/openrouter-preferred-host)
+    """
+    api_key = SecretsStore.load_provider_secret("openrouter")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="OpenRouter APIキーが設定されていません",
+        )
+    try:
+        endpoints = fetch_model_endpoints(api_key, model_id)
+    except OpenRouterEndpointsError as error:
+        logger.warning("openrouter endpoints fetch failed model=%s: %s", model_id, error)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {
+        "model_id": model_id,
+        "endpoints": endpoints,
+        "host_picker_enabled": len(endpoints) >= 2,
+    }
+
+
 # ---------------------------------------------------------------------------
 # エンドポイント: モデルカタログ
 # ---------------------------------------------------------------------------
@@ -1379,6 +1409,7 @@ async def run_benchmark(req: RunRequest) -> StreamingResponse:
                 judge_dispatch_jitter_sec=0.15,
                 judge_parallel=req.judge_parallel,
                 subject_runs=subject_runs,
+                preferred_hosts=req.preferred_hosts or {},
             )
             logger.info(
                 "run started run_id=%s target_model=%s tasks=%d judges=%d "

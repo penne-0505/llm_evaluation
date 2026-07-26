@@ -80,6 +80,10 @@ interface SettingsState {
     addFreeTextHolisticJudge: (v: string) => void;
     removeFreeTextHolisticJudge: (v: string) => void;
 
+    // intent: DEC-002 (Core/openrouter-preferred-host)
+    preferredHosts: Record<string, string>;
+    setPreferredHost: (modelId: string, hostSlug: string | null) => void;
+
     // Parameters
     evaluationMode: EvaluationMode;
     strictPreset: StrictModePreset | null;
@@ -340,6 +344,22 @@ export const useSettingsStore = create<SettingsState>()(
                 }));
             },
 
+            // intent: DEC-002 (Core/openrouter-preferred-host)
+            preferredHosts: {},
+            setPreferredHost: (modelId, hostSlug) => {
+                const id = modelId.trim();
+                if (!id) return;
+                set((s) => {
+                    const next = { ...s.preferredHosts };
+                    if (!hostSlug || !hostSlug.trim()) {
+                        delete next[id];
+                    } else {
+                        next[id] = hostSlug.trim();
+                    }
+                    return { preferredHosts: next };
+                });
+            },
+
             // --- Parameters ---
             evaluationMode: 'standard',
             strictPreset: null,
@@ -492,6 +512,7 @@ export const useSettingsStore = create<SettingsState>()(
                         freeTextJudges: state.freeTextJudges,
                         holisticJudgeModelIds: state.holisticJudgeModelIds,
                         freeTextHolisticJudges: state.freeTextHolisticJudges,
+                        preferredHosts: state.preferredHosts,
                         tasks: state.tasks,
                         selectedTaskIds: state.selectedTaskIds,
                         runHolistic: state.runHolistic,
@@ -517,6 +538,7 @@ export const useSettingsStore = create<SettingsState>()(
                     freeTextJudges: state.freeTextJudges,
                     holisticJudgeModelIds: state.holisticJudgeModelIds,
                     freeTextHolisticJudges: state.freeTextHolisticJudges,
+                    preferredHosts: state.preferredHosts,
                     tasks: state.tasks,
                     selectedTaskIds: state.selectedTaskIds,
                     runHolistic: state.runHolistic,
@@ -576,6 +598,7 @@ export const useSettingsStore = create<SettingsState>()(
                     freeTextJudges: resolved.freeTextJudges,
                     holisticJudgeModelIds: resolved.holisticJudgeModelIds,
                     freeTextHolisticJudges: resolved.freeTextHolisticJudges,
+                    preferredHosts: resolved.preferredHosts,
                     selectedTaskIds: resolved.selectedTaskIds,
                     runHolistic: resolved.runHolistic,
                     excludeUnreliableJudges: resolved.excludeUnreliableJudges,
@@ -604,6 +627,7 @@ export const useSettingsStore = create<SettingsState>()(
                 freeTextJudges: state.freeTextJudges,
                 holisticJudgeModelIds: state.holisticJudgeModelIds,
                 freeTextHolisticJudges: state.freeTextHolisticJudges,
+                preferredHosts: state.preferredHosts,
                 evaluationMode: state.evaluationMode,
                 evalParams: state.evalParams,
                 selectedTaskIds: state.selectedTaskIds,

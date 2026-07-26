@@ -559,6 +559,51 @@ class TestStrictModeApi(unittest.TestCase):
 
 
 class TestOpenRouterAdminApi(unittest.TestCase):
+    def test_openrouter_endpoints_requires_api_key(self):
+        client = TestClient(server.app)
+        with patch.object(server.SecretsStore, "load_provider_secret", return_value=None):
+            response = client.get(
+                "/api/openrouter/endpoints",
+                params={"model_id": "openrouter/anthropic/claude-sonnet-4"},
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_openrouter_endpoints_normalizes_payload(self):
+        client = TestClient(server.app)
+        with patch.object(
+            server.SecretsStore, "load_provider_secret", return_value="or-key"
+        ), patch.object(
+            server,
+            "fetch_model_endpoints",
+            return_value=[
+                {
+                    "slug": "together",
+                    "provider_name": "Together",
+                    "tps_p50": 40.0,
+                    "input_per_million": 1.0,
+                    "output_per_million": 2.0,
+                    "cache_read_per_million": None,
+                },
+                {
+                    "slug": "fireworks",
+                    "provider_name": "Fireworks",
+                    "tps_p50": 50.0,
+                    "input_per_million": 1.5,
+                    "output_per_million": 3.0,
+                    "cache_read_per_million": 0.2,
+                },
+            ],
+        ):
+            response = client.get(
+                "/api/openrouter/endpoints",
+                params={"model_id": "openrouter/anthropic/claude-sonnet-4"},
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["host_picker_enabled"])
+        self.assertEqual(len(payload["endpoints"]), 2)
+        self.assertEqual(payload["endpoints"][0]["slug"], "together")
+
     def test_openrouter_admin_status_reflects_management_key_configuration(self):
         client = TestClient(server.app)
 

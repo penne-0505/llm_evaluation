@@ -25,6 +25,7 @@ test('captureExecutionPresetConfig stores every task as a boolean selection', ()
         freeTextJudges: [],
         holisticJudgeModelIds: [],
         freeTextHolisticJudges: [],
+        preferredHosts: {},
         tasks,
         selectedTaskIds: ['02'],
         runHolistic: false,
@@ -154,6 +155,7 @@ test('capture and resolve preserve manual models when the catalog is unavailable
         freeTextJudges: ['lmstudio/manual-judge'],
         holisticJudgeModelIds: [],
         freeTextHolisticJudges: ['lmstudio/manual-holistic'],
+        preferredHosts: {},
         tasks,
         selectedTaskIds: ['01'],
         runHolistic: true,
@@ -185,6 +187,7 @@ test('capture and resolve round-trip holisticJudgeModels including empty fallbac
         freeTextJudges: [],
         holisticJudgeModelIds: ['openrouter/holistic-judge'],
         freeTextHolisticJudges: [],
+        preferredHosts: {},
         tasks,
         selectedTaskIds: ['01'],
         runHolistic: true,
@@ -217,4 +220,42 @@ test('capture and resolve round-trip holisticJudgeModels including empty fallbac
         tasks,
     );
     assert.deepEqual(legacyWithoutField.holisticJudgeModelIds, []);
+});
+
+test('capture and resolve preferredHosts including legacy missing field', () => {
+    const config = captureExecutionPresetConfig({
+        subjectModelId: 'openrouter/subject',
+        judgeModelIds: ['openrouter/judge-a'],
+        freeTextSubject: '',
+        freeTextJudges: [],
+        holisticJudgeModelIds: [],
+        freeTextHolisticJudges: [],
+        preferredHosts: { 'openrouter/subject': 'together' },
+        tasks,
+        selectedTaskIds: ['01'],
+        runHolistic: true,
+        excludeUnreliableJudges: false,
+        judgeRunCount: 3,
+        subjectRunCount: 1,
+        subjectTemperature: 0.5,
+    });
+    assert.deepEqual(config.preferredHosts, { 'openrouter/subject': 'together' });
+
+    const resolved = resolveExecutionPresetConfig(config, models, tasks);
+    assert.deepEqual(resolved.preferredHosts, { 'openrouter/subject': 'together' });
+
+    const legacy = resolveExecutionPresetConfig(
+        {
+            subjectModel: 'openrouter/subject',
+            judgeModels: ['openrouter/judge-a'],
+            holisticJudgeModels: [],
+            taskSelections: { '01': true, '02': false },
+            runHolistic: true,
+            judgeRunCount: 3,
+            subjectTemperature: 0.5,
+        },
+        models,
+        tasks,
+    );
+    assert.deepEqual(legacy.preferredHosts, {});
 });

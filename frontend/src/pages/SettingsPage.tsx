@@ -33,6 +33,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Button from '../components/Button';
+import { HostPicker } from '../components/HostPicker';
 
 type ModelPickerProps = {
     availableModels: ReturnType<typeof useSettingsStore.getState>['availableModels'];
@@ -1181,6 +1182,63 @@ function OpenRouterAdminSection() {
     );
 }
 
+
+function JudgeHostChips({
+    modelIds,
+    availableModels,
+    preferredHosts,
+    focusId,
+    onFocus,
+    onRemove,
+}: {
+    modelIds: string[];
+    availableModels: { id: string; name: string }[];
+    preferredHosts: Record<string, string>;
+    focusId: string | null;
+    onFocus: (id: string) => void;
+    onRemove: (id: string) => void;
+}) {
+    if (modelIds.length === 0) return null;
+    return (
+        <div className="flex flex-wrap gap-1.5">
+            {modelIds.map((id) => {
+                const model = availableModels.find((m) => m.id === id);
+                const label = model?.name || id;
+                const host = preferredHosts[id];
+                const focused = focusId === id;
+                return (
+                    <div
+                        key={id}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition-colors duration-150 ${
+                            focused ? 'bg-amber text-bg' : 'bg-amber-dim text-amber'
+                        }`}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => onFocus(id)}
+                            className="text-left"
+                            title="ホスト設定の対象にする"
+                        >
+                            <span>{label}</span>
+                            {host ? (
+                                <span className={`ml-1 font-mono opacity-80 ${focused ? 'text-bg/80' : ''}`}>
+                                    · {host}
+                                </span>
+                            ) : null}
+                        </button>
+                        <Button
+                            onClick={() => onRemove(id)}
+                            className={`hover:text-score-low transition-colors duration-150 ${focused ? 'text-bg/80' : ''}`}
+                        >
+                            <X size={10} />
+                        </Button>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 /* ===================== MODEL SELECTION SECTION ===================== */
 function ModelSelectionSection() {
     const {
@@ -1199,12 +1257,15 @@ function ModelSelectionSection() {
         addFreeTextJudge,
         removeFreeTextJudge,
         registryProviders,
+        preferredHosts,
+        setPreferredHost,
     } = useSettingsStore();
 
     const [judgeInput, setJudgeInput] = useState('');
     const hasCatalogModels = availableModels.length > 0;
     const [subjectOpen, setSubjectOpen] = useState(false);
     const [judgeOpen, setJudgeOpen] = useState(false);
+    const [judgeHostFocusId, setJudgeHostFocusId] = useState<string | null>(null);
     const isStrict = evaluationMode === 'strict';
 
     const judgeCount = judgeModelIds.length + freeTextJudges.length;
@@ -1216,6 +1277,28 @@ function ModelSelectionSection() {
     const judgeLabel = judgeModelIds.length > 0
         ? `${judgeModelIds.length}件選択中`
         : '';
+
+    const subjectModel = availableModels.find((m) => m.id === subjectModelId);
+    const subjectIsOpenRouter = Boolean(
+        subjectModelId?.startsWith('openrouter/') || subjectModel?.provider === 'openrouter',
+    );
+
+    const judgeHostCandidates = hasCatalogModels ? judgeModelIds : freeTextJudges;
+    const effectiveJudgeHostFocusId =
+        judgeHostFocusId && judgeHostCandidates.includes(judgeHostFocusId)
+            ? judgeHostFocusId
+            : (judgeHostCandidates[0] ?? null);
+
+    const focusedJudge = effectiveJudgeHostFocusId
+        ? availableModels.find((m) => m.id === effectiveJudgeHostFocusId)
+        : undefined;
+    const focusedJudgeIsOpenRouter = Boolean(
+        effectiveJudgeHostFocusId?.startsWith('openrouter/')
+        || focusedJudge?.provider === 'openrouter',
+    );
+    const judgeHostLabel = effectiveJudgeHostFocusId
+        ? `評価の優先ホスト（${availableModels.find((m) => m.id === effectiveJudgeHostFocusId)?.name || effectiveJudgeHostFocusId}）`
+        : '評価の優先ホスト';
 
     return (
         <section className={`relative space-y-3 animate-fade-up stagger-3 ${(subjectOpen || judgeOpen) ? 'z-50' : 'z-0'}`}>
@@ -1242,19 +1325,32 @@ function ModelSelectionSection() {
                 <div className="card p-4 space-y-2 accent-bar-amber">
                     <label className="section-label text-[9px]">被験モデル</label>
                     {hasCatalogModels ? (
-                        <ModelPicker
-                            availableModels={availableModels}
-                            registryProviders={registryProviders}
-                            open={subjectOpen}
-                            onOpenChange={setSubjectOpen}
-                            placeholder="モデルを選択"
-                            selectedLabel={subjectLabel}
-                            onSelect={(id) => {
-                                setSubjectModel(id);
-                                setSubjectOpen(false);
-                            }}
-                            isSelected={(id) => subjectModelId === id}
-                        />
+                        <>
+                            <ModelPicker
+                                availableModels={availableModels}
+                                registryProviders={registryProviders}
+                                open={subjectOpen}
+                                onOpenChange={setSubjectOpen}
+                                placeholder="モデルを選択"
+                                selectedLabel={subjectLabel}
+                                onSelect={(id) => {
+                                    setSubjectModel(id);
+                                    setSubjectOpen(false);
+                                }}
+                                isSelected={(id) => subjectModelId === id}
+                            />
+                            <HostPicker
+                                modelId={subjectModelId}
+                                isOpenRouter={subjectIsOpenRouter}
+                                selectedHostSlug={
+                                    subjectModelId ? preferredHosts[subjectModelId] ?? null : null
+                                }
+                                onSelectHost={(slug) => {
+                                    if (subjectModelId) setPreferredHost(subjectModelId, slug);
+                                }}
+                                label="被験の優先ホスト"
+                            />
+                        </>
                     ) : (
                         <div className="space-y-1.5">
                             <p className="text-[11px] text-text-tertiary">利用可能なモデル一覧がないため、手動で入力してください。LM Studio は <code>lmstudio/&lt;model-id&gt;</code> 形式です。</p>
@@ -1263,6 +1359,20 @@ function ModelSelectionSection() {
                                 onChange={(e) => setFreeTextSubject(e.target.value)}
                                 placeholder="例: gpt-4o / lmstudio/openai/gpt-oss-20b"
                                 className="w-full bg-bg border border-border rounded px-3 py-2 text-[13px] text-text-primary placeholder-text-tertiary focus:outline-none focus:border-amber/40 transition-colors duration-150"
+                            />
+                            <HostPicker
+                                modelId={freeTextSubject.trim() || null}
+                                isOpenRouter={freeTextSubject.trim().startsWith('openrouter/')}
+                                selectedHostSlug={
+                                    freeTextSubject.trim()
+                                        ? preferredHosts[freeTextSubject.trim()] ?? null
+                                        : null
+                                }
+                                onSelectHost={(slug) => {
+                                    const id = freeTextSubject.trim();
+                                    if (id) setPreferredHost(id, slug);
+                                }}
+                                label="被験の優先ホスト"
                             />
                         </div>
                     )}
@@ -1311,24 +1421,29 @@ function ModelSelectionSection() {
                                         isSelected={(id) => judgeModelIds.includes(id)}
                                         multi
                                     />
-                                    {judgeModelIds.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {judgeModelIds.map((id) => {
-                                                const model = availableModels.find((m) => m.id === id);
-                                                const label = model?.name || id;
-                                                return (
-                                                    <Button
-                                                        key={id}
-                                                        onClick={() => toggleJudgeModel(id)}
-                                                        className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber hover:text-score-low transition-colors duration-150"
-                                                    >
-                                                        <span>{label}</span>
-                                                        <X size={10} />
-                                                    </Button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
+                                    <JudgeHostChips
+                                        modelIds={judgeModelIds}
+                                        availableModels={availableModels}
+                                        preferredHosts={preferredHosts}
+                                        focusId={effectiveJudgeHostFocusId}
+                                        onFocus={setJudgeHostFocusId}
+                                        onRemove={toggleJudgeModel}
+                                    />
+                                    <HostPicker
+                                        modelId={effectiveJudgeHostFocusId}
+                                        isOpenRouter={focusedJudgeIsOpenRouter}
+                                        selectedHostSlug={
+                                            effectiveJudgeHostFocusId
+                                                ? preferredHosts[effectiveJudgeHostFocusId] ?? null
+                                                : null
+                                        }
+                                        onSelectHost={(slug) => {
+                                            if (effectiveJudgeHostFocusId) {
+                                                setPreferredHost(effectiveJudgeHostFocusId, slug);
+                                            }
+                                        }}
+                                        label={judgeHostLabel}
+                                    />
                                 </>
                             ) : (
                                 <p className="text-[11px] text-text-tertiary">
@@ -1349,24 +1464,29 @@ function ModelSelectionSection() {
                                 isSelected={(id) => judgeModelIds.includes(id)}
                                 multi
                             />
-                            {judgeModelIds.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    {judgeModelIds.map((id) => {
-                                        const model = availableModels.find((m) => m.id === id);
-                                        const label = model?.name || id;
-                                        return (
-                                            <Button
-                                                key={id}
-                                                onClick={() => toggleJudgeModel(id)}
-                                                className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber hover:text-score-low transition-colors duration-150"
-                                            >
-                                                <span>{label}</span>
-                                                <X size={10} />
-                                            </Button>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                            <JudgeHostChips
+                                modelIds={judgeModelIds}
+                                availableModels={availableModels}
+                                preferredHosts={preferredHosts}
+                                focusId={effectiveJudgeHostFocusId}
+                                onFocus={setJudgeHostFocusId}
+                                onRemove={toggleJudgeModel}
+                            />
+                            <HostPicker
+                                modelId={effectiveJudgeHostFocusId}
+                                isOpenRouter={focusedJudgeIsOpenRouter}
+                                selectedHostSlug={
+                                    effectiveJudgeHostFocusId
+                                        ? preferredHosts[effectiveJudgeHostFocusId] ?? null
+                                        : null
+                                }
+                                onSelectHost={(slug) => {
+                                    if (effectiveJudgeHostFocusId) {
+                                        setPreferredHost(effectiveJudgeHostFocusId, slug);
+                                    }
+                                }}
+                                label={judgeHostLabel}
+                            />
                         </div>
                     ) : (
                         <div className="space-y-1.5">
@@ -1387,15 +1507,30 @@ function ModelSelectionSection() {
                                 </Button>
                             </div>
                             {freeTextJudges.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mt-1">
-                                    {freeTextJudges.map((j) => (
-                                        <span key={j} className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber">
-                                            {j}
-                                            <Button onClick={() => removeFreeTextJudge(j)} className="hover:text-score-low"><X size={10} /></Button>
-                                        </span>
-                                    ))}
-                                </div>
+                                <JudgeHostChips
+                                    modelIds={freeTextJudges}
+                                    availableModels={freeTextJudges.map((id) => ({ id, name: id }))}
+                                    preferredHosts={preferredHosts}
+                                    focusId={effectiveJudgeHostFocusId}
+                                    onFocus={setJudgeHostFocusId}
+                                    onRemove={removeFreeTextJudge}
+                                />
                             )}
+                            <HostPicker
+                                modelId={effectiveJudgeHostFocusId}
+                                isOpenRouter={Boolean(effectiveJudgeHostFocusId?.startsWith('openrouter/'))}
+                                selectedHostSlug={
+                                    effectiveJudgeHostFocusId
+                                        ? preferredHosts[effectiveJudgeHostFocusId] ?? null
+                                        : null
+                                }
+                                onSelectHost={(slug) => {
+                                    if (effectiveJudgeHostFocusId) {
+                                        setPreferredHost(effectiveJudgeHostFocusId, slug);
+                                    }
+                                }}
+                                label={judgeHostLabel}
+                            />
                         </div>
                     )}
                 </div>
@@ -1416,14 +1551,36 @@ function HolisticSection() {
         addFreeTextHolisticJudge,
         removeFreeTextHolisticJudge,
         registryProviders,
+        preferredHosts,
+        setPreferredHost,
     } = useSettingsStore();
     const [holisticJudgeOpen, setHolisticJudgeOpen] = useState(false);
     const [holisticJudgeInput, setHolisticJudgeInput] = useState('');
+    const [holisticHostFocusId, setHolisticHostFocusId] = useState<string | null>(null);
     const hasCatalogModels = availableModels.length > 0;
     const holisticJudgeCount = holisticJudgeModelIds.length + freeTextHolisticJudges.length;
     const holisticJudgeLabel = holisticJudgeModelIds.length > 0
         ? `${holisticJudgeModelIds.length}件選択中`
         : '';
+
+    const holisticHostCandidates = hasCatalogModels
+        ? holisticJudgeModelIds
+        : freeTextHolisticJudges;
+    const effectiveHolisticHostFocusId =
+        holisticHostFocusId && holisticHostCandidates.includes(holisticHostFocusId)
+            ? holisticHostFocusId
+            : (holisticHostCandidates[0] ?? null);
+
+    const focusedHolistic = effectiveHolisticHostFocusId
+        ? availableModels.find((m) => m.id === effectiveHolisticHostFocusId)
+        : undefined;
+    const focusedHolisticIsOpenRouter = Boolean(
+        effectiveHolisticHostFocusId?.startsWith('openrouter/')
+        || focusedHolistic?.provider === 'openrouter',
+    );
+    const holisticHostLabel = effectiveHolisticHostFocusId
+        ? `包括の優先ホスト（${availableModels.find((m) => m.id === effectiveHolisticHostFocusId)?.name || effectiveHolisticHostFocusId}）`
+        : '包括の優先ホスト';
 
     return (
         <section className={`space-y-3 animate-fade-up stagger-5 relative ${holisticJudgeOpen ? 'z-50' : 'z-0'}`}>
@@ -1467,24 +1624,29 @@ function HolisticSection() {
                                 isSelected={(id) => holisticJudgeModelIds.includes(id)}
                                 multi
                             />
-                            {holisticJudgeModelIds.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    {holisticJudgeModelIds.map((id) => {
-                                        const model = availableModels.find((m) => m.id === id);
-                                        const label = model?.name || id;
-                                        return (
-                                            <Button
-                                                key={id}
-                                                onClick={() => toggleHolisticJudgeModel(id)}
-                                                className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber hover:text-score-low transition-colors duration-150"
-                                            >
-                                                <span>{label}</span>
-                                                <X size={10} />
-                                            </Button>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                            <JudgeHostChips
+                                modelIds={holisticJudgeModelIds}
+                                availableModels={availableModels}
+                                preferredHosts={preferredHosts}
+                                focusId={effectiveHolisticHostFocusId}
+                                onFocus={setHolisticHostFocusId}
+                                onRemove={toggleHolisticJudgeModel}
+                            />
+                            <HostPicker
+                                modelId={effectiveHolisticHostFocusId}
+                                isOpenRouter={focusedHolisticIsOpenRouter}
+                                selectedHostSlug={
+                                    effectiveHolisticHostFocusId
+                                        ? preferredHosts[effectiveHolisticHostFocusId] ?? null
+                                        : null
+                                }
+                                onSelectHost={(slug) => {
+                                    if (effectiveHolisticHostFocusId) {
+                                        setPreferredHost(effectiveHolisticHostFocusId, slug);
+                                    }
+                                }}
+                                label={holisticHostLabel}
+                            />
                         </div>
                     ) : (
                         <div className="space-y-1.5">
@@ -1512,15 +1674,30 @@ function HolisticSection() {
                                 </Button>
                             </div>
                             {freeTextHolisticJudges.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mt-1">
-                                    {freeTextHolisticJudges.map((j) => (
-                                        <span key={j} className="flex items-center gap-1 px-2 py-0.5 bg-amber-dim rounded text-[11px] text-amber">
-                                            {j}
-                                            <Button onClick={() => removeFreeTextHolisticJudge(j)} className="hover:text-score-low"><X size={10} /></Button>
-                                        </span>
-                                    ))}
-                                </div>
+                                <JudgeHostChips
+                                    modelIds={freeTextHolisticJudges}
+                                    availableModels={freeTextHolisticJudges.map((id) => ({ id, name: id }))}
+                                    preferredHosts={preferredHosts}
+                                    focusId={effectiveHolisticHostFocusId}
+                                    onFocus={setHolisticHostFocusId}
+                                    onRemove={removeFreeTextHolisticJudge}
+                                />
                             )}
+                            <HostPicker
+                                modelId={effectiveHolisticHostFocusId}
+                                isOpenRouter={Boolean(effectiveHolisticHostFocusId?.startsWith('openrouter/'))}
+                                selectedHostSlug={
+                                    effectiveHolisticHostFocusId
+                                        ? preferredHosts[effectiveHolisticHostFocusId] ?? null
+                                        : null
+                                }
+                                onSelectHost={(slug) => {
+                                    if (effectiveHolisticHostFocusId) {
+                                        setPreferredHost(effectiveHolisticHostFocusId, slug);
+                                    }
+                                }}
+                                label={holisticHostLabel}
+                            />
                         </div>
                     )}
                 </div>

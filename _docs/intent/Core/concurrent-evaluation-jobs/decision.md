@@ -4,7 +4,7 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-24
-updated_at: 2026-07-24
+updated_at: 2026-07-26
 references:
   - "_docs/plan/Core/concurrent-evaluation-jobs/plan.md"
   - "_docs/qa/Core/concurrent-evaluation-jobs/test-plan.md"
@@ -83,18 +83,34 @@ related_prs: []
 - **Change freedom**: 表示粒度（ジョブバナー / タスクカード）は変更できる。
 - **Why not**: 待ちを無視してキャンセル不能にすると、上限変更や誤設定時に操作不能になる。
 
+### DEC-006: active run の lifetime は内部 route component より長く保つ
+
+- **What**: active run とその進捗ストリームは、Run / Settings 等の内部 route を移動しても
+  継続する app-session resource とする。route component の unmount だけを理由に中断せず、
+  明示キャンセルまたは app session 終了時にのみ停止してよい。
+- **Why**: 設定違いの二本目を構成するには Settings へ戻る必要がある。RunPage がストリームを
+  所有すると、並列比較の通常導線そのものが先行 run を中断し、DEC-001 の目的を満たせない。
+- **Change freedom**: app shell の coordinator、外部 store、再接続可能な backend job など
+  実装方式は変更できる。内部 route 往復で active run と観測可能な進捗が失われない結果を守る。
+- **Why not**: route ごとに接続を作り直すだけでは、再接続 cursor / snapshot 契約がない現行
+  SSE で途中イベントを失うため、初版の修正にはならない。
+- **Revisit when**: backend job が SSE 接続から独立し、進捗 snapshot と再接続 cursor を正式に
+  提供するようになった時。
+
 ## Consequences / Impact
 
 - `runStore` は単一スロットからジョブ集合へ変わる。Layout の実行中インジケータも複数対応が
   必要になる。
 - adapter / engine 経路に共有リミッタが入り、単体テストで時間制御（fake clock）が要る。
 - Settings にレート制限セクションが増え、サーバ永続ファイルが増える。
+- frontend app shell が active run の接続管理とキャンセル dispatch を所有する。
 - UI-Feat-61（presence）はジョブ内 active カードに載る前提で共存する。ボード全体気候には
   しない（既存 Intent と整合）。
 
 ## Quality Implications
 
-- High risk: 同時実行 stampede、制限迂回、4 本目の拒否漏れ、1 ジョブ回帰。
+- High risk: 同時実行 stampede、制限迂回、4 本目の拒否漏れ、route 往復による先行 run 中断、
+  1 ジョブ回帰。
 - 制限遵守は決定的ユニットで窓内カウントを検証する。E2E 実 API は必須にしない。
 - Manual QA で 2〜3 ジョブ縦積みと個別キャンセルを確認する。
 
@@ -103,6 +119,7 @@ related_prs: []
 - INV-001 (from DEC-001): 同一プロセスで同時に `running` な評価ジョブは最大 3 本である（開始時にサーバが保証）。
 - INV-002 (from DEC-003): 評価ジョブの LLM 完了呼び出しは、`provider_id` キーのプロセス共有リミッタを経由する。
 - INV-003 (from DEC-004): 設定未上書きのプロバイダには推奨デフォルト（または未知プロバイダ用の保守的既定）が適用され、制限なしの暗黙無限発行にならない。
+- INV-004 (from DEC-006): 同一 app session 内の内部 route 遷移だけでは active run の状態を終了させず、観測可能な進捗更新を停止させない。
 
 ## Rollback / Follow-ups
 

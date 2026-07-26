@@ -1,14 +1,11 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRunStore, MAX_CONCURRENT_JOBS, type RunJob } from '../store/runStore';
 import { useHistoryStore } from '../store/historyStore';
 import { getStrictModeIssues } from '../lib/strictMode';
-import { startBenchmarkSSE, type SSEConnection } from '../api/sse';
-import {
-    cancelRun as apiCancelRun,
-    fetchOpenRouterCredits,
-} from '../api/client';
+import { fetchOpenRouterCredits } from '../api/client';
+import type { RunCoordinatorActions } from '../api/runCoordinator';
 import {
     Play,
     Square,
@@ -57,23 +54,20 @@ export default function RunPage() {
         runHolistic, setRunHolistic,
         excludeUnreliableJudges, setExcludeUnreliableJudges,
         holisticJudgeModelIds, freeTextHolisticJudges,
+        preferredHosts,
         subjectParallel, setSubjectParallel,
         judgeParallel, setJudgeParallel,
     } = useSettingsStore();
     const {
         jobs,
-        startJob,
-        requestJobCancel,
-        dismissJob,
         setResult,
         canStartAnother,
         runningCount,
     } = useRunStore();
+    const { startJob, requestCancel, dismissJob } = useOutletContext<RunCoordinatorActions>();
     const { runs: historyRuns, initialize: initializeHistory } = useHistoryStore();
 
-    const sseMapRef = useRef<Map<string, SSEConnection>>(new Map());
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const cancelRequestedIdsRef = useRef<Set<string>>(new Set());
     const [nowMs, setNowMs] = useState(0);
     const [creditsConfigured, setCreditsConfigured] = useState(false);
     const [remainingCredits, setRemainingCredits] = useState<number | null>(null);
@@ -114,16 +108,6 @@ export default function RunPage() {
         && canStartAnother();
     const anyRunning = runningCount() > 0;
 
-    const cleanup = useCallback(() => {
-        if (timerRef.current) clearInterval(timerRef.current);
-        timerRef.current = null;
-        for (const conn of sseMapRef.current.values()) {
-            conn.abort();
-        }
-        sseMapRef.current.clear();
-        cancelRequestedIdsRef.current.clear();
-    }, []);
-
     const loadCredits = useCallback(async () => {
         try {
             const snapshot = await fetchOpenRouterCredits();
@@ -138,8 +122,6 @@ export default function RunPage() {
             setCreditsLoading(false);
         }
     }, []);
-
-    useEffect(() => cleanup, [cleanup]);
 
     useEffect(() => {
         void loadCredits();
@@ -207,49 +189,36 @@ export default function RunPage() {
 
     const handleStart = () => {
         if (!canStartAnother()) return;
-        const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const targetModel = subjectModel?.id || freeTextSubject;
-        startJob(jobId, targetModel, totalSteps);
 
-        const conn = startBenchmarkSSE({
-            targetModel,
-            judgeModels: effectiveJudgeIds,
-            holisticJudgeModels: effectiveHolisticJudgeIds,
-            selectedTaskIds: canonicalSelectedTaskIds,
-            judgeRuns: evalParams.judgeRunCount,
-            subjectRuns: evalParams.subjectRunCount,
-            subjectTemp: evalParams.subjectTemperature,
-            strictMode: isStrict,
-            strictPresetId: strictPreset?.id ?? null,
-            taskToolModeOverrides,
-            runHolistic: runHolistic,
-            excludeUnreliableJudges,
-            subjectParallel,
-            judgeParallel,
-        }, jobId);
-        sseMapRef.current.set(jobId, conn);
+        startJob({
+            label: targetModel,
+            totalSteps,
+            params: {
+                targetModel,
+                judgeModels: effectiveJudgeIds,
+                holisticJudgeModels: effectiveHolisticJudgeIds,
+                preferredHosts,
+                selectedTaskIds: canonicalSelectedTaskIds,
+                judgeRuns: evalParams.judgeRunCount,
+                subjectRuns: evalParams.subjectRunCount,
+                subjectTemp: evalParams.subjectTemperature,
+                strictMode: isStrict,
+                strictPresetId: strictPreset?.id ?? null,
+                taskToolModeOverrides,
+                runHolistic: runHolistic,
+                excludeUnreliableJudges,
+                subjectParallel,
+                judgeParallel,
+            },
+        });
     };
 
-    useEffect(() => {
-        for (const job of jobs) {
-            if (!job.cancelRequested || !job.runId) continue;
-            if (cancelRequestedIdsRef.current.has(job.jobId)) continue;
-            cancelRequestedIdsRef.current.add(job.jobId);
-            void apiCancelRun(job.runId).catch(() => {
-                cancelRequestedIdsRef.current.delete(job.jobId);
-            });
-        }
-    }, [jobs]);
-
     const handleJobCancel = (jobId: string) => {
-        requestJobCancel(jobId);
+        requestCancel(jobId);
     };
 
     const handleDismissJob = (jobId: string) => {
-        const conn = sseMapRef.current.get(jobId);
-        conn?.abort();
-        sseMapRef.current.delete(jobId);
-        cancelRequestedIdsRef.current.delete(jobId);
         dismissJob(jobId);
     };
 
@@ -553,6 +522,12 @@ function JobPanel({
                             </span>
                         </div>
                     </div>
+
+                    {job.errorMessage && (
+                        <p className="text-[11px] text-score-low" role="alert">
+                            {job.errorMessage}
+                        </p>
+                    )}
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <RunSummaryStat label="完了" value={String(progress.completedTaskCount)} />

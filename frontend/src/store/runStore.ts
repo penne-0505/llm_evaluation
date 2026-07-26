@@ -65,6 +65,7 @@ interface RunState {
     completeJob: (jobId: string, result: EvaluationRun, savedPath?: string) => void;
     cancelJob: (jobId: string) => void;
     requestJobCancel: (jobId: string) => void;
+    failJobCancel: (jobId: string, message: string) => void;
     setJobError: (jobId: string, message: string) => void;
     dismissJob: (jobId: string) => void;
     resetAll: () => void;
@@ -209,7 +210,19 @@ export const useRunStore = create<RunState>((set, get) => ({
 
     requestJobCancel: (jobId) =>
         set((s) => {
-            const jobs = patchJob(s.jobs, jobId, { cancelRequested: true });
+            const jobs = patchJob(s.jobs, jobId, {
+                cancelRequested: true,
+                errorMessage: null,
+            });
+            return { jobs, ...syncLegacy(jobs) };
+        }),
+
+    failJobCancel: (jobId, message) =>
+        set((s) => {
+            const jobs = patchJob(s.jobs, jobId, {
+                cancelRequested: false,
+                errorMessage: message,
+            });
             return { jobs, ...syncLegacy(jobs) };
         }),
 

@@ -9,6 +9,7 @@ interface CurrentExecutionSettings {
     freeTextJudges: string[];
     holisticJudgeModelIds: string[];
     freeTextHolisticJudges: string[];
+    preferredHosts: Record<string, string>;
     tasks: Task[];
     selectedTaskIds: string[];
     runHolistic: boolean;
@@ -25,6 +26,7 @@ export interface ResolvedExecutionPreset {
     freeTextJudges: string[];
     holisticJudgeModelIds: string[];
     freeTextHolisticJudges: string[];
+    preferredHosts: Record<string, string>;
     selectedTaskIds: string[];
     runHolistic: boolean;
     excludeUnreliableJudges: boolean;
@@ -73,6 +75,8 @@ export function captureExecutionPresetConfig(
         holisticJudgeModels: settings.holisticJudgeModelIds.length > 0
             ? [...settings.holisticJudgeModelIds]
             : [...settings.freeTextHolisticJudges],
+        // intent: DEC-002 (Core/openrouter-preferred-host)
+        preferredHosts: { ...settings.preferredHosts },
         taskSelections: Object.fromEntries(
             settings.tasks.map((task) => [task.id, selectedTaskIds.has(task.id)]),
         ),
@@ -122,6 +126,8 @@ export function resolveExecutionPresetConfig(
             ? holisticJudgeModels.filter((id) => availableModelIds.has(id))
             : [],
         freeTextHolisticJudges: hasCatalogModels ? [] : [...holisticJudgeModels],
+        // intent: DEC-002 / INV-002 (Core/openrouter-preferred-host) — missing → {}
+        preferredHosts: { ...(config.preferredHosts ?? {}) },
         selectedTaskIds: availableTasks
             .filter((task) => requestedTaskIdSet.has(task.id))
             .map((task) => task.id),

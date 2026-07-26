@@ -48,6 +48,18 @@ export interface Model {
     provider: Provider;
 }
 
+/** OpenRouter upstream host for a model endpoint. */
+export interface OpenRouterHostEndpoint {
+    slug: string;
+    providerName: string;
+    quantization?: string | null;
+    status?: number | null;
+    tpsP50: number | null;
+    inputPerMillion: number | null;
+    outputPerMillion: number | null;
+    cacheReadPerMillion: number | null;
+}
+
 // === Tasks ===
 export type TaskType = 'fact' | 'creative' | 'speculative' | 'holistic';
 
@@ -92,6 +104,8 @@ export interface ExecutionPresetConfig {
     judgeModels: string[];
     /** Empty means fallback to judgeModels for holistic evaluation. */
     holisticJudgeModels: string[];
+    /** OpenRouter model id → preferred host slug. Omitted on legacy presets. */
+    preferredHosts?: Record<string, string>;
     taskSelections: Record<string, boolean>;
     runHolistic: boolean;
     /** Exclude unreliable judge lineages from hero average; default false on legacy. */

@@ -20,6 +20,7 @@ import type { ActiveRunTask, EtaStatus } from '../types';
 
 export interface SSEConnection {
     abort: () => void;
+    done: Promise<void>;
 }
 
 /**
@@ -30,7 +31,7 @@ export function startBenchmarkSSE(params: RunParams, jobId: string): SSEConnecti
     const controller = new AbortController();
     const startTime = Date.now();
 
-    (async () => {
+    const done = (async () => {
         try {
             const res = await fetch('/api/run', {
                 method: 'POST',
@@ -87,6 +88,14 @@ export function startBenchmarkSSE(params: RunParams, jobId: string): SSEConnecti
                     }
                 }
             }
+
+            const job = useRunStore.getState().jobs.find((candidate) => candidate.jobId === jobId);
+            if (job?.status === 'running') {
+                useRunStore.getState().setJobError(
+                    jobId,
+                    '進捗接続が完了通知なしで終了しました',
+                );
+            }
         } catch (err: unknown) {
             if (err instanceof DOMException && err.name === 'AbortError') {
                 return;
@@ -98,7 +107,7 @@ export function startBenchmarkSSE(params: RunParams, jobId: string): SSEConnecti
         }
     })();
 
-    return { abort: () => controller.abort() };
+    return { abort: () => controller.abort(), done };
 }
 
 function handleSSEEvent(

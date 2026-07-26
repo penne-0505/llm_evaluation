@@ -221,6 +221,33 @@ test('convertBenchmarkResult maps holistic_judge_models separately from judge_mo
     ]);
 });
 
+test('buildRunRequestBody includes preferred_hosts map', () => {
+    const body = JSON.parse(
+        buildRunRequestBody({
+            targetModel: 'openrouter/subject',
+            judgeModels: ['openrouter/judge-a'],
+            preferredHosts: { 'openrouter/subject': 'together' },
+            selectedTaskIds: ['01'],
+            judgeRuns: 3,
+            subjectTemp: 0.6,
+            strictMode: false,
+        }),
+    );
+    assert.deepEqual(body.preferred_hosts, { 'openrouter/subject': 'together' });
+
+    const legacy = JSON.parse(
+        buildRunRequestBody({
+            targetModel: 'openrouter/subject',
+            judgeModels: ['openrouter/judge-a'],
+            selectedTaskIds: ['01'],
+            judgeRuns: 3,
+            subjectTemp: 0.6,
+            strictMode: false,
+        }),
+    );
+    assert.deepEqual(legacy.preferred_hosts, {});
+});
+
 test('buildRunRequestBody includes holistic_judge_models for three patterns', () => {
     const standardOnly = JSON.parse(
         buildRunRequestBody({

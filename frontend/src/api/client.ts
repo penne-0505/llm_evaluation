@@ -891,6 +891,8 @@ export interface RunParams {
     judgeModels: string[];
     /** Empty / omitted → backend falls back to judgeModels for holistic. */
     holisticJudgeModels?: string[];
+    /** OpenRouter model id → preferred host slug. */
+    preferredHosts?: Record<string, string>;
     selectedTaskIds: string[];
     judgeRuns: number;
     subjectRuns?: number;
@@ -911,6 +913,8 @@ export function buildRunRequestBody(params: RunParams): string {
         judge_models: params.judgeModels,
         // intent: DEC-001 (Core/holistic-judge-model) — optional; empty = fallback
         holistic_judge_models: params.holisticJudgeModels ?? [],
+        // intent: DEC-002 (Core/openrouter-preferred-host)
+        preferred_hosts: params.preferredHosts ?? {},
         selected_task_ids: params.selectedTaskIds,
         judge_runs: params.judgeRuns,
         subject_runs: params.subjectRuns ?? 1,
@@ -931,6 +935,45 @@ export async function cancelRun(runId: string): Promise<void> {
     await apiFetch<{ status: string }>(`/run/cancel?run_id=${encodeURIComponent(runId)}`, {
         method: 'POST',
     });
+}
+
+export interface OpenRouterEndpointsResponse {
+    modelId: string;
+    endpoints: import('../types').OpenRouterHostEndpoint[];
+    hostPickerEnabled: boolean;
+}
+
+export async function fetchOpenRouterEndpoints(
+    modelId: string,
+): Promise<OpenRouterEndpointsResponse> {
+    const raw = await apiFetch<{
+        model_id: string;
+        endpoints: Array<{
+            slug: string;
+            provider_name: string;
+            quantization?: string | null;
+            status?: number | null;
+            tps_p50: number | null;
+            input_per_million: number | null;
+            output_per_million: number | null;
+            cache_read_per_million: number | null;
+        }>;
+        host_picker_enabled: boolean;
+    }>(`/openrouter/endpoints?model_id=${encodeURIComponent(modelId)}`);
+    return {
+        modelId: raw.model_id,
+        hostPickerEnabled: raw.host_picker_enabled,
+        endpoints: (raw.endpoints || []).map((ep) => ({
+            slug: ep.slug,
+            providerName: ep.provider_name,
+            quantization: ep.quantization,
+            status: ep.status,
+            tpsP50: ep.tps_p50,
+            inputPerMillion: ep.input_per_million,
+            outputPerMillion: ep.output_per_million,
+            cacheReadPerMillion: ep.cache_read_per_million,
+        })),
+    };
 }
 
 export interface RateLimitProviderConfig {

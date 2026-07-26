@@ -3,7 +3,7 @@ title: "Plan: Concurrent evaluation jobs with provider rate limits"
 status: active
 draft_status: n/a
 created_at: 2026-07-24
-updated_at: 2026-07-24
+updated_at: 2026-07-26
 references:
   - "_docs/intent/Core/concurrent-evaluation-jobs/decision.md"
   - "_docs/qa/Core/concurrent-evaluation-jobs/test-plan.md"
@@ -28,6 +28,7 @@ Settings で編集でき、プロバイダごとの推奨デフォルトを内�
 - プロセス全体共有のプロバイダ別レート制限（adapter 呼び出し直前で待機）。
 - 制限設定の永続化 API と Settings UI（推奨デフォルト + 上書き）。
 - フロントの multi-job store / Run 画面のジョブ縦積み（各ジョブが現行進行ボードを内包）。
+- Settings / Run 等の内部 route 往復から独立した active run / SSE lifecycle。
 - ジョブ単位のキャンセル・完了導線・上限到達時の開始拒否。
 - 既存 1 本実行・SSE 契約・結果保存の後方互換（単一ジョブ時は現行体験を維持）。
 
@@ -49,6 +50,8 @@ Settings で編集でき、プロバイダごとの推奨デフォルトを内�
     発行しない。
   - AC-004: Settings でプロバイダごとに制限を編集・保存でき、未設定時は推奨デフォルト。
   - AC-005: ジョブ 1 本のみのとき、進行ボード体験は現行と同等（回帰なし）。
+  - AC-006: active run 中に内部 route へ移動しても run / SSE が中断されず、Run 画面へ戻ると
+    継続した進捗を確認できる。
 - **Non-Functional**
   - レート待ちはキャンセル可能である。
   - 制限設定はサーバ側に永続化し、実際の発行制御と一致する。
@@ -63,13 +66,16 @@ Settings で編集でき、プロバイダごとの推奨デフォルトを内�
 5. frontend multi-job store と Run 画面のジョブ縦積み UI を実装する。
 6. Settings にプロバイダ別レート制限編集 UI を追加する。
 7. unit / API / frontend テストと Manual QA を行い verification を残す。
+8. app shell が run / SSE lifecycle を所有し、route component の unmount では abort しない構造へ修正する。
+9. fake SSE と Browser で Run → Settings → Run の進捗継続を回帰検証する。
 
 ## QA Plan
 
 - Risk: High（同時実行・共有レート制限・コスト stampede・UI 構造変更）。
 - High-risk Checklist と Test Matrix は
   `_docs/qa/Core/concurrent-evaluation-jobs/test-plan.md` に記載する。
-- 1 ジョブ回帰、3 ジョブ同時、4 本目拒否、同一プロバイダ共有待ち、Settings 永続化を必須にする。
+- 1 ジョブ回帰、3 ジョブ同時、4 本目拒否、同一プロバイダ共有待ち、Settings 永続化、
+  active run 中の route 往復を必須にする。
 
 ## Deployment / Rollout
 

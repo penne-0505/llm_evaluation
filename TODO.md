@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 67` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 69` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -306,6 +306,33 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## Backlog
 
+### Core-Test-68: [Test] OpenRouter preferred host Manual QA
+
+- **Title**: [Test] OpenRouter preferred host Manual QA
+- **ID**: Core-Test-68
+- **Priority**: P3
+- **Size**: S
+- **Risk**: Medium
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: Settings のホストピッカー（enabled/disabled・チップ切替・プリセット）と優先ホスト付き短 run を実 OpenRouter で確認する。
+- **Acceptance Criteria**:
+  - AC-001: endpoints ≥ 2 でホストピッカーが enabled、1 以下で disabled（枠は残る）。
+  - AC-002: judge チップ切替で共有ピッカーの編集対象が変わり、プリセット保存・読込で preferredHosts が戻る。
+  - AC-003: 優先ホスト指定の短 run が完走する（または失敗時に unrestricted フォールバックが観測できる）。
+- **Steps**:
+  1. [ ] Settings で複数ホストモデルを選び UI を確認する
+  2. [ ] プリセット往復を確認する
+  3. [ ] 短 run を実行する
+- **Description**:
+  - Context: Core-Feat-67 verification PARTIAL の deferred Manual QA。
+  - Notes: `_docs/qa/Core/openrouter-preferred-host/verification.md`
+- **Plan**: None
+- **Intent**: `_docs/intent/Core/openrouter-preferred-host/decision.md`
+- **QA**: `_docs/qa/Core/openrouter-preferred-host/test-plan.md`
+- **Verification**: `_docs/qa/Core/openrouter-preferred-host/verification.md`
+
+
 ### Core-Test-49: [Test] Live Manual QA for OpenAI judge api_reasoning UI
 
 - **Title**: [Test] Live Manual QA for OpenAI judge api_reasoning UI
@@ -395,6 +422,7 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## In Progress
 
+
 ### Core-Feat-66: [Feat] Concurrent evaluation jobs with provider rate limits
 
 - **Title**: [Feat] Concurrent evaluation jobs with provider rate limits
@@ -411,15 +439,18 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
   - AC-003: 全ジョブの LLM 呼び出しがプロバイダ別レート制限を共有し、窓内上限を超えて発行しない。
   - AC-004: Settings でプロバイダごとに制限を編集・保存でき、未設定時は推奨デフォルトが効く。
   - AC-005: ジョブ 1 本のみのとき、進行ボード体験は現行と同等である。
+  - AC-006: active run 中に Settings 等の内部 route へ移動しても run / SSE が中断されず、Run 画面へ戻ると継続した進捗を確認できる。
 - **Steps**:
   1. [x] Plan / Intent / QA を確認する
   2. [x] 共有 ProviderRateLimiter と設定ストア / API を実装する
   3. [x] active run registry（上限 3）を `/run` に接続する
   4. [x] multi-job store とジョブ縦積み UI、Settings 編集 UI を実装する
   5. [x] Test Matrix に従い検証し verification を残す（Verdict PARTIAL: Manual QA deferred）
+  6. [x] run / SSE の所有を route-local component から app shell lifecycle へ移す
+  7. [ ] route 往復の回帰テストと Manual QA を実行し verification を更新する
 - **Description**:
-  - Context: 単一 runStore 前提をやめ、同時比較用に 2〜3 ジョブ並列が欲しい。同時起動時の stampede を避けるため初版からプロバイダ単位の共有レート制限を入れる。
-  - Notes: UI-Feat-61（presence）と進行ボード表面を共有する。presence はジョブ内カード局所のまま共存。verification PARTIAL — 実 API 複数ジョブ Manual QA は deferred。
+  - Context: 単一 runStore 前提をやめ、同時比較用に 2〜3 ジョブ並列が欲しい。同時起動時の stampede を避けるため初版からプロバイダ単位の共有レート制限を入れる。設定違いの二本目を構成する通常導線で RunPage が unmount され、route-local cleanup が先行 SSE を abort する回帰が 2026-07-26 に確認された。
+  - Notes: UI-Feat-61（presence）と進行ボード表面を共有する。presence はジョブ内カード局所のまま共存。2026-07-26 に app-shell coordinator へ SSE 所有を移し、node 回帰は PASS。verification PARTIAL — Browser の route 往復確認と、実 API 複数ジョブ Manual QA が未完了。
 - **Plan**: `_docs/plan/Core/concurrent-evaluation-jobs/plan.md`
 - **Intent**: `_docs/intent/Core/concurrent-evaluation-jobs/decision.md`
 - **QA**: `_docs/qa/Core/concurrent-evaluation-jobs/test-plan.md`

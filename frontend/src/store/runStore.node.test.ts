@@ -82,3 +82,23 @@ test('allows up to MAX_CONCURRENT_JOBS running jobs and rejects more', () => {
     assert.equal(useRunStore.getState().runningCount(), MAX_CONCURRENT_JOBS - 1);
     assert.equal(useRunStore.getState().canStartAnother(), true);
 });
+
+test('failed cancellation restores a retryable running state', () => {
+    const store = useRunStore.getState();
+    store.resetAll();
+    store.startJob('job_cancel', 'cancel target', 2);
+    store.requestJobCancel('job_cancel');
+
+    assert.equal(useRunStore.getState().jobs[0]?.cancelRequested, true);
+
+    useRunStore.getState().failJobCancel('job_cancel', 'cancel failed');
+    const failed = useRunStore.getState().jobs[0];
+    assert.equal(failed?.status, 'running');
+    assert.equal(failed?.cancelRequested, false);
+    assert.equal(failed?.errorMessage, 'cancel failed');
+
+    useRunStore.getState().requestJobCancel('job_cancel');
+    const retried = useRunStore.getState().jobs[0];
+    assert.equal(retried?.cancelRequested, true);
+    assert.equal(retried?.errorMessage, null);
+});

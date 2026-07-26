@@ -12,6 +12,7 @@ from adapters import CompletionResult, LLMAdapter, LLMError
 from adapters.base import NativeToolCall, NativeToolsNotSupportedError, strip_thinking_tags
 from core.json_parser import JudgeResponseParser, ParseError
 from core.model_parameter_support import should_send_temperature
+from core.openrouter_preferred_host import iter_extra_params_attempts
 from core.provider_rate_limiter import ProviderRateLimiter
 from core.result_aggregator import ResultAggregator
 from core.tool_runtime import LocalToolRuntime, ToolCall, ToolRuntimeConfig, parse_tool_call
@@ -217,6 +218,7 @@ class BenchmarkEngine:
         judge_dispatch_jitter_sec: float = 0.15,
         judge_parallel: bool = True,
         subject_runs: int = 1,
+        preferred_hosts: Optional[Dict[str, str]] = None,
     ):
         """
         Args:
@@ -231,6 +233,7 @@ class BenchmarkEngine:
             judge_dispatch_jitter_sec: 同一judgeモデル内の投入ジッター最大値(秒)
             judge_parallel: judge評価を並列実行するか
             subject_runs: 被験LLM呼び出し回数（1–5、judge_runs とは独立）
+            preferred_hosts: OpenRouter モデル ID → 優先ホスト slug
         """
         self.subject_adapter = subject_adapter
         self.subject_model = subject_model
@@ -243,6 +246,12 @@ class BenchmarkEngine:
         self.judge_dispatch_jitter_sec = max(0.0, judge_dispatch_jitter_sec)
         # intent: DEC-002/005 (Core/subject-multi-run-judge-batch) — judge_runs と独立、上限 5
         self.subject_runs = self.clamp_subject_runs(subject_runs)
+        # intent: DEC-002 (Core/openrouter-preferred-host) — model id → host slug
+        self.preferred_hosts: Dict[str, str] = {
+            str(k): str(v).strip()
+            for k, v in (preferred_hosts or {}).items()
+            if str(k).strip() and str(v).strip()
+        }
 
     @classmethod
     def clamp_subject_runs(cls, value: int) -> int:
@@ -513,20 +522,23 @@ class BenchmarkEngine:
             if cancel_checker:
                 cancel_checker()
 
-            await self._await_provider_rate_slot(
-                self.subject_model,
-                self.subject_adapter,
+            def _invoke_native(extra: Optional[Dict[str, Any]]):
+                return self.subject_adapter.complete_with_model_native_tools(
+                    self.subject_model,
+                    messages,
+                    tools_schema,
+                    temperature,
+                    self._SUBJECT_MAX_OUTPUT_TOKENS,
+                    extra,
+                )
+
+            native_result = await self._invoke_with_preferred_host(
+                model_name=self.subject_model,
+                adapter=self.subject_adapter,
+                base_extra=extra_params,
+                invoke=_invoke_native,
                 cancel_checker=cancel_checker,
                 progress_callback=progress_callback,
-            )
-            native_result = await asyncio.to_thread(
-                self.subject_adapter.complete_with_model_native_tools,
-                self.subject_model,
-                messages,
-                tools_schema,
-                temperature,
-                self._SUBJECT_MAX_OUTPUT_TOKENS,
-                extra_params,
             )
             usage_records.append(
                 CompletionResult(text=native_result.content or "", usage=native_result.usage)
@@ -690,6 +702,61 @@ class BenchmarkEngine:
             on_waiting=_on_waiting,
         )
 
+    def _preferred_host_for(
+        self, model_name: str, adapter: LLMAdapter
+    ) -> Optional[str]:
+        if getattr(adapter, "PROVIDER", None) != "openrouter":
+            return None
+        host = self.preferred_hosts.get(model_name)
+        return host or None
+
+    async def _invoke_with_preferred_host(
+        self,
+        *,
+        model_name: str,
+        adapter: LLMAdapter,
+        base_extra: Optional[Dict[str, Any]],
+        invoke: Callable[[Optional[Dict[str, Any]]], Any],
+        cancel_checker: Optional[Callable[[], None]] = None,
+        progress_callback: Optional[Callable[[str], None]] = None,
+    ) -> Any:
+        """
+        Call invoke(extra_params) with preferred-host pin attempts then unrestricted.
+
+        intent: DEC-001 (Core/openrouter-preferred-host)
+        intent-invariant: INV-001 — pin attempts precede unrestricted.
+        """
+        preferred = self._preferred_host_for(model_name, adapter)
+        attempts = list(iter_extra_params_attempts(base_extra, preferred))
+        last_error: Optional[LLMError] = None
+        for index, extra in enumerate(attempts):
+            if cancel_checker:
+                cancel_checker()
+            await self._await_provider_rate_slot(
+                model_name,
+                adapter,
+                cancel_checker=cancel_checker,
+                progress_callback=progress_callback,
+            )
+            try:
+                return await asyncio.to_thread(invoke, extra)
+            except LLMError as error:
+                last_error = error
+                if index >= len(attempts) - 1:
+                    break
+                if preferred and index + 1 == len(attempts) - 1:
+                    logger.warning(
+                        "preferred host exhausted model=%s host=%s; falling back unrestricted",
+                        model_name,
+                        preferred,
+                    )
+                    if progress_callback:
+                        progress_callback(
+                            f"優先ホスト再試行を終え、ホスト指定なしで再試行します ({model_name})"
+                        )
+                await asyncio.sleep(2 ** min(index, 2))
+        raise last_error or LLMError("LLM呼び出しに失敗しました")
+
     async def _complete_subject_once(
         self,
         user_prompt: str,
@@ -699,23 +766,27 @@ class BenchmarkEngine:
     ) -> CompletionResult:
         if cancel_checker:
             cancel_checker()
-        await self._await_provider_rate_slot(
-            self.subject_model,
-            self.subject_adapter,
-            cancel_checker=cancel_checker,
-            progress_callback=progress_callback,
-        )
         extra_params = None
         if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
             extra_params = {"reasoning": {"effort": "high"}}
-        return await asyncio.to_thread(
-            self.subject_adapter.complete_with_model_result,
-            self.subject_model,
-            "",
-            user_prompt,
-            temperature,
-            self._SUBJECT_MAX_OUTPUT_TOKENS,
-            extra_params,
+
+        def _invoke(extra: Optional[Dict[str, Any]]) -> CompletionResult:
+            return self.subject_adapter.complete_with_model_result(
+                self.subject_model,
+                "",
+                user_prompt,
+                temperature,
+                self._SUBJECT_MAX_OUTPUT_TOKENS,
+                extra,
+            )
+
+        return await self._invoke_with_preferred_host(
+            model_name=self.subject_model,
+            adapter=self.subject_adapter,
+            base_extra=extra_params,
+            invoke=_invoke,
+            cancel_checker=cancel_checker,
+            progress_callback=progress_callback,
         )
 
     @staticmethod
@@ -1063,57 +1134,57 @@ class BenchmarkEngine:
         """
         judge呼び出し（リトライ付き）
 
-        Args:
-            adapter: judgeアダプタ
-            system_prompt: システムプロンプト
-            user_prompt: ユーザープロンプト
-            max_retries: 最大リトライ回数
-
-        Returns:
-            生成されたテキスト
-
-        Raises:
-            LLMError: 全てのリトライで失敗した場合
+        優先ホスト指定時は DEC-001 のピン留め試行＋unrestricted が主経路となり、
+        追加の max_retries はかけない（二重リトライを避ける）。
         """
-        last_error = None
+        judge_temperature: Optional[float] = 0.0
+        # intent: DEC-003 (Core/model-parameter-support) — provider は adapter 正典
+        provider = getattr(adapter, "PROVIDER", None) or "unknown"
+        if not should_send_temperature(provider, model_name, judge_temperature):
+            judge_temperature = None
+        extra_params = None
+        if adapter.is_reasoning_opt_in(model_name):
+            extra_params = {"reasoning": {"effort": "high"}}
 
+        preferred = self._preferred_host_for(model_name, adapter)
+
+        def _invoke(extra: Optional[Dict[str, Any]]) -> CompletionResult:
+            return adapter.complete_with_model_result(
+                model_name,
+                system_prompt,
+                user_prompt,
+                judge_temperature,
+                self._JUDGE_MAX_OUTPUT_TOKENS,
+                extra,
+            )
+
+        if preferred:
+            return await self._invoke_with_preferred_host(
+                model_name=model_name,
+                adapter=adapter,
+                base_extra=extra_params,
+                invoke=_invoke,
+                cancel_checker=cancel_checker,
+                progress_callback=progress_callback,
+            )
+
+        last_error = None
         for attempt in range(max_retries + 1):
             if cancel_checker:
                 cancel_checker()
             try:
-                judge_temperature: Optional[float] = 0.0
-                # intent: DEC-003 (Core/model-parameter-support) — provider は adapter 正典
-                provider = getattr(adapter, "PROVIDER", None) or "unknown"
-                if not should_send_temperature(
-                    provider, model_name, judge_temperature
-                ):
-                    judge_temperature = None
-                extra_params = None
-                if adapter.is_reasoning_opt_in(model_name):
-                    extra_params = {"reasoning": {"effort": "high"}}
                 await self._await_provider_rate_slot(
                     model_name,
                     adapter,
                     cancel_checker=cancel_checker,
                     progress_callback=progress_callback,
                 )
-                response = await asyncio.to_thread(
-                    adapter.complete_with_model_result,
-                    model_name,
-                    system_prompt,
-                    user_prompt,
-                    judge_temperature,
-                    self._JUDGE_MAX_OUTPUT_TOKENS,
-                    extra_params,
-                )
-                return response
-
+                return await asyncio.to_thread(_invoke, extra_params)
             except LLMError as e:
                 last_error = e
                 if attempt < max_retries:
                     if cancel_checker:
                         cancel_checker()
-                    # 指数バックオフ
                     await asyncio.sleep(2**attempt)
 
         raise last_error or LLMError("judge呼び出しに失敗しました")

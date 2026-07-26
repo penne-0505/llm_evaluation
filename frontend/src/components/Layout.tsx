@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
 import { Settings, Play, BarChart3, LayoutDashboard } from 'lucide-react';
 import { useRunStore, MAX_CONCURRENT_JOBS } from '../store/runStore';
+import { cancelRun as apiCancelRun } from '../api/client';
+import { startBenchmarkSSE } from '../api/sse';
+import {
+    RunConnectionRegistry,
+    type RunCoordinatorActions,
+    type StartRunJobRequest,
+} from '../api/runCoordinator';
 
 const NAV_ITEMS = [
     { to: '/settings', label: '設定', icon: Settings },
@@ -17,6 +24,8 @@ export default function Layout() {
     const primary = runningJobs[0] ?? null;
     const progress = primary?.progress ?? null;
     const runId = primary?.runId ?? null;
+    const [connectionRegistry] = useState(() => new RunConnectionRegistry());
+    const cancelRequestedIdsRef = useRef<Set<string>>(new Set());
     const [liveElapsedMs, setLiveElapsedMs] = useState(progress?.elapsedMs ?? 0);
     const isRunning = runningJobs.length > 0;
     const showRunIndicator = isRunning && location.pathname !== '/run';
@@ -40,6 +49,59 @@ export default function Layout() {
             window.clearInterval(timer);
         };
     }, [isRunning, startedAtMs, primary?.jobId]);
+
+    const startJob = useCallback((request: StartRunJobRequest): string | null => {
+        const store = useRunStore.getState();
+        if (!store.canStartAnother()) return null;
+
+        const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        store.startJob(jobId, request.label, request.totalSteps);
+        connectionRegistry.track(
+            jobId,
+            startBenchmarkSSE(request.params, jobId),
+        );
+        return jobId;
+    }, [connectionRegistry]);
+
+    const requestCancel = useCallback((jobId: string) => {
+        useRunStore.getState().requestJobCancel(jobId);
+    }, []);
+
+    const dismissJob = useCallback((jobId: string) => {
+        connectionRegistry.abort(jobId);
+        cancelRequestedIdsRef.current.delete(jobId);
+        useRunStore.getState().dismissJob(jobId);
+    }, [connectionRegistry]);
+
+    useEffect(() => {
+        for (const job of jobs) {
+            if (!job.cancelRequested || !job.runId) continue;
+            if (cancelRequestedIdsRef.current.has(job.jobId)) continue;
+            cancelRequestedIdsRef.current.add(job.jobId);
+            void apiCancelRun(job.runId).catch((error: unknown) => {
+                cancelRequestedIdsRef.current.delete(job.jobId);
+                useRunStore.getState().failJobCancel(
+                    job.jobId,
+                    error instanceof Error
+                        ? `キャンセル要求に失敗しました: ${error.message}`
+                        : 'キャンセル要求に失敗しました',
+                );
+            });
+        }
+    }, [jobs]);
+
+    useEffect(() => () => {
+        // intent-invariant: INV-004 (Core/concurrent-evaluation-jobs) —
+        // nested route changes retain Layout; only app-shell teardown aborts active streams.
+        connectionRegistry.abortAll();
+        cancelRequestedIdsRef.current.clear();
+    }, [connectionRegistry]);
+
+    const runCoordinator = useMemo<RunCoordinatorActions>(() => ({
+        startJob,
+        requestCancel,
+        dismissJob,
+    }), [dismissJob, requestCancel, startJob]);
 
     return (
         <div className="flex h-screen overflow-hidden">
@@ -113,7 +175,7 @@ export default function Layout() {
                     </div>
                 )}
                 <div className="max-w-[1120px] mx-auto px-8 py-8">
-                    <Outlet />
+                    <Outlet context={runCoordinator} />
                 </div>
             </main>
         </div>
