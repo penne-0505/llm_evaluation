@@ -100,7 +100,6 @@ export interface StrictModePreset {
 }
 
 export interface ExecutionPresetConfig {
-    subjectModel: string | null;
     judgeModels: string[];
     /** Empty means fallback to judgeModels for holistic evaluation. */
     holisticJudgeModels: string[];
@@ -119,10 +118,13 @@ export interface ExecutionPresetConfig {
 export interface ExecutionPreset {
     id: string;
     name: string;
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
     createdAt: string;
     updatedAt: string;
-    config: ExecutionPresetConfig;
+    config: ExecutionPresetConfig & {
+        /** Legacy schema v1 only. Ignored when loading. */
+        subjectModel?: string | null;
+    };
 }
 
 // === Scores ===

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
     captureExecutionPresetConfig,
+    mergeExecutionPresetPreferredHosts,
     resolveExecutionPresetConfig,
 } from './executionPresets.ts';
 import type { Model, Task } from '../types/index.ts';
@@ -17,11 +18,9 @@ const tasks: Task[] = [
     { id: '02', type: 'creative', promptPreview: 'task 02' },
 ];
 
-test('captureExecutionPresetConfig stores every task as a boolean selection', () => {
+test('AC-001 / INV-003 capture excludes subject identity and stores every task selection', () => {
     const config = captureExecutionPresetConfig({
-        subjectModelId: 'openrouter/subject',
         judgeModelIds: ['openrouter/judge-a'],
-        freeTextSubject: '',
         freeTextJudges: [],
         holisticJudgeModelIds: [],
         freeTextHolisticJudges: [],
@@ -36,7 +35,7 @@ test('captureExecutionPresetConfig stores every task as a boolean selection', ()
     });
 
     assert.deepEqual(config.taskSelections, { '01': false, '02': true });
-    assert.equal(config.subjectModel, 'openrouter/subject');
+    assert.equal(Object.hasOwn(config, 'subjectModel'), false);
     assert.deepEqual(config.judgeModels, ['openrouter/judge-a']);
     assert.deepEqual(config.holisticJudgeModels, []);
     assert.equal(config.runHolistic, false);
@@ -80,7 +79,7 @@ test('resolveExecutionPresetConfig clamps subjectRunCount and defaults legacy pr
     assert.equal(legacy.excludeUnreliableJudges, false);
 });
 
-test('resolveExecutionPresetConfig silently filters unavailable models and tasks', () => {
+test('AC-003/005 legacy subject is ignored while unavailable judges and tasks are filtered', () => {
     const resolved = resolveExecutionPresetConfig(
         {
             subjectModel: 'openrouter/missing-subject',
@@ -97,14 +96,11 @@ test('resolveExecutionPresetConfig silently filters unavailable models and tasks
         tasks,
     );
 
-    assert.equal(resolved.subjectModelId, null);
     assert.deepEqual(resolved.judgeModelIds, ['openrouter/judge-a']);
     assert.deepEqual(resolved.holisticJudgeModelIds, []);
-    assert.equal(resolved.freeTextSubject, '');
     assert.deepEqual(resolved.freeTextJudges, []);
     assert.deepEqual(resolved.selectedTaskIds, ['01']);
     assert.deepEqual(resolved.missingModelIds, [
-        'openrouter/missing-subject',
         'openrouter/missing-judge',
         'openrouter/missing-holistic',
     ]);
@@ -147,11 +143,9 @@ test('resolveExecutionPresetConfig restores selected tasks in the available task
     assert.deepEqual(resolved.missingTaskIds, ['99']);
 });
 
-test('capture and resolve preserve manual models when the catalog is unavailable', () => {
+test('AC-004 capture and resolve preserve manual judge models when the catalog is unavailable', () => {
     const config = captureExecutionPresetConfig({
-        subjectModelId: null,
         judgeModelIds: [],
-        freeTextSubject: 'lmstudio/manual-subject',
         freeTextJudges: ['lmstudio/manual-judge'],
         holisticJudgeModelIds: [],
         freeTextHolisticJudges: ['lmstudio/manual-holistic'],
@@ -166,9 +160,7 @@ test('capture and resolve preserve manual models when the catalog is unavailable
     });
     const resolved = resolveExecutionPresetConfig(config, [], tasks);
 
-    assert.equal(resolved.subjectModelId, null);
     assert.deepEqual(resolved.judgeModelIds, []);
-    assert.equal(resolved.freeTextSubject, 'lmstudio/manual-subject');
     assert.deepEqual(resolved.freeTextJudges, ['lmstudio/manual-judge']);
     assert.deepEqual(resolved.freeTextHolisticJudges, ['lmstudio/manual-holistic']);
     assert.deepEqual(resolved.missingModelIds, []);
@@ -181,9 +173,7 @@ test('capture and resolve round-trip holisticJudgeModels including empty fallbac
     ];
 
     const withOverride = captureExecutionPresetConfig({
-        subjectModelId: 'openrouter/subject',
         judgeModelIds: ['openrouter/judge-a'],
-        freeTextSubject: '',
         freeTextJudges: [],
         holisticJudgeModelIds: ['openrouter/holistic-judge'],
         freeTextHolisticJudges: [],
@@ -222,15 +212,16 @@ test('capture and resolve round-trip holisticJudgeModels including empty fallbac
     assert.deepEqual(legacyWithoutField.holisticJudgeModelIds, []);
 });
 
-test('capture and resolve preferredHosts including legacy missing field', () => {
+test('AC-001/004 preferredHosts keep judge routes and exclude subject-only routes', () => {
     const config = captureExecutionPresetConfig({
-        subjectModelId: 'openrouter/subject',
         judgeModelIds: ['openrouter/judge-a'],
-        freeTextSubject: '',
         freeTextJudges: [],
         holisticJudgeModelIds: [],
         freeTextHolisticJudges: [],
-        preferredHosts: { 'openrouter/subject': 'together' },
+        preferredHosts: {
+            'openrouter/subject': 'together',
+            'openrouter/judge-a': 'deepinfra',
+        },
         tasks,
         selectedTaskIds: ['01'],
         runHolistic: true,
@@ -239,10 +230,10 @@ test('capture and resolve preferredHosts including legacy missing field', () => 
         subjectRunCount: 1,
         subjectTemperature: 0.5,
     });
-    assert.deepEqual(config.preferredHosts, { 'openrouter/subject': 'together' });
+    assert.deepEqual(config.preferredHosts, { 'openrouter/judge-a': 'deepinfra' });
 
     const resolved = resolveExecutionPresetConfig(config, models, tasks);
-    assert.deepEqual(resolved.preferredHosts, { 'openrouter/subject': 'together' });
+    assert.deepEqual(resolved.preferredHosts, { 'openrouter/judge-a': 'deepinfra' });
 
     const legacy = resolveExecutionPresetConfig(
         {
@@ -258,4 +249,21 @@ test('capture and resolve preferredHosts including legacy missing field', () => 
         tasks,
     );
     assert.deepEqual(legacy.preferredHosts, {});
+});
+
+test('INV-003 preset host merge preserves the current subject-only host', () => {
+    assert.deepEqual(
+        mergeExecutionPresetPreferredHosts(
+            {
+                'openrouter/subject': 'together',
+                'openrouter/old-judge': 'old-host',
+            },
+            'openrouter/subject',
+            { 'openrouter/judge-a': 'deepinfra' },
+        ),
+        {
+            'openrouter/subject': 'together',
+            'openrouter/judge-a': 'deepinfra',
+        },
+    );
 });

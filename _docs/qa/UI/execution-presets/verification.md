@@ -6,8 +6,9 @@ qa_status: verified
 risk: Medium
 qa_schema: 2
 created_at: 2026-07-22
-updated_at: 2026-07-22
+updated_at: 2026-07-26
 references:
+  - "_docs/archives/plan/UI/execution-presets/plan.md"
   - "_docs/intent/UI/execution-presets/decision.md"
   - "_docs/reference/UI/execution-presets.md"
   - "_docs/qa/UI/execution-presets/test-plan.md"
@@ -19,9 +20,10 @@ related_prs: []
 
 ## Summary
 
-localStorage実行プリセットのschema、欠損filter、manual model復元、Settings CRUD、
-reload後永続、desktop表示、console状態を検証した。追加で、integer-like task IDを
-含むプリセットが現在のtask catalog順で復元され、欠損task検出を維持することを検証した。
+実行プリセットをschema v2へ更新し、被験モデルのidentityと被験モデル専用hostを
+保存・適用対象から外した。schema v1はlegacy `subjectModel`だけを無視して互換読込し、
+judge条件を維持する。HostPickerはbody直下のportalへ移し、後続sectionのstacking
+contextに隠れず選択できることを実画面で確認した。
 
 ## Verification Verdict
 
@@ -30,88 +32,71 @@ Verdict: PASS
 ## Commands Run
 
 ```bash
-npm run build --prefix frontend
+uv run pytest
 npm run lint --prefix frontend
-node --test frontend/src/api/client.node.test.ts \
-  frontend/src/store/runStore.node.test.ts \
-  frontend/src/lib/executionPresets.node.test.ts \
-  frontend/src/store/settingsStore.node.test.ts
-uv run --with pytest pytest -q
-DD_SCOPE_PATHS=<execution-preset docs> deno run ... <docs validators>
+npm run test --prefix frontend
+npm run build --prefix frontend
+./scripts/check-docs.sh
+npx markdownlint-cli2 "_docs/**/*.md" "_evals/**/*.md" \
+  "README.md" "QUICKSTART.md" "TODO.md" "AGENTS.md" "CLAUDE.md"
+git diff --check
 ```
 
 Result:
 
 ```text
-frontend production build: PASS
+backend pytest: 220 PASS
 frontend lint: PASS
-frontend node tests: 7 PASS
-backend pytest: 77 PASS
-scoped frontmatter / intent / doc-links: PASS
-```
-
-### Task-order regression update
-
-```bash
-node --test frontend/src/lib/executionPresets.node.test.ts
-npm run lint --prefix frontend
-npm run build --prefix frontend
-DD_SCOPE_PATHS='_docs/reference/UI/execution-presets.md:_docs/qa/UI/execution-presets/test-plan.md:_docs/qa/UI/execution-presets/verification.md' deno run --allow-read --allow-env --allow-run=git scripts/validate-frontmatter.mjs
-DD_SCOPE_PATHS='_docs/reference/UI/execution-presets.md:_docs/qa/UI/execution-presets/test-plan.md:_docs/qa/UI/execution-presets/verification.md' deno run --allow-read --allow-env --allow-run=git scripts/validate-doc-links.mjs
-DD_SCOPE_PATHS='_docs/reference/UI/execution-presets.md:_docs/qa/UI/execution-presets/test-plan.md:_docs/qa/UI/execution-presets/verification.md' deno run --allow-read --allow-env --allow-run=git scripts/validate-qa.mjs
-```
-
-Result:
-
-```text
-executionPresets.node.test.ts: 4 PASS
-frontend lint: PASS
+frontend node tests: 68 PASS
 frontend production build: PASS
-scoped frontmatter / doc-links / QA validation: PASS
+docs validators: PASS (既存Core-Bug-48 warningのみ)
+markdownlint: PASS (212 files, 0 issues)
+git diff --check: PASS
 ```
 
 ## Automated Test Results
 
 | Command / Test | Result | Notes |
 | --- | --- | --- |
-| `npm run build --prefix frontend` | PASS | TypeScriptとVite production bundle |
+| `uv run pytest` | PASS | 220 tests |
 | `npm run lint --prefix frontend` | PASS | ESLint error 0 |
-| frontend node tests | PASS | 7 tests |
-| `uv run --with pytest pytest -q` | PASS | 77 tests |
-| scoped docs validators | PASS | reference / intent / QA docs |
+| `npm run test --prefix frontend` | PASS | 68 tests。schema v2、v1互換、subject維持、host filteringを含む |
+| `npm run build --prefix frontend` | PASS | TypeScriptとVite production bundle |
+| `./scripts/check-docs.sh` | PASS | 既存TODO warning 1件、validator failureなし |
+| `npx markdownlint-cli2 ...` | PASS | 212 files、0 issues |
+| `git diff --check` | PASS | whitespace errorなし |
 
 ## Manual QA Results
 
 | Checklist Item | Result | Notes |
 | --- | --- | --- |
 | Page identity / non-blank | PASS | `http://127.0.0.1:8765/settings`, title `LLM評価スイート` |
-| Framework overlay | PASS | overlayなし |
-| Console health | PASS | Electron開発時CSP warningを除き関連error / warningなし |
-| Save | PASS | `QA preset`保存後に`1 saved`とoptionを確認 |
-| Restore | PASS | 包括評価をOFFへ変更後、ロードでONへ復元 |
-| Persistence | PASS | reload後も`QA preset` optionと`1 saved`を確認 |
-| Overwrite / Delete | PASS | confirm経由で実行し、削除後`0 saved`を確認 |
-| Desktop layout | PASS | sectionの重なり・clippingなし |
-| Mobile control presence | PASS | 390x844でsection、save、load controlがDOM上存在 |
+| Preset説明 | PASS | 被験モデルを維持する文言をrendered DOMで確認 |
+| HostPicker layer | PASS | body直下、`position: fixed`、`z-index: 10000`、候補点でmenuが最前面 |
+| HostPicker selection | PASS | OpenAI hostを選択するとmenuが閉じ、表示が切り替わることを確認後、自動へ復元 |
 
 ## Acceptance Criteria Coverage
 
 | ID | Result | Evidence |
 | --- | --- | --- |
-| AC-001 | PASS | capture unit testとschema review |
-| AC-002 | PASS | rendered CRUD / reload flow |
-| AC-003 | PASS | resolve unit testとconsole方針review |
-| AC-004 | PASS | manual model unit test |
-| AC-005 | PASS | schema / store partialize review |
-| AC-006 | PASS | `02, 04, 10, 11`のcatalog順復元と`99`の欠損検出をunit testで確認 |
+| AC-001 | PASS | captureとoverwrite unit test。schema v2にsubject identityなし |
+| AC-002 | PASS | Settings store unit testでcatalog / free-text subjectの不変を確認 |
+| AC-003 | PASS | schema v1 fixtureでlegacy subjectを無視しjudge条件を適用 |
+| AC-004 | PASS | judge / holistic judge / preferred hostのcapture / resolve unit test |
+| AC-005 | PASS | missing judge / task filter unit test |
+| AC-006 | PASS | config型とcapture diff reviewでsecret / tool / parallel fieldなし |
+| AC-007 | PASS | 既存task catalog順unit testを維持 |
+| AC-008 | PASS | Settings rendered DOM、README、reference review |
+| AC-009 | PASS | in-app Browserでportal layerと候補選択を確認 |
 
 ## Decision Conformance
 
 | ID | Result | Why the implementation remains aligned |
 | --- | --- | --- |
-| DEC-001 | PASS | backendを変更せず既存localStorage persistへ追加 |
-| DEC-002 | PASS | 合意済み6項目だけをconfigへ保存し、選択済みtaskを現在のcatalog順で復元 |
+| DEC-001 | PASS | backendを変更せず既存localStorage persistを継続 |
+| DEC-002 | PASS | subject identityを除き、judgeを中心とする再利用可能な評価条件だけを保存 |
 | DEC-003 | PASS | 欠損をfilterしconsole warningのみ記録 |
+| DEC-004 | PASS | v1全体を失効させず、legacy subjectだけを無視して読込 |
 
 ## Invariant Coverage
 
@@ -119,12 +104,11 @@ scoped frontmatter / doc-links / QA validation: PASS
 | --- | --- | --- |
 | INV-001 | PASS | `ExecutionPresetConfig`にAPI key fieldなし |
 | INV-002 | PASS | resolve unit testとUI中断なし |
+| INV-003 | PASS | store unit testでpreset load前後のsubject fields不変 |
 
 ## Deferred / Not Covered
 
-| ID | Reason | Follow-up |
-| --- | --- | --- |
-| MOBILE-LAYOUT | 固定sidebarを含むアプリ全体のmobile最適化はfeature scope外 | mobile対応時にLayout単位で再設計 |
+None
 
 ## Residual Risks
 

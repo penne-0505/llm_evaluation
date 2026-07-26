@@ -17,7 +17,8 @@ import type {
 import {
     captureExecutionPresetConfig,
     createExecutionPreset,
-    EXECUTION_PRESET_SCHEMA_VERSION,
+    isSupportedExecutionPresetSchemaVersion,
+    mergeExecutionPresetPreferredHosts,
     overwriteExecutionPresetConfig,
     resolveExecutionPresetConfig,
 } from '../lib/executionPresets';
@@ -506,9 +507,7 @@ export const useSettingsStore = create<SettingsState>()(
                     normalizedName,
                     timestamp,
                     captureExecutionPresetConfig({
-                        subjectModelId: state.subjectModelId,
                         judgeModelIds: state.judgeModelIds,
-                        freeTextSubject: state.freeTextSubject,
                         freeTextJudges: state.freeTextJudges,
                         holisticJudgeModelIds: state.holisticJudgeModelIds,
                         freeTextHolisticJudges: state.freeTextHolisticJudges,
@@ -532,9 +531,7 @@ export const useSettingsStore = create<SettingsState>()(
                 const existing = state.executionPresets.find((preset) => preset.id === id);
                 if (!existing) return false;
                 const config = captureExecutionPresetConfig({
-                    subjectModelId: state.subjectModelId,
                     judgeModelIds: state.judgeModelIds,
-                    freeTextSubject: state.freeTextSubject,
                     freeTextJudges: state.freeTextJudges,
                     holisticJudgeModelIds: state.holisticJudgeModelIds,
                     freeTextHolisticJudges: state.freeTextHolisticJudges,
@@ -564,7 +561,7 @@ export const useSettingsStore = create<SettingsState>()(
                 const state = get();
                 const preset = state.executionPresets.find((candidate) => candidate.id === id);
                 if (!preset) return false;
-                if (preset.schemaVersion !== EXECUTION_PRESET_SCHEMA_VERSION) {
+                if (!isSupportedExecutionPresetSchemaVersion(preset.schemaVersion)) {
                     console.warn('[execution-preset] unsupported schema version', {
                         presetId: preset.id,
                         schemaVersion: preset.schemaVersion,
@@ -592,13 +589,15 @@ export const useSettingsStore = create<SettingsState>()(
 
                 set((current) => ({
                     evaluationMode: 'standard',
-                    subjectModelId: resolved.subjectModelId,
                     judgeModelIds: resolved.judgeModelIds,
-                    freeTextSubject: resolved.freeTextSubject,
                     freeTextJudges: resolved.freeTextJudges,
                     holisticJudgeModelIds: resolved.holisticJudgeModelIds,
                     freeTextHolisticJudges: resolved.freeTextHolisticJudges,
-                    preferredHosts: resolved.preferredHosts,
+                    preferredHosts: mergeExecutionPresetPreferredHosts(
+                        current.preferredHosts,
+                        current.subjectModelId,
+                        resolved.preferredHosts,
+                    ),
                     selectedTaskIds: resolved.selectedTaskIds,
                     runHolistic: resolved.runHolistic,
                     excludeUnreliableJudges: resolved.excludeUnreliableJudges,

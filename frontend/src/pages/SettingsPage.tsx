@@ -441,7 +441,7 @@ function ExecutionPresetSection() {
                 <div>
                     <h2 className="section-label">実行プリセット</h2>
                     <p className="mt-1 text-[11px] text-text-tertiary">
-                        モデル、タスク、包括評価、評価回数、temperatureをブラウザに保存します
+                        judge、タスク、包括評価、評価回数、temperatureを保存します（被験モデルは維持）
                     </p>
                 </div>
                 <span className="data-display text-[11px] text-text-tertiary tabular-nums">

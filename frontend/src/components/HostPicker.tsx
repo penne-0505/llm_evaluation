@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import { fetchOpenRouterEndpoints } from '../api/client';
 import type { OpenRouterHostEndpoint } from '../types';
 import Button from './Button';
+
+type MenuPosition = {
+    left: number;
+    width: number;
+    top?: number;
+    bottom?: number;
+    maxHeight: number;
+};
 
 function formatMetric(value: number | null, digits = 2): string {
     if (value == null || Number.isNaN(value)) return '—';
@@ -37,6 +46,10 @@ export function HostPicker({
         Record<string, OpenRouterHostEndpoint[]>
     >({});
     const rootRef = useRef<HTMLDivElement | null>(null);
+    const anchorRef = useRef<HTMLDivElement | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
+    const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+    const menuId = useId();
     const fetchKey = isOpenRouter && modelId ? modelId : null;
 
     useEffect(() => {
@@ -68,7 +81,8 @@ export function HostPicker({
 
     useEffect(() => {
         const handlePointerDown = (event: MouseEvent) => {
-            if (!rootRef.current?.contains(event.target as Node)) {
+            const target = event.target as Node;
+            if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
                 setOpen(false);
             }
         };
@@ -90,6 +104,38 @@ export function HostPicker({
         return match?.providerName || selectedHostSlug;
     }, [endpoints, selectedHostSlug]);
 
+    useEffect(() => {
+        if (!open || !enabled) return;
+
+        const updatePosition = () => {
+            const rect = anchorRef.current?.getBoundingClientRect();
+            if (!rect) return;
+
+            const viewportGap = 8;
+            const menuGap = 4;
+            const availableBelow = window.innerHeight - rect.bottom - viewportGap;
+            const availableAbove = rect.top - viewportGap;
+            const openUpward = availableBelow < 160 && availableAbove > availableBelow;
+
+            setMenuPosition({
+                left: rect.left,
+                width: rect.width,
+                ...(openUpward
+                    ? { bottom: window.innerHeight - rect.top + menuGap }
+                    : { top: rect.bottom + menuGap }),
+                maxHeight: Math.max(80, Math.min(256, openUpward ? availableAbove : availableBelow)),
+            });
+        };
+
+        updatePosition();
+        window.addEventListener('resize', updatePosition);
+        document.addEventListener('scroll', updatePosition, true);
+        return () => {
+            window.removeEventListener('resize', updatePosition);
+            document.removeEventListener('scroll', updatePosition, true);
+        };
+    }, [enabled, open]);
+
     const handleSelect = useCallback(
         (slug: string | null) => {
             onSelectHost(slug);
@@ -102,6 +148,7 @@ export function HostPicker({
         <div ref={rootRef} className="relative space-y-1.5">
             <label className="section-label text-[9px]">{label}</label>
             <div
+                ref={anchorRef}
                 className={`w-full flex items-center gap-2 bg-bg border rounded px-3 py-2 transition-colors duration-150 ${
                     !enabled
                         ? 'opacity-50 cursor-not-allowed border-border'
@@ -115,6 +162,8 @@ export function HostPicker({
                     disabled={!enabled}
                     onClick={() => enabled && setOpen(!open)}
                     className="flex-1 text-left text-[13px] text-text-primary disabled:cursor-not-allowed focus:outline-none"
+                    aria-expanded={open}
+                    aria-controls={menuId}
                 >
                     {showLoading ? 'ホスト一覧を取得中…' : selectedLabel}
                 </button>
@@ -140,8 +189,13 @@ export function HostPicker({
                 </p>
             )}
             {error && <p className="text-[11px] text-score-low">{error}</p>}
-            {open && enabled && (
-                <div className="absolute z-30 mt-1 w-full bg-surface border border-border rounded-md shadow-xl max-h-64 overflow-y-auto">
+            {open && enabled && menuPosition && createPortal(
+                <div
+                    ref={menuRef}
+                    id={menuId}
+                    className="fixed z-[10000] bg-surface border border-border rounded-md shadow-xl overflow-y-auto"
+                    style={menuPosition}
+                >
                     <Button
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
@@ -181,7 +235,8 @@ export function HostPicker({
                             </Button>
                         );
                     })}
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );

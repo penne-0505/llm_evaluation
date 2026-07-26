@@ -1,11 +1,15 @@
 import type { ExecutionPreset, ExecutionPresetConfig, Model, Task } from '../types';
 
-export const EXECUTION_PRESET_SCHEMA_VERSION = 1 as const;
+export const EXECUTION_PRESET_SCHEMA_VERSION = 2 as const;
+export const SUPPORTED_EXECUTION_PRESET_SCHEMA_VERSIONS = [1, 2] as const;
+
+type ResolvableExecutionPresetConfig = ExecutionPresetConfig & {
+    /** Legacy schema v1 only. Deliberately ignored during resolution. */
+    subjectModel?: string | null;
+};
 
 interface CurrentExecutionSettings {
-    subjectModelId: string | null;
     judgeModelIds: string[];
-    freeTextSubject: string;
     freeTextJudges: string[];
     holisticJudgeModelIds: string[];
     freeTextHolisticJudges: string[];
@@ -20,9 +24,7 @@ interface CurrentExecutionSettings {
 }
 
 export interface ResolvedExecutionPreset {
-    subjectModelId: string | null;
     judgeModelIds: string[];
-    freeTextSubject: string;
     freeTextJudges: string[];
     holisticJudgeModelIds: string[];
     freeTextHolisticJudges: string[];
@@ -58,25 +60,40 @@ export function overwriteExecutionPresetConfig(
     config: ExecutionPresetConfig,
     timestamp: string,
 ): ExecutionPreset {
-    return { ...preset, config, updatedAt: timestamp };
+    return {
+        ...preset,
+        schemaVersion: EXECUTION_PRESET_SCHEMA_VERSION,
+        config,
+        updatedAt: timestamp,
+    };
+}
+
+export function isSupportedExecutionPresetSchemaVersion(version: number): boolean {
+    return SUPPORTED_EXECUTION_PRESET_SCHEMA_VERSIONS.some(
+        (supportedVersion) => supportedVersion === version,
+    );
 }
 
 export function captureExecutionPresetConfig(
     settings: CurrentExecutionSettings,
 ): ExecutionPresetConfig {
     const selectedTaskIds = new Set(settings.selectedTaskIds);
-    const freeTextSubject = settings.freeTextSubject.trim();
+    const judgeModels = settings.judgeModelIds.length > 0
+        ? [...settings.judgeModelIds]
+        : [...settings.freeTextJudges];
+    const holisticJudgeModels = settings.holisticJudgeModelIds.length > 0
+        ? [...settings.holisticJudgeModelIds]
+        : [...settings.freeTextHolisticJudges];
+    const presetHostModelIds = new Set([...judgeModels, ...holisticJudgeModels]);
     return {
-        subjectModel: settings.subjectModelId || freeTextSubject || null,
-        judgeModels: settings.judgeModelIds.length > 0
-            ? [...settings.judgeModelIds]
-            : [...settings.freeTextJudges],
+        judgeModels,
         // intent: DEC-004 (Core/holistic-judge-model) — 空配列 = judgeModels へ fallback
-        holisticJudgeModels: settings.holisticJudgeModelIds.length > 0
-            ? [...settings.holisticJudgeModelIds]
-            : [...settings.freeTextHolisticJudges],
+        holisticJudgeModels,
         // intent: DEC-002 (Core/openrouter-preferred-host)
-        preferredHosts: { ...settings.preferredHosts },
+        preferredHosts: Object.fromEntries(
+            Object.entries(settings.preferredHosts)
+                .filter(([modelId]) => presetHostModelIds.has(modelId)),
+        ),
         taskSelections: Object.fromEntries(
             settings.tasks.map((task) => [task.id, selectedTaskIds.has(task.id)]),
         ),
@@ -90,7 +107,7 @@ export function captureExecutionPresetConfig(
 }
 
 export function resolveExecutionPresetConfig(
-    config: ExecutionPresetConfig,
+    config: ResolvableExecutionPresetConfig,
     availableModels: Model[],
     availableTasks: Task[],
 ): ResolvedExecutionPreset {
@@ -99,35 +116,34 @@ export function resolveExecutionPresetConfig(
     const hasCatalogModels = availableModels.length > 0;
     // intent: DEC-004 (Core/holistic-judge-model) — 旧 preset（field なし）は空配列扱い
     const holisticJudgeModels = config.holisticJudgeModels ?? [];
-    const requestedModelIds = [
-        ...(config.subjectModel ? [config.subjectModel] : []),
-        ...config.judgeModels,
-        ...holisticJudgeModels,
-    ];
+    const requestedModelIds = [...config.judgeModels, ...holisticJudgeModels];
     const missingModelIds = hasCatalogModels
         ? requestedModelIds.filter((id) => !availableModelIds.has(id))
         : [];
+    const resolvedHostModelIds = new Set(
+        hasCatalogModels
+            ? requestedModelIds.filter((id) => availableModelIds.has(id))
+            : requestedModelIds,
+    );
     const requestedTaskIds = Object.entries(config.taskSelections)
         .filter(([, selected]) => selected)
         .map(([id]) => id);
     const requestedTaskIdSet = new Set(requestedTaskIds);
 
     return {
-        subjectModelId:
-            hasCatalogModels && config.subjectModel && availableModelIds.has(config.subjectModel)
-                ? config.subjectModel
-                : null,
         judgeModelIds: hasCatalogModels
             ? config.judgeModels.filter((id) => availableModelIds.has(id))
             : [],
-        freeTextSubject: hasCatalogModels ? '' : config.subjectModel ?? '',
         freeTextJudges: hasCatalogModels ? [] : [...config.judgeModels],
         holisticJudgeModelIds: hasCatalogModels
             ? holisticJudgeModels.filter((id) => availableModelIds.has(id))
             : [],
         freeTextHolisticJudges: hasCatalogModels ? [] : [...holisticJudgeModels],
         // intent: DEC-002 / INV-002 (Core/openrouter-preferred-host) — missing → {}
-        preferredHosts: { ...(config.preferredHosts ?? {}) },
+        preferredHosts: Object.fromEntries(
+            Object.entries(config.preferredHosts ?? {})
+                .filter(([modelId]) => resolvedHostModelIds.has(modelId)),
+        ),
         selectedTaskIds: availableTasks
             .filter((task) => requestedTaskIdSet.has(task.id))
             .map((task) => task.id),
@@ -143,4 +159,22 @@ export function resolveExecutionPresetConfig(
         missingModelIds: [...new Set(missingModelIds)],
         missingTaskIds: requestedTaskIds.filter((id) => !availableTaskIds.has(id)),
     };
+}
+
+export function mergeExecutionPresetPreferredHosts(
+    currentHosts: Record<string, string>,
+    currentSubjectModelId: string | null,
+    presetHosts: Record<string, string>,
+): Record<string, string> {
+    const subjectHost = currentSubjectModelId
+        ? currentHosts[currentSubjectModelId]
+        : undefined;
+    if (
+        !currentSubjectModelId
+        || !subjectHost
+        || Object.hasOwn(presetHosts, currentSubjectModelId)
+    ) {
+        return { ...presetHosts };
+    }
+    return { ...presetHosts, [currentSubjectModelId]: subjectHost };
 }
