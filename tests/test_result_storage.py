@@ -517,5 +517,67 @@ class TestResultStorage(unittest.TestCase):
         # All-judge min would be 20; exclude-aware min is 75
         self.assertEqual(saved_summary["min_score"], 75.0)
 
+    def test_legacy_index_entries_are_backfilled_from_result_file(self):
+        """AC-004 (Core-Bug-71): 欠落フィールドを持つ古い index を結果ファイルから補完する。
+
+        補完は以前 server.py の list_results にあった。
+        intent: DEC-003 (Core/result-index-integrity)
+        """
+        saved_path = ResultStorage.save(
+            {
+                "run_id": "run-legacy",
+                "target_model": "gpt-5.1",
+                "judge_models": ["judge-a"],
+                "executed_at": "2026-07-26T00:00:00Z",
+                "estimated_cost_usd": 1.5,
+                "cost_estimate_status": "complete",
+                "tasks": [],
+                "holistic_tasks": [],
+                "average_score": 70,
+                "best_score": 70,
+            }
+        )
+        complete = ResultStorage.list_summaries()[0]
+
+        # 古い cache を模し、後から追加されたフィールドを落とす
+        legacy_entry = {
+            key: value
+            for key, value in complete.items()
+            if key not in ResultStorage._BACKFILL_FIELDS
+        }
+        ResultStorage._save_index([legacy_entry])
+        self.assertNotIn("run_id", legacy_entry)
+
+        backfilled = ResultStorage.list_summaries()[0]
+
+        for field in ResultStorage._BACKFILL_FIELDS:
+            self.assertIn(field, backfilled, f"{field} が補完されていない")
+        # 結果ファイル内の run_id を優先する（ファイル名 stem は読めない場合のフォールバック）
+        self.assertEqual(backfilled["run_id"], "run-legacy")
+        self.assertTrue(saved_path.exists())
+        self.assertEqual(backfilled["estimated_cost_usd"], 1.5)
+        self.assertEqual(backfilled["cost_estimate_status"], "complete")
+        # 補完結果は結果ファイルから再構築した値と一致する
+        for field in ResultStorage._BACKFILL_FIELDS:
+            self.assertEqual(backfilled[field], complete[field], f"{field} が不一致")
+
+    def test_backfill_uses_defaults_when_result_file_is_missing(self):
+        """AC-004: 結果ファイルを読めない場合も欠落キーを既定値で必ず埋める。"""
+        ResultStorage._save_index(
+            [{"filename": "20260726_000000_gone.json", "executed_at": "2026-07-26"}]
+        )
+
+        summary = ResultStorage.list_summaries()[0]
+
+        for field in ResultStorage._BACKFILL_FIELDS:
+            self.assertIn(field, summary, f"{field} が補完されていない")
+        self.assertEqual(summary["run_id"], "20260726_000000_gone")
+        self.assertEqual(summary["max_score"], 0)
+        self.assertEqual(summary["cost_estimate_status"], "unavailable")
+        self.assertEqual(summary["subject_total_tokens"], 0)
+        self.assertFalse(summary["strict_mode_requested"])
+        self.assertIsNone(summary["strict_mode_preset_id"])
+
+
 if __name__ == "__main__":
     unittest.main()

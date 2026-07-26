@@ -1,7 +1,10 @@
 """実行結果の保存・読み込み管理"""
 
 import json
+import os
 import re
+import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -18,6 +21,13 @@ class ResultStorage:
 
     RESULTS_DIR: Path | None = None
     INDEX_FILE: Path | None = None
+
+    # intent: DEC-001 (Core/result-index-integrity) — index の read-modify-write を直列化する。
+    # 更新経路は event loop thread（async な POST /api/run が save を直接呼ぶ）と
+    # threadpool thread（同期 def の GET / DELETE /api/results）に跨るため、
+    # asyncio.Lock ではなく threading 側で排他する。
+    # RLock なのは、ロック保持中に別の index 操作を呼ぶ経路を許すため。
+    _index_lock = threading.RLock()
 
     @classmethod
     def results_dir(cls) -> Path:
@@ -123,33 +133,118 @@ class ResultStorage:
                 results.append(filepath)
         return sorted(results, reverse=True)
 
+    # 古い index cache に欠けうるフィールド群。
+    # intent: DEC-003 (Core/result-index-integrity) — 補完は storage の責務。
+    # API 層で個別に埋めると、フィールド追加のたびに複数箇所を触ることになる。
+    _BACKFILL_FIELDS: tuple[str, ...] = (
+        "run_id",
+        "max_score",
+        "min_score",
+        "estimated_cost_usd",
+        "cost_estimate_status",
+        "subject_total_tokens",
+        "subject_estimated_cost_usd",
+        "subject_cost_per_1m_tokens_usd",
+        "strict_mode_requested",
+        "strict_mode_enforced",
+        "strict_mode_eligible",
+        "strict_mode_preset_id",
+        "strict_mode_preset_label",
+        "strict_mode_profile_id",
+        "strict_mode_profile_label",
+    )
+
+    @classmethod
+    def _needs_backfill(cls, summary: Dict[str, Any]) -> bool:
+        return any(field not in summary for field in cls._BACKFILL_FIELDS)
+
+    @classmethod
+    def _backfill_summary(cls, summary: Dict[str, Any]) -> bool:
+        """欠落フィールドを結果ファイルから補完する。補完したら True を返す。
+
+        結果ファイルを読めない場合も、欠落キーは既定値で必ず埋める。
+        呼び出し側がキーの存在を前提にできるようにするため、部分的な補完で終えない。
+        """
+        if not cls._needs_backfill(summary):
+            return False
+
+        filename = summary.get("filename", "")
+        rebuilt: Optional[Dict[str, Any]] = None
+        fallback_run_id = Path(filename).stem if filename else ""
+        if filename:
+            try:
+                filepath = cls.resolve_result_path(filename)
+                if filepath.exists():
+                    rebuilt = cls._build_summary(cls.load(filepath), filepath)
+                    fallback_run_id = filepath.stem
+            except Exception:
+                rebuilt = None
+
+        for field in cls._BACKFILL_FIELDS:
+            if field in summary:
+                continue
+            if rebuilt is not None and field in rebuilt:
+                summary[field] = rebuilt[field]
+            elif field == "run_id":
+                summary[field] = fallback_run_id
+            elif field in ("max_score", "min_score"):
+                summary[field] = 0
+            elif field == "cost_estimate_status":
+                summary[field] = "unavailable"
+            elif field == "subject_total_tokens":
+                summary[field] = 0
+            elif field.startswith("strict_mode_") and field in (
+                "strict_mode_requested",
+                "strict_mode_enforced",
+                "strict_mode_eligible",
+            ):
+                summary[field] = False
+            else:
+                summary[field] = None
+        return True
+
     @classmethod
     def list_summaries(cls) -> List[Dict[str, Any]]:
         """
         保存済み結果のサマリー一覧を取得
 
+        欠落フィールドは補完済みで返す。補完が発生した場合は index を再保存する。
+
         Returns:
             サマリーのリスト（新しい順）
         """
         use_index_cache = not cls._has_legacy_result_files()
-        index = cls._load_index() if use_index_cache else []
-        if index:
-            return index
+        # intent: DEC-001 (Core/result-index-integrity) — 再構築・再保存も index を書く経路なので、
+        # 読み出しから書き戻しまでを他の更新と交錯させない。
+        with cls._index_lock:
+            index = cls._load_index() if use_index_cache else []
+            if index:
+                backfilled = False
+                for summary in index:
+                    if cls._backfill_summary(summary):
+                        backfilled = True
+                if backfilled and use_index_cache:
+                    try:
+                        cls._save_index(index)
+                    except Exception:
+                        # 再保存は次回への最適化にすぎない。失敗しても補完済みの値は返す。
+                        pass
+                return index
 
-        summaries: List[Dict[str, Any]] = []
-        for filepath in cls.list_results():
-            try:
-                data = cls.load(filepath)
-            except Exception:
-                continue
-            summaries.append(cls._build_summary(data, filepath))
+            summaries: List[Dict[str, Any]] = []
+            for filepath in cls.list_results():
+                try:
+                    data = cls.load(filepath)
+                except Exception:
+                    continue
+                summaries.append(cls._build_summary(data, filepath))
 
-        if summaries:
-            summaries.sort(key=lambda x: x.get("executed_at", ""), reverse=True)
-            if use_index_cache:
-                cls._save_index(summaries)
+            if summaries:
+                summaries.sort(key=lambda x: x.get("executed_at", ""), reverse=True)
+                if use_index_cache:
+                    cls._save_index(summaries)
 
-        return summaries
+            return summaries
 
     @classmethod
     def delete(cls, filepath: Path) -> bool:
@@ -328,37 +423,61 @@ class ResultStorage:
 
     @classmethod
     def _save_index(cls, index: List[Dict[str, Any]]) -> None:
+        # intent: DEC-002 (Core/result-index-integrity) — 一時ファイルへ書いてから
+        # os.replace で差し替える。open(path, "w") は truncate してから書くため、
+        # 書き込み途中の状態が他スレッドやプロセス異常終了へ晒される。
+        # intent-invariant: INV-001 — index.json は常に完全な JSON 配列として読める。
         results_dir = cls.results_dir()
         results_dir.mkdir(parents=True, exist_ok=True)
-        with open(cls.index_file(), "w", encoding="utf-8") as f:
-            json.dump(index, f, ensure_ascii=False, indent=2)
+        index_file = cls.index_file()
+        # os.replace が原子的であるためには同一ファイルシステム上である必要があるので、
+        # 一時ファイルは索引と同じディレクトリへ作る。
+        fd, tmp_name = tempfile.mkstemp(
+            dir=str(index_file.parent), prefix=".index-", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(index, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_name, index_file)
+        except BaseException:
+            # 置き換え前に失敗した場合だけ一時ファイルが残るため、ここで取り除く。
+            # 成功時は os.replace により tmp_name は既に存在しない。
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
 
     @classmethod
     def _upsert_index(cls, benchmark_result: Dict[str, Any], filepath: Path) -> None:
         summary = cls._build_summary(benchmark_result, filepath)
-        index = cls._load_index()
-        index = [
-            item
-            for item in index
-            if item.get("filepath") != str(filepath)
-            and item.get("filename") != filepath.name
-        ]
-        index.append(summary)
-        index.sort(key=lambda x: x.get("executed_at", ""), reverse=True)
-        cls._save_index(index)
+        # intent: DEC-001 — load から save までを 1 区間として保持しないと lost update が残る。
+        with cls._index_lock:
+            index = cls._load_index()
+            index = [
+                item
+                for item in index
+                if item.get("filepath") != str(filepath)
+                and item.get("filename") != filepath.name
+            ]
+            index.append(summary)
+            index.sort(key=lambda x: x.get("executed_at", ""), reverse=True)
+            cls._save_index(index)
 
     @classmethod
     def _remove_from_index(cls, filepath: Path) -> None:
-        index = cls._load_index()
-        if not index:
-            return
-        index = [
-            item
-            for item in index
-            if item.get("filepath") != str(filepath)
-            and item.get("filename") != filepath.name
-        ]
-        cls._save_index(index)
+        # intent: DEC-001 — 削除も load から save までを保持区間に含める。
+        with cls._index_lock:
+            index = cls._load_index()
+            if not index:
+                return
+            index = [
+                item
+                for item in index
+                if item.get("filepath") != str(filepath)
+                and item.get("filename") != filepath.name
+            ]
+            cls._save_index(index)
 
     @classmethod
     def get_result_info(cls, filepath: Path) -> Dict[str, Any]:

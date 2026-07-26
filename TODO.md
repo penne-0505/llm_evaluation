@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 71` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 74` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -306,6 +306,61 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## Backlog
 
+### Core-Bug-73: [Bug] Multiple app instances share the results index without cross-process locking
+
+- **Title**: [Bug] Multiple app instances share the results index without cross-process locking
+- **ID**: Core-Bug-73
+- **Priority**: P2
+- **Size**: S
+- **Risk**: High
+- **Area**: Core
+- **Dependencies**: [Core-Bug-71]
+- **Goal**: 同一マシンでアプリを多重起動した場合でも、結果 index が破損・欠落しないようにする。または多重起動自体を防ぐ。
+- **Acceptance Criteria**:
+  - AC-001: 2 つのインスタンスが同時に結果を保存・削除しても index が壊れず、entry が失われない。
+  - AC-002: 方針（プロセス間ロック / 単一インスタンス化）を Intent に記録する。
+  - AC-003: 2 プロセスを模した regression test を追加し、再発を検出できる。
+- **Steps**:
+  1. [ ] プロセス間ロックと単一インスタンス化を比較検討する
+  2. [ ] 方針を Intent へ記録し実装する
+  3. [ ] 多重起動を模した regression test を追加する
+- **Description**:
+  - Context: Core-Bug-71 で導入した排他は `threading.RLock` によるプロセス内ロックであり、別プロセスからの更新は防げない（`_docs/intent/Core/result-index-integrity/decision.md` DEC-004）。`launcher.py` は空きポートを探してフォールバックするため多重起動が可能で、両インスタンスが `AppPaths.results_dir()` の同じ `index.json` を共有する。
+  - Notes: DEC-004 の Revisit when に該当する。atomic write（DEC-002）により破損の窓は狭まっているが、lost update は依然起きうる。
+- **Plan**: `_docs/plan/Core/cross-process-index-safety/plan.md`
+- **Intent**: `_docs/intent/Core/result-index-integrity/decision.md`
+- **QA**: `_docs/qa/Core/result-index-integrity/test-plan.md`
+- **Verification**: None
+
+### Core-Bug-72: [Bug] run_id collides at second resolution across concurrent jobs
+
+- **Title**: [Bug] run_id collides at second resolution across concurrent jobs
+- **ID**: Core-Bug-72
+- **Priority**: P1
+- **Size**: S
+- **Risk**: High
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: 同一モデルの評価を同じ秒に開始したときの `run_id` 衝突を解消し、同時実行の管理とキャンセルを run 単位で正しく分離する。
+- **Acceptance Criteria**:
+  - AC-001: 同一モデル・同一秒に開始した 2 本の run が異なる `run_id` を持つ。
+  - AC-002: `ActiveRunRegistry.try_start` が重複 `run_id` を暗黙に成功扱いせず、同時上限の計上が正しい。
+  - AC-003: 片方のキャンセルが他方へ波及しない。
+  - AC-004: 同じ秒に完了した同一モデルの結果ファイルが互いを上書きしない。
+  - AC-005: 同一秒・同一モデルの並行 run を対象とした regression test を追加し、再発を検出できる。
+- **Steps**:
+  1. [ ] `run_id` に衝突しない識別子を導入する
+  2. [ ] `try_start` の重複時の扱いを見直す
+  3. [ ] `_cancel_flags` と結果ファイル名の分離を確認する
+  4. [ ] regression test を追加する
+- **Description**:
+  - Context: `server.py` の `run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{req.target_model}"` は秒精度。`ActiveRunRegistry.try_start` は `run_id in _active` のとき登録せず `True` を返すため、同時上限を素通りし、片方の `finish` が共有キーを消す。`_cancel_flags` も共有される。`ResultStorage.save` のファイル名も秒精度で衝突しうる。
+  - Notes: Core-Bug-71 の調査中に発見。intent は `_docs/intent/Core/result-index-integrity/decision.md` の Rollback / Follow-ups に記載。専用 intent は着手時に作成する。
+- **Plan**: `_docs/plan/Core/run-identity-collision/plan.md`
+- **Intent**: `_docs/intent/Core/result-index-integrity/decision.md`
+- **QA**: `_docs/qa/Core/result-index-integrity/test-plan.md`
+- **Verification**: None
+
 ### DevOps-Test-69: [Test] Verify first Code CI run on GitHub
 
 - **Title**: [Test] Verify first Code CI run on GitHub
@@ -472,6 +527,37 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - **Verification**: None
 
 ## In Progress
+
+### Core-Bug-71: [Bug] Result index lost update and non-atomic write
+
+- **Title**: [Bug] Result index lost update and non-atomic write
+- **ID**: Core-Bug-71
+- **Priority**: P0
+- **Size**: M
+- **Risk**: High
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: `index.json` の read-modify-write 競合と非アトミック書き込みを解消し、index を書く経路を `ResultStorage` へ集約する。
+- **Acceptance Criteria**:
+  - AC-001: `save` と `delete` の並行実行で保存済み結果が index から失われない。
+  - AC-002: 並行実行下でも `index.json` が常に完全な JSON として解析できる。
+  - AC-003: 削除した結果の entry が index に残らない。
+  - AC-004: バックフィル移送前後で既存 index に対する一覧出力が同値である。
+  - AC-005: `server.py` から `ResultStorage` の private 参照が無くなる。
+  - AC-006: 既存 backend テストが緑のままである。
+  - AC-007: 並行 save / delete を対象とした regression test を追加し、修正前コードで落ちることを確認して再発を検出できる。
+- **Steps**:
+  1. [x] index 更新経路をロックで直列化する
+  2. [x] `_save_index` を一時ファイル + `os.replace` にする
+  3. [x] バックフィルを `list_summaries()` へ移送する
+  4. [x] 並行テストを追加し verification を残す
+- **Description**:
+  - Context: `POST /api/run` は async で event loop thread、`GET`/`DELETE /api/results` は同期のため threadpool thread。両者が排他なしで index を read-modify-write する。barrier で競合を強制した 20 試行で 20 件すべて不整合（破損 11 / stale entry 8 / 消失 1）。
+  - Notes: index が非空のまま entry を失うと再構築が走らず、その run は履歴から恒久的に消える。結果 JSON 本体は残るためデータ損失ではなく可視性の損失。
+- **Plan**: `_docs/plan/Core/result-index-integrity/plan.md`
+- **Intent**: `_docs/intent/Core/result-index-integrity/decision.md`
+- **QA**: `_docs/qa/Core/result-index-integrity/test-plan.md`
+- **Verification**: `_docs/qa/Core/result-index-integrity/verification.md`
 
 ### Core-Feat-66: [Feat] Concurrent evaluation jobs with provider rate limits
 

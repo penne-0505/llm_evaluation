@@ -2056,148 +2056,10 @@ async def cancel_run(run_id: str) -> Dict[str, str]:
 def list_results() -> List[Dict[str, Any]]:
     """評価結果のサマリー一覧を返す（新しい順）。run_id を付与する。"""
     try:
+        # intent: DEC-003 (Core/result-index-integrity) — 欠落フィールドの補完と index の
+        # 再保存は ResultStorage の責務。ここでは表示用の丸めだけを行う。
         summaries = ResultStorage.list_summaries()
-        needs_reindex = False
         for s in summaries:
-            # 古いキャッシュに欠落しているフィールドを結果ファイルから補完
-            missing_run_id = "run_id" not in s
-            missing_scores = "max_score" not in s or "min_score" not in s
-            missing_cost = (
-                "estimated_cost_usd" not in s or "cost_estimate_status" not in s
-            )
-            missing_strict = (
-                "strict_mode_requested" not in s
-                or "strict_mode_enforced" not in s
-                or "strict_mode_eligible" not in s
-                or "strict_mode_preset_id" not in s
-                or "strict_mode_preset_label" not in s
-                or "strict_mode_profile_id" not in s
-                or "strict_mode_profile_label" not in s
-            )
-            missing_subject_cost = (
-                "subject_total_tokens" not in s
-                or "subject_estimated_cost_usd" not in s
-                or "subject_cost_per_1m_tokens_usd" not in s
-            )
-            if (
-                missing_run_id
-                or missing_scores
-                or missing_cost
-                or missing_subject_cost
-                or missing_strict
-            ):
-                filename = s.get("filename", "")
-                if filename:
-                    try:
-                        filepath = ResultStorage.resolve_result_path(filename)
-                        if filepath.exists():
-                            data = ResultStorage.load(filepath)
-                            if missing_run_id:
-                                s["run_id"] = data.get("run_id", filepath.stem)
-                            if missing_scores:
-                                # _build_summary と同じロジックでスコアを再計算
-                                tasks = data.get("tasks", [])
-                                total_scores = []
-                                for task in tasks:
-                                    for result in task.get(
-                                        "judge_results", {}
-                                    ).values():
-                                        agg = result.get("aggregated")
-                                        if agg:
-                                            total_scores.append(
-                                                agg.get("total_score_mean", 0)
-                                            )
-                                s["max_score"] = (
-                                    max(total_scores) if total_scores else 0
-                                )
-                                s["min_score"] = (
-                                    min(total_scores) if total_scores else 0
-                                )
-                                needs_reindex = True
-                            if missing_cost:
-                                s["estimated_cost_usd"] = data.get("estimated_cost_usd")
-                                s["cost_estimate_status"] = data.get(
-                                    "cost_estimate_status"
-                                )
-                                needs_reindex = True
-                            if missing_subject_cost:
-                                rebuilt = ResultStorage._build_summary(data, filepath)
-                                s["subject_total_tokens"] = rebuilt.get(
-                                    "subject_total_tokens"
-                                )
-                                s["subject_estimated_cost_usd"] = rebuilt.get(
-                                    "subject_estimated_cost_usd"
-                                )
-                                s["subject_cost_per_1m_tokens_usd"] = rebuilt.get(
-                                    "subject_cost_per_1m_tokens_usd"
-                                )
-                                needs_reindex = True
-                            if missing_strict:
-                                rebuilt = ResultStorage._build_summary(data, filepath)
-                                s["strict_mode_requested"] = rebuilt.get(
-                                    "strict_mode_requested"
-                                )
-                                s["strict_mode_enforced"] = rebuilt.get(
-                                    "strict_mode_enforced"
-                                )
-                                s["strict_mode_eligible"] = rebuilt.get(
-                                    "strict_mode_eligible"
-                                )
-                                s["strict_mode_preset_id"] = rebuilt.get(
-                                    "strict_mode_preset_id"
-                                )
-                                s["strict_mode_preset_label"] = rebuilt.get(
-                                    "strict_mode_preset_label"
-                                )
-                                s["strict_mode_profile_id"] = rebuilt.get(
-                                    "strict_mode_profile_id"
-                                )
-                                s["strict_mode_profile_label"] = rebuilt.get(
-                                    "strict_mode_profile_label"
-                                )
-                                needs_reindex = True
-                        else:
-                            if missing_run_id:
-                                s["run_id"] = Path(filename).stem
-                            if missing_scores:
-                                s.setdefault("max_score", 0)
-                                s.setdefault("min_score", 0)
-                            if missing_cost:
-                                s.setdefault("estimated_cost_usd", None)
-                                s.setdefault("cost_estimate_status", "unavailable")
-                            if missing_subject_cost:
-                                s.setdefault("subject_total_tokens", 0)
-                                s.setdefault("subject_estimated_cost_usd", None)
-                                s.setdefault("subject_cost_per_1m_tokens_usd", None)
-                            if missing_strict:
-                                s.setdefault("strict_mode_requested", False)
-                                s.setdefault("strict_mode_enforced", False)
-                                s.setdefault("strict_mode_eligible", False)
-                                s.setdefault("strict_mode_preset_id", None)
-                                s.setdefault("strict_mode_preset_label", None)
-                                s.setdefault("strict_mode_profile_id", None)
-                                s.setdefault("strict_mode_profile_label", None)
-                    except Exception:
-                        if missing_run_id:
-                            s["run_id"] = Path(filename).stem
-                        if missing_scores:
-                            s.setdefault("max_score", 0)
-                            s.setdefault("min_score", 0)
-                        if missing_cost:
-                            s.setdefault("estimated_cost_usd", None)
-                            s.setdefault("cost_estimate_status", "unavailable")
-                        if missing_subject_cost:
-                            s.setdefault("subject_total_tokens", 0)
-                            s.setdefault("subject_estimated_cost_usd", None)
-                            s.setdefault("subject_cost_per_1m_tokens_usd", None)
-                        if missing_strict:
-                            s.setdefault("strict_mode_requested", False)
-                            s.setdefault("strict_mode_enforced", False)
-                            s.setdefault("strict_mode_eligible", False)
-                            s.setdefault("strict_mode_preset_id", None)
-                            s.setdefault("strict_mode_preset_label", None)
-                            s.setdefault("strict_mode_profile_id", None)
-                            s.setdefault("strict_mode_profile_label", None)
             # スコアを小数1桁に丸める。
             # intent: DEC-004 (Core/exclude-unreliable-judges) — all-excluded 時は
             # avg/max/min が null のまま一覧へ通し、0 に潰さない。
@@ -2205,15 +2067,7 @@ def list_results() -> List[Dict[str, Any]]:
             # round 前に None を明示分岐する。
             for _score_key in ("avg_score", "max_score", "min_score"):
                 _score_val = s.get(_score_key, 0)
-                s[_score_key] = (
-                    None if _score_val is None else round(_score_val, 1)
-                )
-        # キャッシュに欠落があった場合、再保存して次回以降は高速に
-        if needs_reindex:
-            try:
-                ResultStorage._save_index(summaries)
-            except Exception:
-                pass
+                s[_score_key] = None if _score_val is None else round(_score_val, 1)
         return summaries
     except Exception as e:
         raise HTTPException(
