@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 69` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 71` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -305,6 +305,58 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 ---
 
 ## Backlog
+
+### DevOps-Test-69: [Test] Verify first Code CI run on GitHub
+
+- **Title**: [Test] Verify first Code CI run on GitHub
+- **ID**: DevOps-Test-69
+- **Priority**: P1
+- **Size**: XS
+- **Risk**: High
+- **Area**: DevOps
+- **Dependencies**: []
+- **Goal**: 新設した `Code CI` workflow が GitHub 上で実際に発火し、backend matrix と frontend job が緑になることを確認する。
+- **Acceptance Criteria**:
+  - AC-001: push で `Code CI` が起動し、backend（3.12 / 3.14）と frontend の全 job が成功する。
+  - AC-002: 意図的に失敗させたコミットで job が赤くなり、gate として機能することを確認する。
+  - AC-003: backend の 2 leg のログが実際に異なる Python 版を報告する。緑であることだけを根拠にしない。
+- **Steps**:
+  1. [ ] push 後に Actions の run を確認する
+  2. [ ] 失敗ケースで gate が赤くなることを確認する
+  3. [ ] verification の AC-004 を PASS へ更新する
+- **Description**:
+  - Context: DevOps code-ci-gate verification PARTIAL の deferred 項目。ローカルでは全 gate コマンドが exit 0 だが、workflow 自体は未実行である。
+  - Notes: `_docs/qa/DevOps/code-ci-gate/verification.md`
+- **Plan**: `_docs/plan/DevOps/code-ci-gate/plan.md`
+- **Intent**: `_docs/intent/DevOps/code-ci-gate/decision.md`
+- **QA**: `_docs/qa/DevOps/code-ci-gate/test-plan.md`
+- **Verification**: `_docs/qa/DevOps/code-ci-gate/verification.md`
+
+### DevOps-Chore-70: [Chore] Audit frontend toolchain versions and dev dependency advisories
+
+- **Title**: [Chore] Audit frontend toolchain versions and dev dependency advisories
+- **ID**: DevOps-Chore-70
+- **Priority**: P2
+- **Size**: S
+- **Risk**: High
+- **Area**: DevOps
+- **Dependencies**: []
+- **Goal**: Node のローカル版と CI / release 版の差の扱いを決め、`npm audit` が報告する dev 依存の既知脆弱性を棚卸しする。
+- **Acceptance Criteria**:
+  - AC-001: Node のバージョン方針を決定する（matrix 化、または出荷版へ統一）。決定理由を残す。
+  - AC-002: `npm audit` の 10 件について、対応するか受容するかを判断し、受容分は理由を残す。
+  - AC-003: 対応後も `npm run lint / test / build --prefix frontend` が緑である。
+- **Steps**:
+  1. [ ] ローカル（24）と CI / release（22）の差分影響を確認する
+  2. [ ] `npm audit` の各件を出荷影響の有無で分類する
+  3. [ ] 方針を決めて workflow または依存を更新する
+- **Description**:
+  - Context: DevOps code-ci-gate verification の residual risks。脆弱性はいずれも vite・eslint 配下の既存 dev 依存で、ビルド成果物には載らない。
+  - Notes: 依存を上げるとビルドが壊れうるため、gate が緑であることを確認しながら進める。
+- **Plan**: `_docs/plan/DevOps/code-ci-gate/plan.md`
+- **Intent**: `_docs/intent/DevOps/code-ci-gate/decision.md`
+- **QA**: `_docs/qa/DevOps/code-ci-gate/test-plan.md`
+- **Verification**: None
 
 ### Core-Test-68: [Test] OpenRouter preferred host Manual QA
 

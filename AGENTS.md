@@ -19,6 +19,7 @@
 
 - Python 依存管理は `uv`、frontend 依存管理は `npm` を使う。
 - backend は FastAPI / Python、frontend は React / TypeScript / Vite の monorepo 構成。
-- backend tests は `uv run pytest`、frontend lint/build は `npm run lint --prefix frontend` と `npm run build --prefix frontend` を使う。
+- backend tests は `uv run pytest`、frontend は `npm run lint --prefix frontend`、`npm run test --prefix frontend`、`npm run build --prefix frontend` を使う。frontend の node test を個別ファイル指定の `npx tsx --test` で回さず、`npm run test` を正典とする。
 - docs 検証は `./scripts/check-docs.sh`、CI 相当の Markdown 検証は `npx markdownlint-cli2` を使う。
+- 上記は `Code CI` / `Docs CI` が gate する。full suite が緑でない状態で verification verdict を `PASS` にしない（[quality assurance standard](_docs/standards/quality_assurance.md) の baseline suite を参照）。
 - Git 操作はユーザーが明示的に許可した範囲だけで行い、push、main 更新、恒久削除を推測で実行しない。

@@ -189,6 +189,30 @@ DEC 自体を機械テストの対象にせず、変更が影響する DEC は v
 | `FAIL` | `failed` |
 | `BLOCKED` | `blocked` |
 
+### baseline suite
+
+verdict を書く前提として、リポジトリの自動テストが緑であることを求める。
+
+`PARTIAL` が表すのは「未確認」であって「失敗」ではない。落ちているテストは未確認項目ではなく、
+再現済みの既知欠陥である。両者を同じ verdict に畳むと、以後 suite が二値の信号として機能しなくなり、
+「この赤は既知のものか、新しい退行か」を毎回人間が判定することになる。
+
+- full suite に失敗が残る状態では、verdict を `PASS` にしない。
+- 失敗を既知として先へ進む場合は、TODO へタスクとして起票し、その ID を verification に記載する。
+  ID のない「既知の失敗」は検証漏れとして review で扱う。
+- 対象は Code CI と Docs CI が gate するコマンド一式とする。
+
+```text
+uv run pytest
+npm run lint --prefix frontend
+npm run test --prefix frontend
+npm run build --prefix frontend
+./scripts/check-docs.sh
+```
+
+順序依存でテスト単体では緑になる場合、緑と扱わない。full suite での結果を採用する。
+プロセス共有状態のテスト間分離は `tests/conftest.py` が担う。
+
 ## QA documents
 
 QA 文書は以下の canonical path に置く。

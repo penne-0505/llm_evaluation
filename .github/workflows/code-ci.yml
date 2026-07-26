@@ -1,0 +1,75 @@
+name: Code CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+# gate はチェックアウトと実行のみで、成果物の書き戻しを行わない。
+# release workflow（contents: write）と違い、最小権限に固定する。
+permissions:
+  contents: read
+
+# テストは副作用を持たないため、同一 ref の古い run は打ち切ってよい。
+concurrency:
+  group: code-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 は release build（linux-appimage / windows-bundle）が使う版、
+        # 3.14 は .python-version が指すローカル開発版。両方を gate する。
+        python-version: ['3.12', '3.14']
+
+    # uv は `.python-version`（3.14）を優先するため、setup-python で 3.12 を用意しても
+    # UV_PYTHON が無いと matrix 両方が 3.14 で走り、3.12 を検証しないまま緑になる。
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install backend dependencies
+        run: uv sync
+
+      - name: Run backend tests
+        run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # release build と同じ版で gate する。
+          node-version: '22'
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Lint
+        run: npm run lint --prefix frontend
+
+      - name: Unit tests
+        run: npm run test --prefix frontend
+
+      - name: Build
+        run: npm run build --prefix frontend
