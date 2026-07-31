@@ -174,6 +174,9 @@ def test_is_reasoning_opt_in_openrouter():
 
         # reasoning サポートかつ :thinking ではない → True
         assert adapter.is_reasoning_opt_in("anthropic/claude-3.7-sonnet") is True
+        assert adapter.reasoning_effort_params(
+            "anthropic/claude-3.7-sonnet"
+        ) == {"reasoning": {"effort": "xhigh"}}
         print("✓ anthropic/claude-3.7-sonnet → True")
 
         # :thinking suffix → always on → False
@@ -277,12 +280,12 @@ def test_extra_body_passed_to_openrouter():
         model="anthropic/claude-3.7-sonnet",
         system_prompt="sys",
         user_prompt="user",
-        extra_params={"reasoning": {"effort": "medium"}},
+        extra_params={"reasoning": {"effort": "xhigh"}},
     )
 
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert "extra_body" in call_kwargs, "extra_body が含まれる"
-    assert call_kwargs["extra_body"] == {"reasoning": {"effort": "medium"}}, "extra_body の内容が正しい"
+    assert call_kwargs["extra_body"] == {"reasoning": {"effort": "xhigh"}}, "extra_body の内容が正しい"
     assert "reasoning" not in call_kwargs, "reasoning がトップレベルに含まれない"
     print("✓ complete_with_model_result: extra_body として渡される")
 
@@ -292,11 +295,11 @@ def test_extra_body_passed_to_openrouter():
         model="anthropic/claude-3.7-sonnet",
         messages=[{"role": "user", "content": "hi"}],
         tools=[],
-        extra_params={"reasoning": {"effort": "medium"}},
+        extra_params={"reasoning": {"effort": "xhigh"}},
     )
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert "extra_body" in call_kwargs, "native_tools: extra_body が含まれる"
-    assert call_kwargs["extra_body"] == {"reasoning": {"effort": "medium"}}, "native_tools: extra_body の内容が正しい"
+    assert call_kwargs["extra_body"] == {"reasoning": {"effort": "xhigh"}}, "native_tools: extra_body の内容が正しい"
     print("✓ complete_with_model_native_tools: extra_body として渡される")
 
     print("OpenRouter extra_body テスト完了")
@@ -484,10 +487,10 @@ def test_openrouter_claude_opt_in_extracts_anthropic_reasoning_details():
         model="anthropic/claude-3.7-sonnet",
         system_prompt="sys",
         user_prompt="user",
-        extra_params={"reasoning": {"effort": "high"}},
+        extra_params={"reasoning": {"effort": "xhigh"}},
     )
     call_kwargs = adapter._client.chat.completions.create.call_args.kwargs
-    assert call_kwargs.get("extra_body") == {"reasoning": {"effort": "high"}}
+    assert call_kwargs.get("extra_body") == {"reasoning": {"effort": "xhigh"}}
     assert result.api_reasoning == "step A\n\nnative thinking leak"
     print("✓ Claude opt-in + reasoning_details (incl. thinking key)")
 
@@ -511,7 +514,7 @@ def test_openrouter_gemini_thinking_model_extracts_reasoning():
         model="google/gemini-2.5-flash-preview:thinking",
         system_prompt="sys",
         user_prompt="user",
-        extra_params={"reasoning": {"effort": "high"}},
+        extra_params={"reasoning": {"effort": "xhigh"}},
     )
     assert result.text == judge_json
     assert result.api_reasoning == "gemini chain of thought"
@@ -815,7 +818,7 @@ def test_extra_body_passed_to_lmstudio():
 
 
 def test_lmstudio_effort_passthrough_by_capability():
-    """代表3種の capability と extra_body 付与の対応を固定する（Core-Chore-45）。"""
+    """AC-002: graded high capability のみ top-level reasoning_effort を送る。"""
     print("\n=== LM Studio effort passthrough by capability ===")
 
     with patch(
@@ -828,16 +831,25 @@ def test_lmstudio_effort_passthrough_by_capability():
     mock_data = {
         "models": [
             {
-                "key": "opt-in-model",
+                "key": "graded-off-model",
                 "capabilities": {
                     "reasoning": {
                         "default": "off",
-                        "allowed_options": ["off", "on"],
+                        "allowed_options": ["off", "low", "medium", "high"],
                     }
                 },
             },
             {
-                "key": "default-on-model",
+                "key": "graded-on-model",
+                "capabilities": {
+                    "reasoning": {
+                        "default": "high",
+                        "allowed_options": ["off", "low", "medium", "high"],
+                    }
+                },
+            },
+            {
+                "key": "binary-model",
                 "capabilities": {
                     "reasoning": {
                         "default": "on",
@@ -856,26 +868,27 @@ def test_lmstudio_effort_passthrough_by_capability():
         mock_get.return_value.json.return_value = mock_data
         mock_get.return_value.raise_for_status = MagicMock()
 
-        assert adapter.is_reasoning_opt_in("opt-in-model") is True
-        assert adapter.is_reasoning_opt_in("default-on-model") is False
+        assert adapter.is_reasoning_opt_in("graded-off-model") is True
+        assert adapter.is_reasoning_opt_in("graded-on-model") is False
         assert adapter.is_reasoning_opt_in("no-reasoning-model") is False
 
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = "ok"
+    mock_response.choices[0].message.tool_calls = []
     mock_response.usage = None
     mock_client.chat.completions.create.return_value = mock_response
     adapter._client = mock_client
 
-    # Engine と同型: opt-in 時のみ {"reasoning": {"effort": "high"}}
-    for model_key, expect_opt_in in [
-        ("opt-in-model", True),
-        ("default-on-model", False),
+    for model_key, expect_effort in [
+        ("graded-off-model", True),
+        ("graded-on-model", True),
+        ("binary-model", False),
         ("no-reasoning-model", False),
     ]:
         mock_client.chat.completions.create.reset_mock()
-        extra = {"reasoning": {"effort": "high"}} if expect_opt_in else None
+        extra = adapter.reasoning_effort_params(model_key)
         adapter.complete_with_model_result(
             model=model_key,
             system_prompt="sys",
@@ -883,16 +896,25 @@ def test_lmstudio_effort_passthrough_by_capability():
             extra_params=extra,
         )
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
-        if expect_opt_in:
-            assert call_kwargs.get("extra_body") == {
-                "reasoning": {"effort": "high"}
-            }, model_key
-        else:
+        if expect_effort:
+            assert extra == {"reasoning_effort": "high"}, model_key
+            assert call_kwargs.get("reasoning_effort") == "high", model_key
             assert "extra_body" not in call_kwargs, model_key
-        print(
-            f"✓ {model_key}: opt_in={expect_opt_in}, "
-            f"extra_body={'yes' if expect_opt_in else 'no'}"
-        )
+        else:
+            assert extra is None, model_key
+            assert "reasoning_effort" not in call_kwargs, model_key
+            assert "extra_body" not in call_kwargs, model_key
+
+    native_extra = adapter.reasoning_effort_params("graded-on-model")
+    adapter.complete_with_model_native_tools(
+        model="graded-on-model",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[],
+        extra_params=native_extra,
+    )
+    native_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert native_kwargs.get("reasoning_effort") == "high"
+    assert "extra_body" not in native_kwargs
 
     LMStudioAdapter._models_cache = None
     print("LM Studio effort passthrough by capability テスト完了")

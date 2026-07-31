@@ -23,21 +23,21 @@ def test_parse_openrouter_model_path():
 
 
 def test_merge_provider_pin_preserves_reasoning():
-    merged = merge_provider_pin({"reasoning": {"effort": "high"}}, "together")
-    assert merged["reasoning"] == {"effort": "high"}
+    merged = merge_provider_pin({"reasoning": {"effort": "xhigh"}}, "together")
+    assert merged["reasoning"] == {"effort": "xhigh"}
     assert merged["provider"] == {"only": ["together"], "allow_fallbacks": False}
 
 
 def test_iter_extra_params_attempts_pin_then_unrestricted():
     # intent-invariant: INV-001
-    base = {"reasoning": {"effort": "high"}}
+    base = {"reasoning": {"effort": "xhigh"}}
     attempts = list(iter_extra_params_attempts(base, "deepinfra"))
     assert len(attempts) == PREFERRED_HOST_ATTEMPTS + 1
     for pinned in attempts[:-1]:
         assert pinned is not None
         assert pinned["provider"]["only"] == ["deepinfra"]
         assert pinned["provider"]["allow_fallbacks"] is False
-        assert pinned["reasoning"] == {"effort": "high"}
+        assert pinned["reasoning"] == {"effort": "xhigh"}
     assert attempts[-1] == base
     assert "provider" not in (attempts[-1] or {})
 

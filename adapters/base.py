@@ -185,6 +185,18 @@ class LLMAdapter(ABC):
         """モデルがopt-inでreasoningを有効にできるか判定（デフォルトFalse）"""
         return False
 
+    def reasoning_effort_params(self, model: str) -> Optional[Dict[str, Any]]:
+        """Return provider-shaped effort params, or None when unsupported.
+
+        The compatibility default preserves the historic OpenRouter-shaped opt-in
+        contract. Protocol-specific adapters override this method.
+        """
+        # intent: DEC-004 (Core/reasoning-effort-ceiling) — engine asks the
+        # adapter once, so subject and judge cannot drift by role.
+        if self.is_reasoning_opt_in(model):
+            return {"reasoning": {"effort": "xhigh"}}
+        return None
+
     def supports_native_tools(self) -> bool:
         return False
 

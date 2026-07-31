@@ -47,6 +47,27 @@ class OpenAICompatibleAdapter(LLMAdapter):
     def is_available(self) -> bool:
         return bool(self._api_key) and self._client is not None and bool(self._base_url)
 
+    def reasoning_effort_params(self, model: str) -> Optional[Dict[str, Any]]:
+        from core.model_parameter_support import reasoning_effort_for_model
+
+        effort = reasoning_effort_for_model(self._provider_id, model)
+        if effort is None:
+            return None
+        return {"reasoning_effort": effort}
+
+    @staticmethod
+    def _merge_extra_params(
+        kwargs: Dict[str, Any], extra_params: Optional[Dict[str, Any]]
+    ) -> None:
+        if not extra_params:
+            return
+        extra_body = dict(extra_params)
+        reasoning_effort = extra_body.pop("reasoning_effort", None)
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+
     def _normalize_model_name(self, model: str) -> str:
         prefix = f"{self._provider_id}/"
         if model.startswith(prefix):
@@ -129,8 +150,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 kwargs["max_completion_tokens"] = max_tokens
             else:
                 kwargs["max_tokens"] = max_tokens
-            if extra_params:
-                kwargs["extra_body"] = extra_params
+            self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()
             response = self._client.chat.completions.create(**kwargs)
@@ -196,8 +216,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 kwargs["max_completion_tokens"] = max_tokens
             else:
                 kwargs["max_tokens"] = max_tokens
-            if extra_params:
-                kwargs["extra_body"] = extra_params
+            self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()
             response = self._client.chat.completions.create(**kwargs)

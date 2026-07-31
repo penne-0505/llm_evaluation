@@ -5,14 +5,16 @@ intent: DEC-001/002 (Core/model-parameter-support) — adapters/engine はここ
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Optional, Set
 
 # Static tables as_of (OpenAI docs / observed API errors). Update when vendors change.
-AS_OF = "2026-07-23"
+AS_OF = "2026-08-01"
 
 # Parameters we currently reason about
 PARAM_TEMPERATURE = "temperature"
 PARAM_MAX_COMPLETION_TOKENS = "max_completion_tokens"
+PARAM_REASONING_EFFORT = "reasoning_effort"
 
 # OpenAI model families that reject non-default temperature (observed + docs).
 # intent: DEC-002 — 静的表。族マッチで gpt-5.6-luna 等をカバー。
@@ -40,6 +42,30 @@ _GOOGLE_TEMPERATURE_UNSUPPORTED_SUBSTRINGS = (
 _OPENAI_TEMPERATURE_EXACT: Dict[str, bool] = {
     # leave empty; prefixes cover gpt-5 family. gpt-4o etc default True via profile.
 }
+
+_OPENAI_REASONING_PREFIXES = ("o1", "o3", "o4", "gpt-5")
+
+# Anthropic effort support as documented on 2026-08-01. The xhigh families also
+# support max, but DEC-001 sets the product ceiling at xhigh.
+_ANTHROPIC_XHIGH_FAMILIES = (
+    "claude-fable-5",
+    "claude-mythos-5",
+    "claude-opus-5",
+    "claude-opus-4-8",
+    "claude-opus-4.8",
+    "claude-opus-4-7",
+    "claude-opus-4.7",
+    "claude-sonnet-5",
+)
+_ANTHROPIC_HIGH_ONLY_FAMILIES = (
+    "claude-mythos-preview",
+    "claude-opus-4-6",
+    "claude-opus-4.6",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4.6",
+    "claude-opus-4-5",
+    "claude-opus-4.5",
+)
 
 _OR_SUPPORTED_PARAMS_CACHE: Optional[Dict[str, Set[str]]] = None
 
@@ -74,6 +100,42 @@ def _provider_family(provider: str) -> str:
     if p in ("lmstudio",):
         return "lmstudio"
     return p or "unknown"
+
+
+def _openai_supports_xhigh(normalized_model: str) -> bool:
+    if normalized_model.startswith("gpt-5.1-codex-max"):
+        return True
+    match = re.match(r"^gpt-5\.(\d+)(?:-|$)", normalized_model)
+    return bool(match and int(match.group(1)) >= 2)
+
+
+def reasoning_effort_for_model(provider: str, model: str) -> Optional[str]:
+    """Return the highest supported effort at or below the xhigh ceiling.
+
+    intent: DEC-001/003 (Core/reasoning-effort-ceiling) — never return max;
+    unknown providers and unsupported model families are omitted instead of guessed.
+    """
+    family = _provider_family(provider)
+    normalized = _normalize_model_id(model)
+
+    if family == "openai":
+        if not normalized.startswith(_OPENAI_REASONING_PREFIXES):
+            return None
+        return "xhigh" if _openai_supports_xhigh(normalized) else "high"
+
+    if family == "google":
+        if normalized.startswith(("gemini-2.5", "gemini-3")):
+            return "high"
+        return None
+
+    if family == "anthropic":
+        if normalized.startswith(_ANTHROPIC_XHIGH_FAMILIES):
+            return "xhigh"
+        if normalized.startswith(_ANTHROPIC_HIGH_ONLY_FAMILIES):
+            return "high"
+        return None
+
+    return None
 
 
 def set_openrouter_supported_parameters_cache(

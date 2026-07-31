@@ -70,6 +70,19 @@ class LMStudioAdapter(LLMAdapter):
     def is_available(self) -> bool:
         return self._client is not None and bool(self._base_url)
 
+    @staticmethod
+    def _merge_extra_params(
+        kwargs: Dict[str, Any], extra_params: Optional[Dict[str, Any]]
+    ) -> None:
+        if not extra_params:
+            return
+        extra_body = dict(extra_params)
+        reasoning_effort = extra_body.pop("reasoning_effort", None)
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+
     def complete(
         self,
         system_prompt: str,
@@ -127,8 +140,7 @@ class LMStudioAdapter(LLMAdapter):
             }
             if temperature is not None:
                 kwargs["temperature"] = temperature
-            if extra_params:
-                kwargs["extra_body"] = extra_params
+            self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()
             response = self._client.chat.completions.create(**kwargs)
@@ -180,8 +192,7 @@ class LMStudioAdapter(LLMAdapter):
             }
             if temperature is not None:
                 kwargs["temperature"] = temperature
-            if extra_params:
-                kwargs["extra_body"] = extra_params
+            self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()
             response = self._client.chat.completions.create(**kwargs)
@@ -270,3 +281,18 @@ class LMStudioAdapter(LLMAdapter):
         if reasoning is None:
             return False
         return reasoning.get("default") == "off"
+
+    def reasoning_effort_params(self, model: str) -> Optional[Dict[str, Any]]:
+        """Use Chat Completions reasoning_effort only for graded-high models."""
+        models = self._fetch_models_cache()
+        if models is None:
+            return None
+        normalized = self._normalize_model_name(model)
+        info = models.get(normalized)
+        if not info:
+            return None
+        reasoning = info.get("capabilities", {}).get("reasoning") or {}
+        allowed = {str(value) for value in reasoning.get("allowed_options", [])}
+        if "high" not in allowed:
+            return None
+        return {"reasoning_effort": "high"}

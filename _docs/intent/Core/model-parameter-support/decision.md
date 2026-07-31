@@ -4,10 +4,11 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-08-01
 references:
   - "_docs/archives/plan/Core/model-parameter-support/plan.md"
   - "_docs/qa/Core/model-parameter-support/test-plan.md"
+  - "_docs/intent/Core/reasoning-effort-ceiling/decision.md"
 related_issues: []
 related_prs: []
 ---
@@ -50,6 +51,15 @@ related_prs: []
 - **What**: temperature を必須。OpenAI 系の max_completion_tokens 選択も同モジュールのヘルパに寄せる。
 - **Why**: リクエスト整形ポリシーを一箇所に集める。
 - **Change freedom**: 他パラメータ（tools 等）の追加時期。
+
+### DEC-005: reasoning effort の値解決は同じ support 層、payload shape は adapter が持つ
+
+- **What**: `reasoning_effort_for_model` が built-in provider / model の `xhigh` ceiling と high fallback
+  を解決し、各 adapter が OpenRouter / OpenAI-compatible / Anthropic の field shape へ変換する。
+- **Why**: model family table は temperature と同じ更新単位だが、protocol shape まで共有層へ入れると
+  engine と adapter の責務が混ざる。
+- **Change freedom**: capability API が利用可能になれば static table を置換できる。ceiling と安全側
+  omit の rationale は `_docs/intent/Core/reasoning-effort-ceiling/decision.md` を正典とする。
 
 ## Consequences / Impact
 

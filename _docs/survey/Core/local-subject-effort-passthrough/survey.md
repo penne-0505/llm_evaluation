@@ -3,10 +3,11 @@ title: "Survey: Local subject effort/reasoning passthrough"
 status: active
 draft_status: n/a
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-08-01
 references:
   - "https://lmstudio.ai/docs/developer/rest/list"
   - "https://lmstudio.ai/changelog/lmstudio-v0.4.8"
+  - "_docs/intent/Core/reasoning-effort-ceiling/decision.md"
 related_issues: []
 related_prs: []
 ---
@@ -36,6 +37,9 @@ Inbox 由来の Core-Chore-45 は、ローカル被験（LM Studio）で `reason
   アプリがレスポンスから reasoning 本文を抽出していない点はコード上で確定済み。
 
 ## Results
+
+> 2026-08-01 update: §A–E は Core-Chore-45 時点の旧実装調査である。現行 contract は §F と
+> `_docs/intent/Core/reasoning-effort-ceiling/decision.md` を正典とする。
 
 ### A. 被験呼び出し経路（engine）
 
@@ -117,3 +121,14 @@ OpenRouter の `supported_parameters: ["reasoning"]` + `:thinking` always-on と
    top-level `reasoning_effort` のどちらが効くかをライブ検証し、必要なら adapter の payload 正規化を行う
    （**Core-Bug-48** を Backlog 起票済み）。
 4. default on モデルへも常に effort high を強制したい場合は、別 Enhance（opt-in 定義変更）とする。
+
+## F. Core-Enhance-75 後の現行 contract（2026-08-01）
+
+- LM Studio 0.4.8 changelog が Chat Completions の top-level `reasoning_effort` 対応を明記したため、
+  nested OpenRouter shape の流用を廃止した。
+- `/api/v1/models` の `capabilities.reasoning.allowed_options` に `high` がある model は、default の
+  on/off に関係なく `reasoning_effort: high` を送る。
+- `allowed_options` が `on` / `off` のみ、capability 不在、catalog 取得失敗では graded effort を
+  omit する。無効値による request failure を避けるためである。
+- 被験通常 / native tools / judge は同じ `LMStudioAdapter.reasoning_effort_params` を使う。
+- unit regression は追加済み。LM Studio 実サーバが停止中だったため受理確認は Core-Bug-48 に残す。

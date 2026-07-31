@@ -65,6 +65,41 @@ def test_complete_returns_text_usage_and_api_reasoning():
     assert call_kwargs["max_tokens"] == 256
 
 
+def test_ac002_anthropic_effort_params_use_xhigh_ceiling_and_high_fallback():
+    adapter = _make_adapter()
+
+    assert adapter.reasoning_effort_params("anthropic/claude-opus-4-8") == {
+        "output_config": {"effort": "xhigh"}
+    }
+    assert adapter.reasoning_effort_params("anthropic/claude-sonnet-4-6") == {
+        "output_config": {"effort": "high"}
+    }
+    assert (
+        adapter.reasoning_effort_params("anthropic/claude-sonnet-4-5-20250929")
+        is None
+    )
+
+
+def test_ac002_anthropic_effort_is_forwarded_to_messages_api():
+    adapter = _make_adapter()
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="ok")], usage=None
+    )
+    adapter._client.messages.create.return_value = response
+    effort = adapter.reasoning_effort_params("anthropic/claude-opus-4-8")
+
+    adapter.complete_with_model_result(
+        model="anthropic/claude-opus-4-8",
+        system_prompt="sys",
+        user_prompt="user",
+        extra_params=effort,
+    )
+
+    call_kwargs = adapter._client.messages.create.call_args.kwargs
+    assert call_kwargs["output_config"] == {"effort": "xhigh"}
+    assert "extra_body" not in call_kwargs
+
+
 def test_native_tools_returns_native_tool_call():
     """AC-003 / DEC-006: tool_use → NativeToolCall、OpenAI tools/messages 変換。"""
     adapter = _make_adapter()
@@ -119,11 +154,14 @@ def test_native_tools_returns_native_tool_call():
     ]
 
     result = adapter.complete_with_model_native_tools(
-        model="anthropic/claude-3-5-sonnet-latest",
+        model="anthropic/claude-opus-4-8",
         messages=openai_messages,
         tools=openai_tools,
         temperature=0.0,
         max_tokens=1024,
+        extra_params=adapter.reasoning_effort_params(
+            "anthropic/claude-opus-4-8"
+        ),
     )
 
     assert result.content == "calling tool"
@@ -136,7 +174,8 @@ def test_native_tools_returns_native_tool_call():
     assert result.usage.input_tokens == 5
 
     call_kwargs = adapter._client.messages.create.call_args.kwargs
-    assert call_kwargs["model"] == "claude-3-5-sonnet-latest"
+    assert call_kwargs["model"] == "claude-opus-4-8"
+    assert call_kwargs["output_config"] == {"effort": "xhigh"}
     assert call_kwargs["system"] == "You are helpful."
     assert call_kwargs["tools"] == [
         {

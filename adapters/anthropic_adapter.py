@@ -255,6 +255,14 @@ class AnthropicAdapter(LLMAdapter):
         """APIキーが設定されているか確認（長さ > 10）。"""
         return self._api_key is not None and len(self._api_key) > 10
 
+    def reasoning_effort_params(self, model: str) -> Optional[Dict[str, Any]]:
+        from core.model_parameter_support import reasoning_effort_for_model
+
+        effort = reasoning_effort_for_model(self._provider_id, model)
+        if effort is None:
+            return None
+        return {"output_config": {"effort": effort}}
+
     def _normalize_model_name(self, model: str) -> str:
         prefix = f"{self._provider_id}/"
         if model.startswith(prefix):

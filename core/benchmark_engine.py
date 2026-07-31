@@ -514,9 +514,9 @@ class BenchmarkEngine:
         tool_trace: List[Dict[str, Any]] = []
         usage_records: List[CompletionResult] = []
 
-        extra_params = None
-        if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
-            extra_params = {"reasoning": {"effort": "high"}}
+        extra_params = self.subject_adapter.reasoning_effort_params(
+            self.subject_model
+        )
 
         for step_index in range(config.max_steps + 1):
             if cancel_checker:
@@ -766,9 +766,9 @@ class BenchmarkEngine:
     ) -> CompletionResult:
         if cancel_checker:
             cancel_checker()
-        extra_params = None
-        if self.subject_adapter.is_reasoning_opt_in(self.subject_model):
-            extra_params = {"reasoning": {"effort": "high"}}
+        extra_params = self.subject_adapter.reasoning_effort_params(
+            self.subject_model
+        )
 
         def _invoke(extra: Optional[Dict[str, Any]]) -> CompletionResult:
             return self.subject_adapter.complete_with_model_result(
@@ -1142,9 +1142,7 @@ class BenchmarkEngine:
         provider = getattr(adapter, "PROVIDER", None) or "unknown"
         if not should_send_temperature(provider, model_name, judge_temperature):
             judge_temperature = None
-        extra_params = None
-        if adapter.is_reasoning_opt_in(model_name):
-            extra_params = {"reasoning": {"effort": "high"}}
+        extra_params = adapter.reasoning_effort_params(model_name)
 
         preferred = self._preferred_host_for(model_name, adapter)
 

@@ -127,7 +127,7 @@ class _NativeToolLoopAdapter(_StubAdapter):
 
 
 class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
-    async def test_reasoning_opt_in_subject_uses_high_effort(self):
+    async def test_ac001_reasoning_subject_uses_adapter_xhigh_effort(self):
         subject_adapter = _StubAdapter(["subject-response"], reasoning_opt_in=True)
         engine = BenchmarkEngine(
             subject_adapter=subject_adapter,
@@ -146,7 +146,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             subject_adapter.calls[0]["extra_params"],
-            {"reasoning": {"effort": "high"}},
+            {"reasoning": {"effort": "xhigh"}},
         )
 
     async def test_subject_max_tokens_is_16384(self):
@@ -438,7 +438,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             {"subject_duration_ms": 250, "judge_duration_ms": 190},
         )
 
-    async def test_reasoning_opt_in_judge_uses_high_effort(self):
+    async def test_ac001_reasoning_judge_uses_adapter_xhigh_effort(self):
         valid_response = json.dumps(
             {
                 "task_name": "test",
@@ -473,7 +473,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             judge_adapter.calls[0]["extra_params"],
-            {"reasoning": {"effort": "high"}},
+            {"reasoning": {"effort": "xhigh"}},
         )
 
     async def test_gemini_3_judge_omits_temperature(self):
@@ -513,7 +513,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(judge_adapter.calls[0]["temperature"])
         self.assertEqual(
             judge_adapter.calls[0]["extra_params"],
-            {"reasoning": {"effort": "high"}},
+            {"reasoning": {"effort": "xhigh"}},
         )
 
     async def test_judge_temperature_uses_adapter_provider_not_model_prefix(self):
@@ -782,7 +782,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_claude_opt_in_effort_and_api_reasoning(self):
-        """AC-004: Claude opt-in は effort high 送信 + api_reasoning 永続化"""
+        """AC-004: Claude opt-in は effort xhigh 送信 + api_reasoning 永続化"""
         valid_response = json.dumps(
             {
                 "task_name": "test",
@@ -834,7 +834,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         run = payload["judge_results"]["anthropic/claude-3.7-sonnet"]["runs"][0]
         self.assertEqual(
             judge_adapter.calls[0]["extra_params"],
-            {"reasoning": {"effort": "high"}},
+            {"reasoning": {"effort": "xhigh"}},
         )
         self.assertEqual(run["api_reasoning"], "claude opt-in thinking")
         self.assertEqual(run["reasoning"], "scoring rationale")
@@ -1257,13 +1257,13 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subject_adapter.native_call_count, 2)
         self.assertTrue(
             all(
-                call["extra_params"] == {"reasoning": {"effort": "high"}}
+                call["extra_params"] == {"reasoning": {"effort": "xhigh"}}
                 for call in subject_adapter.native_calls
             )
         )
         self.assertEqual(
             subject_adapter.calls[0]["extra_params"],
-            {"reasoning": {"effort": "high"}},
+            {"reasoning": {"effort": "xhigh"}},
         )
 
     async def test_holistic_task_result_includes_explicit_empty_subject_prompt(self):

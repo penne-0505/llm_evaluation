@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 75` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 76` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -466,27 +466,27 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - **QA**: None
 - **Verification**: None
 
-### Core-Bug-48: [Bug] Verify LM Studio reasoning.effort payload shape
+### Core-Bug-48: [Bug] Verify LM Studio reasoning_effort on a live server
 
-- **Title**: [Bug] Verify LM Studio reasoning.effort payload shape
+- **Title**: [Bug] Verify LM Studio reasoning_effort on a live server
 - **ID**: Core-Bug-48
 - **Priority**: P2
 - **Size**: S
 - **Risk**: Low
 - **Area**: Core
 - **Dependencies**: []
-- **Goal**: LM Studio chat completions 被験呼び出しで、現行の nested `extra_body.reasoning.effort` がサーバに受理・反映されるか、flat `reasoning_effort` 等への正規化が必要かをライブ検証し、必要なら adapter を修正する。
+- **Goal**: LM Studio chat completions 被験呼び出しで、top-level `reasoning_effort: high` が graded reasoning model に受理・反映されることをライブ検証する。
 - **Acceptance Criteria**:
-  - AC-001: default off の代表ローカルモデルで、現行 payload（`{"reasoning": {"effort": "high"}}`）と代替（例: `{"reasoning_effort": "high"}`）の受理差が記録される。
-  - AC-002: 受理される形に合わせて `LMStudioAdapter` が `extra_body` を正規化する、または現行形で十分なら調査結果を survey / Intent に残して閉じる。
-  - AC-003: `tests/test_adapters.py` の LM Studio extra_body / opt-in 関連テストが更新または維持され通る。
+  - AC-001: `allowed_options` に `high` を含む代表ローカルモデルで、top-level `reasoning_effort: high` の受理と出力差が記録される。
+  - AC-002: `allowed_options` が on/off のみのモデルへ graded effort を送らない現行 gate が、実サーバ catalog と整合する。
+  - AC-003: `tests/test_adapters.py` の top-level forwarding / capability gate regression test が再発防止として維持され通る。
 - **Steps**:
-  1. [ ] LM Studio 実機（または互換サーバ）で default off モデルに両 payload を送り、ログ / 応答差を記録する
-  2. [ ] 必要なら `LMStudioAdapter.complete_with_model_result` / native tools で payload 正規化を実装する
+  1. [ ] LM Studio 0.4.8+ 実機で graded model に `reasoning_effort: high` を送り、ログ / 応答を記録する
+  2. [ ] binary on/off model の catalog と omit 挙動を照合する
   3. [ ] テストと `_docs/survey/Core/local-subject-effort-passthrough/survey.md` を更新する
 - **Description**:
-  - Context: Core-Chore-45 調査で、engine は OpenRouter 同型の nested `reasoning.effort` を LM Studio にも送ることが確定。一方 LM Studio 0.4.8 は `reasoning_effort` 追加を changelog 記載し、`/v1/responses` は nested effort を明示サポート、chat completions の公式パラメータ一覧には未列挙。live 検証なしでは nested 形の有効性が未確定。
-  - Notes: Source survey `_docs/survey/Core/local-subject-effort-passthrough/survey.md` §E。opt-in 条件（default off のみ送信）自体の変更は本 Bug のスコープ外。
+  - Context: Core-Enhance-75 で LM Studio 0.4.8 changelog と `/api/v1/models` schema に合わせ、graded capability へ top-level `reasoning_effort: high` を送る実装と unit regression を追加した。ローカルサーバは調査時に停止中で live 受理は未確認。
+  - Notes: Source survey `_docs/survey/Core/local-subject-effort-passthrough/survey.md` §F。payload shape の実装判断は `_docs/intent/Core/reasoning-effort-ceiling/decision.md` が正典。
 - **Plan**: None
 - **Intent**: None
 - **QA**: None
@@ -527,6 +527,36 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - **Verification**: None
 
 ## In Progress
+
+### Core-Enhance-75: [Enhance] Unify subject and judge reasoning effort ceilings
+
+- **Title**: [Enhance] Unify subject and judge reasoning effort ceilings
+- **ID**: Core-Enhance-75
+- **Priority**: P1
+- **Size**: M
+- **Risk**: High
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: 被験と judge の reasoning effort が同一の provider-aware 方針で、各 API が受理する `xhigh` 以下の最上位値に統一される。
+- **Acceptance Criteria**:
+  - AC-001: 被験の通常・native tool 経路と judge 経路が、同じ adapter 契約から effort payload を取得する。
+  - AC-002: OpenRouter は `reasoning.effort: xhigh`、OpenAI は対応モデルで top-level `reasoning_effort: xhigh`（high-only は `high`）、Google AI Studio は top-level `reasoning_effort: high`、Anthropic は `output_config.effort` に `xhigh` または `high`、LM Studio は capability が許す場合に top-level `reasoning_effort: high` を送る。
+  - AC-003: `max` は送信せず、effort 非対応モデル・能力不明の custom provider へ無効な値を送らない。
+  - AC-004: provider payload、被験/judge parity、非対応時 omit の regression test と baseline suite が通る。
+  - AC-005: 実装 commit が main へ push され、`v0.17.0` tag の release workflow と配布 asset が確認できる。
+- **Steps**:
+  1. [x] provider 公式仕様と現行 routing / SDK payload を調査する
+  2. [x] Plan / Intent / QA test-plan を作成する
+  3. [x] adapter ごとの effort 解決と payload 正規化を実装する
+  4. [x] regression / baseline / docs gate を実行し verification を残す
+  5. [ ] commit / push / `v0.17.0` tag push / release 検証を完了する
+- **Description**:
+  - Context: engine は OpenRouter / LM Studio 向け nested `reasoning.effort: high` を3箥所で直書きし、公式 OpenAI / Google / Anthropic 経路には effort を送っていない。各 API の実フィールドと対応上限が異なるため、adapter 境界で解決する。
+  - Notes: `max` 対応系でも ceiling は `xhigh` とし、`xhigh` 非対応なら `high` まで下げる。Core-Bug-48 の LM Studio live QA は、実サーバでの受理確認として別途残す。
+- **Plan**: `_docs/plan/Core/reasoning-effort-ceiling/plan.md`
+- **Intent**: `_docs/intent/Core/reasoning-effort-ceiling/decision.md`
+- **QA**: `_docs/qa/Core/reasoning-effort-ceiling/test-plan.md`
+- **Verification**: `_docs/qa/Core/reasoning-effort-ceiling/verification.md`
 
 ### Core-Bug-71: [Bug] Result index lost update and non-atomic write
 

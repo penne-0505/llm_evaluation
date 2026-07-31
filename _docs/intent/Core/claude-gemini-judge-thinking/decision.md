@@ -4,13 +4,14 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-08-01
 references:
   - "_docs/archives/survey/Core/claude-gemini-judge-thinking/survey.md"
   - "_docs/archives/plan/Core/claude-gemini-judge-thinking/plan.md"
   - "_docs/qa/Core/claude-gemini-judge-thinking/test-plan.md"
   - "_docs/qa/Core/claude-gemini-judge-thinking/verification.md"
   - "_docs/intent/Core/openai-judge-thinking/decision.md"
+  - "_docs/intent/Core/reasoning-effort-ceiling/decision.md"
 related_issues: []
 related_prs: []
 ---
@@ -20,7 +21,7 @@ related_prs: []
 ## Context
 
 OpenRouter 経由の Claude / Gemini judge では、`is_reasoning_opt_in` により opt-in モデルへ
-`reasoning.effort: high` が送られるが、`:thinking` suffix モデルは always-on のため extra_params なし
+`reasoning.effort: xhigh` が送られるが、`:thinking` suffix モデルは always-on のため extra_params なし
 で呼ばれる。いずれも adapter は `message.content` のみ返し、Anthropic thinking ブロックや Gemini
 thinking 出力は破棄される。Core-Feat-37 と `CompletionResult` / `api_reasoning` / UI 分離は共有するが、
 provider 別の取得可否と no-support 境界は本 Intent で決める。
@@ -54,7 +55,7 @@ provider 別の取得可否と no-support 境界は本 Intent で決める。
 ### DEC-003: `:thinking` suffix と opt-in reasoning は同一抽出経路で扱う
 
 - **What**: `is_reasoning_opt_in` が False でも（`:thinking` always-on）、レスポンスに
-  `message.reasoning` があれば `api_reasoning` に保存する。opt-in モデルは effort high 送信 +
+  `message.reasoning` があれば `api_reasoning` に保存する。opt-in モデルは effort xhigh 送信 +
   同一抽出。
 - **Why**: opt-in 判定は **リクエスト** 制御であり、**レスポンス** 抽出条件ではない。`:thinking`
   モデルは effort 未送信でも thinking が返るため、抽出を opt-in True に限定すると取りこぼす。
@@ -77,7 +78,7 @@ provider 別の取得可否と no-support 境界は本 Intent で決める。
 ## Quality Implications
 
 - stub: `anthropic/claude-3.7-sonnet:thinking`（reasoning あり、extra_params なし）。
-- stub: opt-in Claude（effort high + reasoning あり）。
+- stub: opt-in Claude（effort xhigh + reasoning あり）。
 - stub: Gemini thinking / 非 thinking。
 - 全ケースで aggregated スコア取得成功（AC-005）。
 

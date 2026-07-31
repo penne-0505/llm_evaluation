@@ -77,6 +77,93 @@ class TestModelParameterSupport(unittest.TestCase):
             mps.allows("custom-proxy", "mystery-model", "temperature")
         )
 
+    def test_ac002_reasoning_effort_uses_xhigh_ceiling_and_high_fallback(self) -> None:
+        cases = [
+            ("openai", "openai/gpt-5.6-luna", "xhigh"),
+            ("openai", "openai/gpt-5.1-codex-max", "xhigh"),
+            ("openai", "openai/gpt-5.1", "high"),
+            ("openai", "openai/gpt-5-pro", "high"),
+            ("google-ai-studio", "google-ai-studio/gemini-3.5-flash", "high"),
+            ("google-ai-studio", "google-ai-studio/gemini-2.5-pro", "high"),
+            ("anthropic", "anthropic/claude-opus-4-8", "xhigh"),
+            ("anthropic", "anthropic/claude-sonnet-5", "xhigh"),
+            ("anthropic", "anthropic/claude-sonnet-4-6", "high"),
+            ("anthropic", "anthropic/claude-opus-4-5-20251101", "high"),
+        ]
+        for provider, model, expected in cases:
+            with self.subTest(provider=provider, model=model):
+                self.assertEqual(
+                    mps.reasoning_effort_for_model(provider, model), expected
+                )
+
+    def test_inv002_reasoning_effort_omits_unsupported_and_never_returns_max(self) -> None:
+        unsupported = [
+            ("openai", "openai/gpt-4o"),
+            ("google-ai-studio", "google-ai-studio/gemini-2.0-flash"),
+            ("anthropic", "anthropic/claude-sonnet-4-5-20250929"),
+            ("custom-proxy", "custom-proxy/reasoning-model"),
+        ]
+        for provider, model in unsupported:
+            with self.subTest(provider=provider, model=model):
+                self.assertIsNone(mps.reasoning_effort_for_model(provider, model))
+
+        known = [
+            ("openai", "openai/gpt-5.6-sol"),
+            ("anthropic", "anthropic/claude-opus-4-7"),
+            ("google-ai-studio", "google-ai-studio/gemini-3.1-pro-preview"),
+        ]
+        self.assertNotIn(
+            "max",
+            [mps.reasoning_effort_for_model(provider, model) for provider, model in known],
+        )
+
+    def test_ac002_openai_compatible_adapter_forwards_reasoning_effort_top_level(self) -> None:
+        for provider_id, model, expected in [
+            ("openai", "openai/gpt-5.6-luna", "xhigh"),
+            (
+                "google-ai-studio",
+                "google-ai-studio/gemini-3.5-flash",
+                "high",
+            ),
+        ]:
+            with self.subTest(provider=provider_id):
+                adapter = OpenAICompatibleAdapter(
+                    provider_id=provider_id,
+                    api_key="sk-test-key-for-openai-adapter",
+                    base_url="https://example.invalid/v1",
+                )
+                mock_client = MagicMock()
+                mock_response = MagicMock()
+                mock_response.choices = [MagicMock()]
+                mock_response.choices[0].message.content = "ok"
+                mock_response.choices[0].message.reasoning = None
+                mock_response.choices[0].message.reasoning_details = None
+                mock_response.usage = None
+                mock_client.chat.completions.create.return_value = mock_response
+                adapter._client = mock_client
+
+                extra_params = adapter.reasoning_effort_params(model)
+                self.assertEqual(extra_params, {"reasoning_effort": expected})
+                adapter.complete_with_model_result(
+                    model=model,
+                    system_prompt="sys",
+                    user_prompt="user",
+                    extra_params=extra_params,
+                )
+                kwargs = mock_client.chat.completions.create.call_args.kwargs
+                self.assertEqual(kwargs.get("reasoning_effort"), expected)
+                self.assertNotIn("extra_body", kwargs)
+
+    def test_ac003_custom_openai_compatible_adapter_omits_effort(self) -> None:
+        adapter = OpenAICompatibleAdapter(
+            provider_id="custom-proxy",
+            api_key="sk-test-key-for-custom-adapter",
+            base_url="https://example.invalid/v1",
+        )
+        self.assertIsNone(
+            adapter.reasoning_effort_params("custom-proxy/reasoning-model")
+        )
+
     def test_openai_compatible_adapter_omits_temperature_for_gpt56(self) -> None:
         adapter = OpenAICompatibleAdapter(
             provider_id="openai",

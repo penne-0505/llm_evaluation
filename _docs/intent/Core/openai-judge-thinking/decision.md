@@ -4,11 +4,12 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-23
-updated_at: 2026-07-23
+updated_at: 2026-08-01
 references:
   - "_docs/archives/survey/Core/openai-judge-thinking/survey.md"
   - "_docs/archives/plan/Core/openai-judge-thinking/plan.md"
   - "_docs/qa/Core/openai-judge-thinking/test-plan.md"
+  - "_docs/intent/Core/reasoning-effort-ceiling/decision.md"
 related_issues: []
 related_prs: []
 ---
@@ -19,7 +20,8 @@ related_prs: []
 
 judge は `JudgeResponseParser` 通過後の JSON `reasoning` に採点根拠を書く。これはモデル内部の
 thinking トークンとは別概念である。現行 `CompletionResult` は `text` のみで、OpenRouter アダプタも
-`message.content` だけを返す。engine は opt-in モデルへ `reasoning.effort: high` を送るが、
+`message.content` だけを返す。engine は adapter の共通契約から opt-in モデルへ
+`reasoning.effort: xhigh` を送るが、
 レスポンス thinking は保存も表示もしない。Core-Feat-38 と `CompletionResult` / UI 契約は共有可能だが、
 OpenAI 系の API 経路選択（Chat Completions vs Responses API vs タグ）は本 Intent で決める。
 
