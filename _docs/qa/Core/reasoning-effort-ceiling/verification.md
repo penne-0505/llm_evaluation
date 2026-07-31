@@ -2,7 +2,7 @@
 title: "QA Verification: Provider-aware reasoning effort ceiling"
 status: active
 draft_status: n/a
-qa_status: partial
+qa_status: verified
 risk: High
 qa_schema: 2
 created_at: 2026-08-01
@@ -24,11 +24,13 @@ OpenRouter は nested `xhigh`、OpenAI / Google は top-level `reasoning_effort`
 `output_config.effort`、LM Studio は catalog が graded `high` を許す場合だけ top-level
 `reasoning_effort` を送る。local regression と repository baseline は全て通過した。
 
-remote main / `v0.17.0` tag / release assets は未 push のため、現時点の verdict は `PARTIAL` とする。
+implementation commit `82ee42e4a12128fde10a9d246018fbdeaa29d6df` は main と annotated
+`v0.17.0` tag へ push 済みである。Code CI / Docs CI / Linux / Windows release workflow は全て
+success、GitHub Release は公開済みで4 assetが uploaded になった。
 
 ## Verification Verdict
 
-Verdict: PARTIAL
+Verdict: PASS
 
 ## Commands Run
 
@@ -50,6 +52,15 @@ npx markdownlint-cli2 '_docs/**/*.md' '_evals/**/*.md' README.md AGENTS.md \
 git diff --check
 rg -n -S '\{"reasoning": \{"effort": "high"\}\}|extra_params = \
   \{"reasoning"|"effort": "max"' adapters core tests
+git push origin main
+git tag -a v0.17.0 82ee42e4a12128fde10a9d246018fbdeaa29d6df -m "v0.17.0"
+git push origin refs/tags/v0.17.0
+git ls-remote --heads --tags origin
+gh run view 30662780030 --json name,status,conclusion,headSha,jobs,url
+gh run view 30662780368 --json name,status,conclusion,headSha,jobs,url
+gh run view 30662789470 --json name,status,conclusion,headSha,jobs,url
+gh run view 30662790075 --json name,status,conclusion,headSha,jobs,url
+gh release view v0.17.0 --json tagName,isDraft,isPrerelease,publishedAt,url,assets
 ```
 
 Result:
@@ -68,6 +79,13 @@ docs-validator=PASS
 markdownlint=154 files, 0 issues
 diff-check=PASS
 legacy-high/max-send-scan=0 matches
+implementation-push=82ee42e4a12128fde10a9d246018fbdeaa29d6df
+remote-tag=v0.17.0 -> 82ee42e4a12128fde10a9d246018fbdeaa29d6df
+code-ci=success (backend 3.12, backend 3.14, frontend)
+docs-ci=success
+windows-release=success
+linux-release=success
+release=v0.17.0 published, draft=false, prerelease=false, assets=4 uploaded
 ```
 
 ## Automated Test Results
@@ -89,7 +107,7 @@ legacy-high/max-send-scan=0 matches
 | Google AI Studio field / enum | PASS | official OpenAI compatibility map: high が上限 |
 | LM Studio field / capability | PASS | 0.4.8 changelog + `/api/v1/models` schema。live server は停止中 |
 | Live LM Studio request | deferred | Core-Bug-48 に follow-up。unit で top-level / omit を固定 |
-| Remote main / tag / release | pending | AC-005。implementation commit 後に実施 |
+| Remote main / tag / release | PASS | main / tag SHA 一致、4 workflow success、4 asset uploaded |
 
 ## Acceptance Criteria Coverage
 
@@ -99,7 +117,7 @@ legacy-high/max-send-scan=0 matches
 | AC-002 | PASS | resolver + four adapter test groups、official docs / SDK signatures |
 | AC-003 | PASS | unsupported/custom omit tests、static scan、`max` return なし |
 | AC-004 | PASS | targeted と baseline suite が全て緑 |
-| AC-005 | PARTIAL | local implementation は完了、push / tag / release は未実施 |
+| AC-005 | PASS | main / annotated tag は `82ee42e`。Code/Docs/Linux/Windows 全 workflow success、4 asset uploaded |
 
 ## Decision Conformance
 
@@ -122,16 +140,13 @@ legacy-high/max-send-scan=0 matches
 
 | ID | Reason | Follow-up |
 | --- | --- | --- |
-| AC-005 | push / tag 前のため | Core-Enhance-75 Step 5 を継続し本 verification を更新 |
 | LM Studio live | ローカルサーバ停止中。AC-002 は公式仕様 + unit で充足 | Core-Bug-48 |
 | Paid provider live comparison | regression に課金 credential を要求しない | 必要時に別 Manual QA |
 
 ## Residual Risks
 
-- OpenAI / Anthropic の effort capability は静的表のため、新 model family は表更新まで安全側 omit になる。
-- 現時点では remote release evidence が未取得である。
+None
 
 ## Follow-up TODOs
 
-- Core-Enhance-75: main push、`v0.17.0` tag push、release workflow / assets を確認する。
 - Core-Bug-48: LM Studio 0.4.8+ 実サーバで graded high の受理を確認する。

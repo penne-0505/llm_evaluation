@@ -2,7 +2,7 @@
 title: "QA Test Plan: Provider-aware reasoning effort ceiling"
 status: active
 draft_status: n/a
-qa_status: in-progress
+qa_status: planned
 risk: High
 qa_schema: 2
 created_at: 2026-08-01
@@ -75,13 +75,13 @@ unsupported model や custom endpoint の既存成功経路を壊さない。
 | AC-002 | TODO / DEC-002 | provider 別 value / shape | unit | `uv run pytest tests/test_model_parameter_support.py tests/test_adapters.py tests/test_anthropic_adapter.py` | OR/OpenAI/Google/Anthropic/LM の kwargs が期待値一致 | verified |
 | AC-003 | TODO / INV-002 | max 禁止、unsupported / custom omit | unit + static | resolver tests + `rg` | `max` payload 0件、unknown は None | verified |
 | AC-004 | TODO | repository baseline | regression | `uv run pytest`; frontend lint/test/build; docs gates | 全 command exit 0 | verified |
-| AC-005 | TODO | push / tag / release | remote manual | `git ls-remote`, `gh run`, `gh release view` | main/tag SHA と4 assets確認 | deferred |
+| AC-005 | TODO | push / tag / release | remote manual | `git ls-remote`, `gh run`, `gh release view` | main/tag SHA と4 assets確認 | verified |
 
 ## Manual QA Checklist
 
 - [x] OpenAI / Anthropic / Google / LM Studio の公式 field と enum を再照合する。
 - [x] ローカル LM Studio が起動していないため live payload 受理を deferred と明記する。
-- [ ] `v0.17.0` の Linux / Windows workflow と checksum asset を確認する。
+- [x] `v0.17.0` の Linux / Windows workflow と checksum asset を確認する。
 
 ## Regression Checklist
 

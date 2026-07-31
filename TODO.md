@@ -528,36 +528,6 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## In Progress
 
-### Core-Enhance-75: [Enhance] Unify subject and judge reasoning effort ceilings
-
-- **Title**: [Enhance] Unify subject and judge reasoning effort ceilings
-- **ID**: Core-Enhance-75
-- **Priority**: P1
-- **Size**: M
-- **Risk**: High
-- **Area**: Core
-- **Dependencies**: []
-- **Goal**: 被験と judge の reasoning effort が同一の provider-aware 方針で、各 API が受理する `xhigh` 以下の最上位値に統一される。
-- **Acceptance Criteria**:
-  - AC-001: 被験の通常・native tool 経路と judge 経路が、同じ adapter 契約から effort payload を取得する。
-  - AC-002: OpenRouter は `reasoning.effort: xhigh`、OpenAI は対応モデルで top-level `reasoning_effort: xhigh`（high-only は `high`）、Google AI Studio は top-level `reasoning_effort: high`、Anthropic は `output_config.effort` に `xhigh` または `high`、LM Studio は capability が許す場合に top-level `reasoning_effort: high` を送る。
-  - AC-003: `max` は送信せず、effort 非対応モデル・能力不明の custom provider へ無効な値を送らない。
-  - AC-004: provider payload、被験/judge parity、非対応時 omit の regression test と baseline suite が通る。
-  - AC-005: 実装 commit が main へ push され、`v0.17.0` tag の release workflow と配布 asset が確認できる。
-- **Steps**:
-  1. [x] provider 公式仕様と現行 routing / SDK payload を調査する
-  2. [x] Plan / Intent / QA test-plan を作成する
-  3. [x] adapter ごとの effort 解決と payload 正規化を実装する
-  4. [x] regression / baseline / docs gate を実行し verification を残す
-  5. [ ] commit / push / `v0.17.0` tag push / release 検証を完了する
-- **Description**:
-  - Context: engine は OpenRouter / LM Studio 向け nested `reasoning.effort: high` を3箥所で直書きし、公式 OpenAI / Google / Anthropic 経路には effort を送っていない。各 API の実フィールドと対応上限が異なるため、adapter 境界で解決する。
-  - Notes: `max` 対応系でも ceiling は `xhigh` とし、`xhigh` 非対応なら `high` まで下げる。Core-Bug-48 の LM Studio live QA は、実サーバでの受理確認として別途残す。
-- **Plan**: `_docs/plan/Core/reasoning-effort-ceiling/plan.md`
-- **Intent**: `_docs/intent/Core/reasoning-effort-ceiling/decision.md`
-- **QA**: `_docs/qa/Core/reasoning-effort-ceiling/test-plan.md`
-- **Verification**: `_docs/qa/Core/reasoning-effort-ceiling/verification.md`
-
 ### Core-Bug-71: [Bug] Result index lost update and non-atomic write
 
 - **Title**: [Bug] Result index lost update and non-atomic write
