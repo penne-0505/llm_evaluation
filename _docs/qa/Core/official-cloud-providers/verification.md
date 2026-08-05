@@ -2,7 +2,7 @@
 title: "QA Verification: Ollama Cloud and OpenCode Go official providers"
 status: active
 draft_status: n/a
-qa_status: partial
+qa_status: verified
 risk: High
 qa_schema: 2
 created_at: 2026-08-05
@@ -10,7 +10,7 @@ updated_at: 2026-08-05
 references:
   - "_docs/intent/Core/official-cloud-providers/decision.md"
   - "_docs/intent/Core/openai-compat-anthropic-providers/decision.md"
-  - "_docs/plan/Core/official-cloud-providers/plan.md"
+  - "_docs/archives/plan/Core/official-cloud-providers/plan.md"
   - "_docs/qa/Core/official-cloud-providers/test-plan.md"
 related_issues: []
 related_prs: []
@@ -22,12 +22,12 @@ related_prs: []
 
 Ollama Cloud / OpenCode Go を official builtin provider とし、base URL、environment alias、UI 保存、
 model catalog、Chat Completions routing を同じ registry contract に統合した。local baseline、公開 endpoint、
-無認証 error contract、独立 diff review は完了した。remote main / tag / release workflow は未実行のため、
-deployment closure だけを deferred とする。
+無認証 error contract、独立 diff review は完了した。implementation commit と annotated `v0.18.0` tag は
+remote へ push 済みで、Code CI / Docs CI / Linux / Windows workflow と release asset 4件を確認した。
 
 ## Verification Verdict
 
-Verdict: PARTIAL
+Verdict: PASS
 
 ## Commands Run
 
@@ -52,6 +52,14 @@ curl -fsSL https://models.dev/api.json
 cheap-opinion review --model qwen-coder --format json
 git diff --check
 git ls-remote --tags origin refs/tags/v0.18.0 refs/tags/v0.18.0^{}
+git push origin main
+git tag -a v0.18.0 21f3362 -m "v0.18.0"
+git push origin refs/tags/v0.18.0
+gh run view 30987792969 --json status,conclusion,jobs,url
+gh run view 30987793258 --json status,conclusion,jobs,url
+gh run view 30987794136 --json status,conclusion,jobs,url
+gh run view 30987794123 --json status,conclusion,jobs,url
+gh release view v0.18.0 --json tagName,isDraft,isPrerelease,publishedAt,url,assets
 ```
 
 Result:
@@ -73,7 +81,15 @@ models.dev=ollama-cloud https://ollama.com/v1 OLLAMA_API_KEY
 models.dev=opencode-go https://opencode.ai/zen/go/v1 OPENCODE_API_KEY
 independent-review=patch is correct; 2 documentation findings rejected after direct line review
 diff-check=PASS
-remote-v0.18.0=absent
+pre-push-v0.18.0-check=absent
+implementation-commit=21f3362f32a805a1655fe19fa62cbd7aad91b517
+remote-main=21f3362f32a805a1655fe19fa62cbd7aad91b517
+remote-tag=v0.18.0 -> 21f3362f32a805a1655fe19fa62cbd7aad91b517
+code-ci=success (backend 3.12, backend 3.14, frontend)
+docs-ci=success
+linux-release=success
+windows-release=success
+release=v0.18.0 published, draft=false, prerelease=false, assets=4 uploaded
 ```
 
 ## Automated Test Results
@@ -95,6 +111,7 @@ remote-v0.18.0=absent
 | Chat Completions endpoint existence | PASS | representative model は認証判定まで到達し HTTP 401 |
 | Paid credential completion | not-applicable | secret 探索・課金 request は scope 外 |
 | Independent diff review | PASS | correctness 0.98。2 doc 指摘は事実不一致 / 既記載のため棄却 |
+| Remote main / tag / release | PASS | main / peeled tag SHA一致、4 workflow success、4 asset uploaded |
 
 ## Acceptance Criteria Coverage
 
@@ -126,14 +143,12 @@ remote-v0.18.0=absent
 
 ## Deferred / Not Covered
 
-| ID | Reason | Follow-up |
-| --- | --- | --- |
-| Remote release | implementation commit / tag がまだ未 push | Core-Enhance-76 のまま継続し、CI / asset確認後に PASSへ更新 |
+None
 
 ## Residual Risks
 
-- GitHub Code CI / Docs CI / Linux / Windows release workflow と配布 asset は tag push 後まで未確認。
+None
 
 ## Follow-up TODOs
 
-- Core-Enhance-76: `v0.18.0` push 後の remote workflow / release asset を確認して本 verification を閉じる。
+None

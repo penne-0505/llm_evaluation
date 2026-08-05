@@ -7,7 +7,7 @@ created_at: 2026-08-05
 updated_at: 2026-08-05
 references:
   - "_docs/intent/Core/openai-compat-anthropic-providers/decision.md"
-  - "_docs/plan/Core/official-cloud-providers/plan.md"
+  - "_docs/archives/plan/Core/official-cloud-providers/plan.md"
   - "_docs/qa/Core/official-cloud-providers/test-plan.md"
 related_issues: []
 related_prs: []

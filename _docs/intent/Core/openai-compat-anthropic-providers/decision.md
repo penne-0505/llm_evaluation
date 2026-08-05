@@ -10,7 +10,7 @@ references:
   - "_docs/archives/survey/Core/openai-compat-anthropic-providers/survey.md"
   - "_docs/archives/plan/Core/openai-compat-anthropic-providers/plan.md"
   - "_docs/qa/Core/openai-compat-anthropic-providers/test-plan.md"
-  - "_docs/plan/Core/official-cloud-providers/plan.md"
+  - "_docs/archives/plan/Core/official-cloud-providers/plan.md"
   - "_docs/qa/Core/official-cloud-providers/test-plan.md"
 related_issues: []
 related_prs: []

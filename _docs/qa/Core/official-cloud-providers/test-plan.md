@@ -10,7 +10,7 @@ updated_at: 2026-08-05
 references:
   - "_docs/intent/Core/official-cloud-providers/decision.md"
   - "_docs/intent/Core/openai-compat-anthropic-providers/decision.md"
-  - "_docs/plan/Core/official-cloud-providers/plan.md"
+  - "_docs/archives/plan/Core/official-cloud-providers/plan.md"
 related_issues: []
 related_prs: []
 ---
@@ -20,7 +20,7 @@ related_prs: []
 ## Source of Intent
 
 - TODO: `Core-Enhance-76`
-- Plan: `_docs/plan/Core/official-cloud-providers/plan.md`
+- Plan: `_docs/archives/plan/Core/official-cloud-providers/plan.md`
 - Intent: `_docs/intent/Core/official-cloud-providers/decision.md`
 - Related intent: `_docs/intent/Core/openai-compat-anthropic-providers/decision.md`
 

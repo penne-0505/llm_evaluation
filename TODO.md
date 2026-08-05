@@ -528,37 +528,6 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 
 ## In Progress
 
-### Core-Enhance-76: [Enhance] Add Ollama Cloud and OpenCode Go as official providers
-
-- **Title**: [Enhance] Add Ollama Cloud and OpenCode Go as official providers
-- **ID**: Core-Enhance-76
-- **Priority**: P1
-- **Size**: M
-- **Risk**: High
-- **Area**: Core
-- **Dependencies**: []
-- **Goal**: Ollama Cloud と OpenCode Go を、公式の base URL と API key 名を持つ組み込み provider として設定・モデル取得・評価に利用できる。
-- **Acceptance Criteria**:
-  - AC-001: `ollama-cloud` と `opencode-go` が削除不可の組み込み provider として常駐し、公式 base URL `https://ollama.com/v1` と `https://opencode.ai/zen/go/v1` を使う。
-  - AC-002: `.env` と UI 保存の双方で、Ollama Cloud は `OLLAMA_API_KEY`、OpenCode Go は `OPENCODE_API_KEY` に写像され、secret 本体が API 応答・モデルキャッシュ・ログへ露出しない。
-  - AC-003: 両 provider の `/models` 応答が `ollama-cloud/<model-id>` / `opencode-go/<model-id>` として catalog に入り、既存 OpenAI-compatible adapter が `/chat/completions` へ upstream model id を送る。
-  - AC-004: 既存の `provider_registry.json` に組み込み provider が欠ける場合は再 seed され、同じ id の旧 custom entry は公式 kind / base URL / pricing profile へ安全に正規化される。
-  - AC-005: README、`.env.example`、Settings の案内から、各サービスで発行した API key の入力先と料金推定が unavailable になり得ることを判断できる。
-  - AC-006: backend / frontend / docs の baseline suite がすべて成功する。
-- **Steps**:
-  1. [x] 公式 API、base URL、API key 名、モデル一覧 endpoint を調査する
-  2. [x] built-in seed、secret alias、UI 表示、利用 docs を更新する
-  3. [x] registry / secrets / catalog / adapter の regression test を追加する
-  4. [x] baseline suite と live endpoint contract check を実行し verification を残す
-  5. [ ] commit、release tag、push 後の CI と配布 asset を確認する
-- **Description**:
-  - Context: 任意 OpenAI-compatible provider として手動登録はできるが、公式 URL と API key alias が内蔵されておらず、入力ミスや generic `PROVIDER_*` 名への不一致が起きる。OpenCode Go は provider gateway が Chat Completions を各 upstream 形式へ変換するため、既存 adapter を再利用する。
-  - Notes: live completion はユーザーの課金 credential を必要とするため、通常の回帰では secret を使わず、公式 docs・公開 `/models`・無認証 error contract・mock request で確認する。
-- **Plan**: `_docs/plan/Core/official-cloud-providers/plan.md`
-- **Intent**: `_docs/intent/Core/official-cloud-providers/decision.md`
-- **QA**: `_docs/qa/Core/official-cloud-providers/test-plan.md`
-- **Verification**: `_docs/qa/Core/official-cloud-providers/verification.md`
-
 ### Core-Bug-71: [Bug] Result index lost update and non-atomic write
 
 - **Title**: [Bug] Result index lost update and non-atomic write
