@@ -262,7 +262,15 @@ class ModelCatalog:
                 "anthropic-version": "2023-06-01",
             },
         )
-        return [{"id": item.get("id")} for item in data.get("data", []) if item.get("id")]
+        return [
+            {
+                "id": item.get("id"),
+                "max_tokens": item.get("max_tokens"),
+                "max_input_tokens": item.get("max_input_tokens"),
+            }
+            for item in data.get("data", [])
+            if item.get("id")
+        ]
 
     @classmethod
     def _fetch_anthropic_models_for_provider(
@@ -278,7 +286,13 @@ class ModelCatalog:
             if not model_id:
                 continue
             prefixed = model_id if model_id.startswith(prefix) else f"{prefix}{model_id}"
-            models.append({"id": prefixed})
+            models.append(
+                {
+                    "id": prefixed,
+                    "max_tokens": item.get("max_tokens"),
+                    "max_input_tokens": item.get("max_input_tokens"),
+                }
+            )
         return models
 
     @classmethod
@@ -492,6 +506,10 @@ class ModelCatalog:
                         "prompt": pricing.get("prompt"),
                         "completion": pricing.get("completion"),
                     }
+                for limit_key in ("max_tokens", "max_input_tokens"):
+                    raw_limit = item.get(limit_key)
+                    if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) and raw_limit > 0:
+                        entry[limit_key] = raw_limit
             else:
                 continue
 

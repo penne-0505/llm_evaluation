@@ -25,7 +25,7 @@ class _StubAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.0,
-        max_tokens: int = 1024,
+        max_tokens=None,
     ) -> str:
         return self.complete_with_model(
             "stub-model", system_prompt, user_prompt, temperature, max_tokens
@@ -43,7 +43,7 @@ class _StubAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.0,
-        max_tokens: int = 1024,
+        max_tokens=None,
     ) -> str:
         return self.complete_with_model_result(
             model, system_prompt, user_prompt, temperature, max_tokens
@@ -55,7 +55,7 @@ class _StubAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.0,
-        max_tokens: int = 1024,
+        max_tokens=None,
         extra_params=None,
     ) -> CompletionResult:
         self.call_count += 1
@@ -104,7 +104,7 @@ class _NativeToolLoopAdapter(_StubAdapter):
         messages,
         tools,
         temperature=0.0,
-        max_tokens=4096,
+        max_tokens=None,
         extra_params=None,
     ):
         self.native_call_count += 1
@@ -148,8 +148,9 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             subject_adapter.calls[0]["extra_params"],
             {"reasoning": {"effort": "xhigh"}},
         )
+        self.assertIsNone(subject_adapter.calls[0]["max_tokens"])
 
-    async def test_subject_max_tokens_is_16384(self):
+    async def test_ac001_subject_uses_provider_native_output_limit(self):
         subject_adapter = _StubAdapter(["subject-response"])
         engine = BenchmarkEngine(
             subject_adapter=subject_adapter,
@@ -166,13 +167,9 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             system_prompt="system",
         )
 
-        self.assertEqual(
-            subject_adapter.calls[0]["max_tokens"],
-            BenchmarkEngine._SUBJECT_MAX_OUTPUT_TOKENS,
-        )
-        self.assertEqual(subject_adapter.calls[0]["max_tokens"], 16384)
+        self.assertIsNone(subject_adapter.calls[0]["max_tokens"])
 
-    async def test_subject_native_tools_max_tokens_is_16384(self):
+    async def test_ac001_subject_native_tools_use_provider_native_output_limit(self):
         subject_adapter = _NativeToolLoopAdapter(
             native_responses=[
                 NativeCompletionResult(content="done", tool_calls=[]),
@@ -213,13 +210,9 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(subject_adapter.native_call_count, 1)
-        self.assertEqual(
-            subject_adapter.native_calls[0]["max_tokens"],
-            BenchmarkEngine._SUBJECT_MAX_OUTPUT_TOKENS,
-        )
-        self.assertEqual(subject_adapter.native_calls[0]["max_tokens"], 16384)
+        self.assertIsNone(subject_adapter.native_calls[0]["max_tokens"])
 
-    async def test_judge_max_tokens_is_16384(self):
+    async def test_ac002_judge_uses_provider_native_output_limit(self):
         valid_response = json.dumps(
             {
                 "task_name": "test",
@@ -253,14 +246,10 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
             system_prompt="system",
         )
 
+        self.assertIsNone(judge_adapter.calls[0]["max_tokens"])
         self.assertEqual(
-            judge_adapter.calls[0]["max_tokens"],
-            BenchmarkEngine._JUDGE_MAX_OUTPUT_TOKENS,
-        )
-        self.assertEqual(judge_adapter.calls[0]["max_tokens"], 16384)
-        self.assertEqual(
-            BenchmarkEngine._JUDGE_OUTPUT_RESERVE_TOKENS,
-            BenchmarkEngine._JUDGE_MAX_OUTPUT_TOKENS,
+            BenchmarkEngine._HOLISTIC_OUTPUT_RESERVE_TOKENS,
+            16_384,
         )
 
     async def test_fail_fast_skips_remaining_runs_after_threshold(self):
@@ -1314,6 +1303,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["input_prompt"], "holistic-eval")
         self.assertEqual(payload["response"], "")
         self.assertEqual(subject_adapter.call_count, 0)
+        self.assertIsNone(judge_adapter.calls[0]["max_tokens"])
         self.assertIn("bundling_metadata", payload)
         self.assertFalse(payload["bundling_metadata"]["truncated"])
         self.assertEqual(payload["bundling_metadata"]["action"], "none")
@@ -1364,6 +1354,7 @@ class TestBenchmarkEngine(unittest.IsolatedAsyncioTestCase):
         self.assertIn("holistic-judge", result.judge_results)
         self.assertNotIn("standard-judge", result.judge_results)
         self.assertEqual(holistic_judge.call_count, 1)
+        self.assertIsNone(holistic_judge.calls[0]["max_tokens"])
         self.assertEqual(standard_judge.call_count, 0)
         self.assertEqual(subject_adapter.call_count, 0)
 

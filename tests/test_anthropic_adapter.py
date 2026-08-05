@@ -16,6 +16,7 @@ from adapters.base import LLMError, NativeToolCall
 def _make_adapter() -> AnthropicAdapter:
     adapter = AnthropicAdapter(api_key="sk-ant-test-key-long-enough", provider_id="anthropic")
     adapter._client = MagicMock()
+    adapter._client.models.retrieve.return_value = SimpleNamespace(max_tokens=64_000)
     return adapter
 
 
@@ -97,7 +98,99 @@ def test_ac002_anthropic_effort_is_forwarded_to_messages_api():
 
     call_kwargs = adapter._client.messages.create.call_args.kwargs
     assert call_kwargs["output_config"] == {"effort": "xhigh"}
+    assert call_kwargs["max_tokens"] == 64_000
     assert "extra_body" not in call_kwargs
+
+
+def test_ac004_anthropic_uses_catalog_model_max_without_live_lookup(monkeypatch):
+    adapter = _make_adapter()
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="ok")], usage=None
+    )
+    adapter._client.messages.create.return_value = response
+    monkeypatch.setattr(
+        "core.model_catalog.ModelCatalog.find_model_entry",
+        lambda provider, model: {
+            "id": "anthropic/claude-sonnet-5",
+            "max_tokens": 128_000,
+        },
+    )
+
+    adapter.complete_with_model_result(
+        model="anthropic/claude-sonnet-5",
+        system_prompt="sys",
+        user_prompt="user",
+    )
+
+    assert adapter._client.messages.create.call_args.kwargs["max_tokens"] == 128_000
+    adapter._client.models.retrieve.assert_not_called()
+
+
+def test_ac004_anthropic_live_model_max_is_cached(monkeypatch):
+    adapter = _make_adapter()
+    adapter._client.models.retrieve.return_value = SimpleNamespace(max_tokens=128_000)
+    adapter._client.messages.create.return_value = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="ok")], usage=None
+    )
+    monkeypatch.setattr(
+        "core.model_catalog.ModelCatalog.find_model_entry",
+        lambda provider, model: None,
+    )
+
+    for _ in range(2):
+        adapter.complete_with_model_result(
+            model="anthropic/claude-opus-5",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+
+    adapter._client.models.retrieve.assert_called_once_with(model_id="claude-opus-5")
+    assert adapter._client.messages.create.call_count == 2
+    assert all(
+        call.kwargs["max_tokens"] == 128_000
+        for call in adapter._client.messages.create.call_args_list
+    )
+
+
+def test_ac004_anthropic_native_tools_use_resolved_model_max(monkeypatch):
+    adapter = _make_adapter()
+    adapter._client.models.retrieve.return_value = SimpleNamespace(max_tokens=128_000)
+    adapter._client.messages.create.return_value = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="done")], usage=None
+    )
+    monkeypatch.setattr(
+        "core.model_catalog.ModelCatalog.find_model_entry",
+        lambda provider, model: None,
+    )
+
+    adapter.complete_with_model_native_tools(
+        model="anthropic/claude-opus-5",
+        messages=[{"role": "user", "content": "hello"}],
+        tools=[],
+    )
+
+    assert adapter._client.messages.create.call_args.kwargs["max_tokens"] == 128_000
+
+
+def test_inv002_anthropic_missing_model_max_fails_without_message_request(monkeypatch):
+    adapter = _make_adapter()
+    adapter._client.models.retrieve.return_value = SimpleNamespace(max_tokens=None)
+    monkeypatch.setattr(
+        "core.model_catalog.ModelCatalog.find_model_entry",
+        lambda provider, model: None,
+    )
+
+    try:
+        adapter.complete_with_model_result(
+            model="anthropic/unknown-model",
+            system_prompt="sys",
+            user_prompt="user",
+        )
+        assert False, "LLMError expected"
+    except LLMError as error:
+        assert "有効なmax_tokens" in str(error)
+
+    adapter._client.messages.create.assert_not_called()
 
 
 def test_native_tools_returns_native_tool_call():
@@ -175,6 +268,7 @@ def test_native_tools_returns_native_tool_call():
 
     call_kwargs = adapter._client.messages.create.call_args.kwargs
     assert call_kwargs["model"] == "claude-opus-4-8"
+    assert call_kwargs["max_tokens"] == 1024
     assert call_kwargs["output_config"] == {"effort": "xhigh"}
     assert call_kwargs["system"] == "You are helpful."
     assert call_kwargs["tools"] == [

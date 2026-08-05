@@ -182,12 +182,9 @@ class BenchmarkEngine:
     # intent: DEC-001 (Core/holistic-context-overflow) — tokenizer 未導入のため chars≈4/token で見積もり、未解決 model は小さめ default で API 拒否を避ける
     _CHARS_PER_TOKEN = 4
     _DEFAULT_CONTEXT_LIMIT_TOKENS = 32_768
-    # subject / judge の completion 上限。reasoning 既定 ON では thinking と visible content が
-    # 共有するため、4096 だと content（採点 JSON 含む）が空のまま打ち切られることがある。
-    # 16384 は目標長ではなく打ち切り緩和。judge 呼び出しと holistic 入力の出力予約を同一値にする。
-    _SUBJECT_MAX_OUTPUT_TOKENS = 16384
-    _JUDGE_MAX_OUTPUT_TOKENS = 16384
-    _JUDGE_OUTPUT_RESERVE_TOKENS = _JUDGE_MAX_OUTPUT_TOKENS
+    # intent: DEC-004 (Core/provider-native-output-limits) — holistic input の
+    # overflow 予防用 reserve。adapter request の出力 cap としては使わない。
+    _HOLISTIC_OUTPUT_RESERVE_TOKENS = 16_384
     _CONTEXT_SAFETY_MARGIN_RATIO = 0.05
     _RESPONSE_TRUNCATE_MARKER = "\n...[truncated]"
     # より具体的な識別子を先に置く（部分一致）
@@ -528,7 +525,7 @@ class BenchmarkEngine:
                     messages,
                     tools_schema,
                     temperature,
-                    self._SUBJECT_MAX_OUTPUT_TOKENS,
+                    None,
                     extra,
                 )
 
@@ -776,7 +773,7 @@ class BenchmarkEngine:
                 "",
                 user_prompt,
                 temperature,
-                self._SUBJECT_MAX_OUTPUT_TOKENS,
+                None,
                 extra,
             )
 
@@ -1152,7 +1149,7 @@ class BenchmarkEngine:
                 system_prompt,
                 user_prompt,
                 judge_temperature,
-                self._JUDGE_MAX_OUTPUT_TOKENS,
+                None,
                 extra,
             )
 
@@ -1383,7 +1380,7 @@ class BenchmarkEngine:
         )
         # intent: DEC-001 — 出力予約は実 window を超えないよう cap し、answer 予算を負にしない
         output_reserve_tokens = min(
-            self._JUDGE_OUTPUT_RESERVE_TOKENS,
+            self._HOLISTIC_OUTPUT_RESERVE_TOKENS,
             max(256, context_limit_tokens // 4),
         )
         overhead_chars = (

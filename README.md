@@ -264,6 +264,9 @@ user override の配置先:
 official preset v3 は `task_ids=01..11`、preferred `judge_models=[openrouter/moonshotai/kimi-k3, openrouter/openai/gpt-5.6-terra, openrouter/qwen/qwen3.7-max]`、`judge_runs=3`、`subject_temperature=0.45`、bundled prompt / rubric / judge_system_prompt 固定です。
 Strict Mode の judge 適合は model ID の末尾セグメント（leaf）一致で判定します。同一 leaf なら OpenRouter 以外の provider ルートも選べます（Settings の judge picker は leaf 一致モデルにフィルタされます）。
 reasoning を明示指定できる被験モデルとjudgeモデルには effort `high` を指定します。モデルカタログ上で reasoning の明示指定に対応しないモデルは、各 provider / model の既定動作を使用します。
+被験・judge の評価 request にはアプリ独自の出力 token 上限を設定しません。OpenAI 互換経路では
+max output field を省略し、Anthropic Messages API では Models API が返すモデル別 `max_tokens` を使います。
+そのため、生成時間と料金は選択した provider / model の native limit と停止判断に依存します。
 judge の temperature は原則 `0.0` です。gpt-5 系など非対応モデルでは sampling parameter を送信せず、モデルの既定値を使用します。
 
 Settings の実行プリセットはブラウザの localStorage に保存されます。保存対象はjudgeモデル、タスク選択、包括評価の有無、評価回数、subject temperatureです。被験モデルは評価対象としてプリセットから独立しており、ロードしても現在の選択を維持します。ロード時に現在のカタログに存在しないjudgeモデルやタスクは除外し、ブラウザコンソールへwarningを記録します。

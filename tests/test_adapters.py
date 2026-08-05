@@ -700,6 +700,18 @@ def test_openrouter_omits_none_or_unsupported_temperature():
         )
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert "temperature" not in call_kwargs
+        assert "max_tokens" not in call_kwargs
+        assert "max_completion_tokens" not in call_kwargs
+
+        mock_client.chat.completions.create.reset_mock()
+        adapter.complete_with_model_result(
+            model="openrouter/anthropic/claude-sonnet-5",
+            system_prompt="sys",
+            user_prompt="user",
+            max_tokens=777,
+        )
+        explicit_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert explicit_kwargs["max_tokens"] == 777
 
         mock_client.chat.completions.create.reset_mock()
         adapter.complete_with_model_native_tools(
@@ -710,6 +722,8 @@ def test_openrouter_omits_none_or_unsupported_temperature():
         )
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert "temperature" not in call_kwargs
+        assert "max_tokens" not in call_kwargs
+        assert "max_completion_tokens" not in call_kwargs
 
         mock_client.chat.completions.create.reset_mock()
         adapter.complete_with_model_result(
@@ -758,6 +772,8 @@ def test_lmstudio_omits_none_temperature():
     )
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert "temperature" not in call_kwargs
+    assert "max_tokens" not in call_kwargs
+    assert "max_completion_tokens" not in call_kwargs
 
     mock_client.chat.completions.create.reset_mock()
     adapter.complete_with_model_native_tools(
@@ -768,6 +784,18 @@ def test_lmstudio_omits_none_temperature():
     )
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert "temperature" not in call_kwargs
+    assert "max_tokens" not in call_kwargs
+    assert "max_completion_tokens" not in call_kwargs
+
+    mock_client.chat.completions.create.reset_mock()
+    adapter.complete_with_model_result(
+        model="local-model",
+        system_prompt="sys",
+        user_prompt="user",
+        max_tokens=777,
+    )
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["max_tokens"] == 777
 
 
 def test_extra_body_passed_to_lmstudio():

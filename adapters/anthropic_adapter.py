@@ -244,6 +244,7 @@ class AnthropicAdapter(LLMAdapter):
         self._api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         self._base_url = (str(base_url).strip().rstrip("/") if base_url else None) or None
         self._client: Optional[Anthropic] = None
+        self._model_max_tokens: Dict[str, int] = {}
 
         if self._api_key:
             if self._base_url:
@@ -271,6 +272,68 @@ class AnthropicAdapter(LLMAdapter):
         if model.startswith("anthropic/"):
             return model.split("/", 1)[1]
         return model
+
+    @staticmethod
+    def _positive_token_limit(value: Any) -> Optional[int]:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            return None
+        return value
+
+    def _resolve_max_tokens(
+        self,
+        *,
+        model: str,
+        normalized_model: str,
+        requested: Optional[int],
+    ) -> int:
+        if requested is not None:
+            return requested
+
+        cached = self._model_max_tokens.get(normalized_model)
+        if cached is not None:
+            return cached
+
+        # intent: DEC-003 / INV-002 (Core/provider-native-output-limits) —
+        # catalog metadata を優先し、固定値 fallback は作らない。
+        try:
+            from core.model_catalog import ModelCatalog
+
+            catalog_id = (
+                model
+                if model.startswith(f"{self._provider_id}/")
+                else f"{self._provider_id}/{normalized_model}"
+            )
+            entry = ModelCatalog.find_model_entry(self._provider_id, catalog_id)
+        except Exception:
+            entry = None
+
+        catalog_limit = self._positive_token_limit(
+            entry.get("max_tokens") if isinstance(entry, dict) else None
+        )
+        if catalog_limit is not None:
+            self._model_max_tokens[normalized_model] = catalog_limit
+            return catalog_limit
+
+        if self._client is None:
+            raise LLMError(f"{self._provider_id}: model limitを取得できません")
+
+        try:
+            model_info = self._client.models.retrieve(model_id=normalized_model)
+        except Exception as exc:
+            raise LLMError(
+                f"{self._provider_id}: {normalized_model} の最大出力token数をModels APIから取得できません"
+            ) from exc
+
+        live_limit = self._positive_token_limit(
+            _block_attr(model_info, "max_tokens")
+        )
+        if live_limit is None:
+            raise LLMError(
+                f"{self._provider_id}: {normalized_model} のModels API応答に有効なmax_tokensがありません"
+            )
+
+        self._model_max_tokens[normalized_model] = live_limit
+        return live_limit
 
     @staticmethod
     def _merge_extra_params(
@@ -312,7 +375,7 @@ class AnthropicAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
     ) -> str:
         model = os.getenv(
             "JUDGE_ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929"
@@ -331,7 +394,7 @@ class AnthropicAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
     ) -> str:
         return self.complete_with_model_result(
             model=model,
@@ -347,7 +410,7 @@ class AnthropicAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
         if not self.is_available() or self._client is None:
@@ -355,9 +418,14 @@ class AnthropicAdapter(LLMAdapter):
 
         normalized_model = self._normalize_model_name(model)
         try:
+            resolved_max_tokens = self._resolve_max_tokens(
+                model=model,
+                normalized_model=normalized_model,
+                requested=max_tokens,
+            )
             kwargs: Dict[str, Any] = {
                 "model": normalized_model,
-                "max_tokens": max_tokens,
+                "max_tokens": resolved_max_tokens,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_prompt}],
             }
@@ -385,6 +453,8 @@ class AnthropicAdapter(LLMAdapter):
                 ),
                 api_reasoning=api_reasoning,
             )
+        except LLMError:
+            raise
         except APIError as e:
             raise LLMError(f"{self._provider_id} APIエラー: {str(e)}") from e
         except Exception as e:
@@ -399,7 +469,7 @@ class AnthropicAdapter(LLMAdapter):
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
         if not self.is_available() or self._client is None:
@@ -410,9 +480,14 @@ class AnthropicAdapter(LLMAdapter):
         anthropic_tools = _convert_openai_tools(tools)
 
         try:
+            resolved_max_tokens = self._resolve_max_tokens(
+                model=model,
+                normalized_model=normalized_model,
+                requested=max_tokens,
+            )
             kwargs: Dict[str, Any] = {
                 "model": normalized_model,
-                "max_tokens": max_tokens,
+                "max_tokens": resolved_max_tokens,
                 "messages": anthropic_messages,
                 "tools": anthropic_tools,
             }
@@ -442,6 +517,8 @@ class AnthropicAdapter(LLMAdapter):
                     model, getattr(response, "usage", None), duration_ms
                 ),
             )
+        except LLMError:
+            raise
         except APIError as e:
             err = str(e)
             if "tool" in err.lower():

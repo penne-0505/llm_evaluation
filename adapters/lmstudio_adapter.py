@@ -88,7 +88,7 @@ class LMStudioAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
     ) -> str:
         model = os.getenv("JUDGE_LMSTUDIO_MODEL", "lmstudio/local-model")
         return self.complete_with_model(
@@ -105,7 +105,7 @@ class LMStudioAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
     ) -> str:
         return self.complete_with_model_result(
             model=model,
@@ -121,7 +121,7 @@ class LMStudioAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
         if not self.is_available() or self._client is None:
@@ -136,8 +136,11 @@ class LMStudioAdapter(LLMAdapter):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                "max_tokens": max_tokens,
             }
+            # intent: DEC-002 (Core/provider-native-output-limits) — local model
+            # runtime が持つ native limit/default を app 固定値で狭めない。
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
             if temperature is not None:
                 kwargs["temperature"] = temperature
             self._merge_extra_params(kwargs, extra_params)
@@ -174,7 +177,7 @@ class LMStudioAdapter(LLMAdapter):
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
         if not self.is_available() or self._client is None:
@@ -188,8 +191,9 @@ class LMStudioAdapter(LLMAdapter):
                 "messages": messages,
                 "tools": tools,
                 "tool_choice": "auto",
-                "max_tokens": max_tokens,
             }
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
             if temperature is not None:
                 kwargs["temperature"] = temperature
             self._merge_extra_params(kwargs, extra_params)

@@ -94,7 +94,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
     ) -> str:
         return self.complete_with_model(
             model=f"{self._provider_id}/default",
@@ -110,7 +110,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
     ) -> str:
         return self.complete_with_model_result(
             model=model,
@@ -126,7 +126,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
         system_prompt: str,
         user_prompt: str,
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 1024,
+        max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> CompletionResult:
         if not self.is_available() or self._client is None:
@@ -149,10 +149,13 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 model=model,
                 temperature=temperature,
             )
-            if self._should_use_max_completion_tokens(normalized_model):
-                kwargs["max_completion_tokens"] = max_tokens
-            else:
-                kwargs["max_tokens"] = max_tokens
+            # intent: DEC-002 (Core/provider-native-output-limits) — None は
+            # Chat Completions の optional max field を完全に省略する。
+            if max_tokens is not None:
+                if self._should_use_max_completion_tokens(normalized_model):
+                    kwargs["max_completion_tokens"] = max_tokens
+                else:
+                    kwargs["max_tokens"] = max_tokens
             self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()
@@ -193,7 +196,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         temperature: Optional[float] = 0.0,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = None,
         extra_params: Optional[Dict[str, Any]] = None,
     ) -> NativeCompletionResult:
         if not self.is_available() or self._client is None:
@@ -215,10 +218,11 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 model=model,
                 temperature=temperature,
             )
-            if self._should_use_max_completion_tokens(normalized_model):
-                kwargs["max_completion_tokens"] = max_tokens
-            else:
-                kwargs["max_tokens"] = max_tokens
+            if max_tokens is not None:
+                if self._should_use_max_completion_tokens(normalized_model):
+                    kwargs["max_completion_tokens"] = max_tokens
+                else:
+                    kwargs["max_tokens"] = max_tokens
             self._merge_extra_params(kwargs, extra_params)
 
             start = time.perf_counter()

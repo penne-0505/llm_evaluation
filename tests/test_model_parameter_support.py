@@ -189,7 +189,29 @@ class TestModelParameterSupport(unittest.TestCase):
         kwargs = mock_client.chat.completions.create.call_args.kwargs
         self.assertNotIn("temperature", kwargs)
         self.assertEqual(kwargs["model"], "gpt-5.6-luna")
-        self.assertIn("max_completion_tokens", kwargs)
+        self.assertNotIn("max_completion_tokens", kwargs)
+        self.assertNotIn("max_tokens", kwargs)
+
+        mock_response.choices[0].message.tool_calls = []
+        mock_client.chat.completions.create.reset_mock()
+        adapter.complete_with_model_native_tools(
+            model="openai/gpt-5.6-luna",
+            messages=[{"role": "user", "content": "user"}],
+            tools=[],
+        )
+        native_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        self.assertNotIn("max_completion_tokens", native_kwargs)
+        self.assertNotIn("max_tokens", native_kwargs)
+
+        mock_client.chat.completions.create.reset_mock()
+        adapter.complete_with_model_result(
+            model="openai/gpt-5.6-luna",
+            system_prompt="sys",
+            user_prompt="user",
+            max_tokens=2048,
+        )
+        explicit_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        self.assertEqual(explicit_kwargs["max_completion_tokens"], 2048)
 
     def test_openai_compatible_adapter_sends_temperature_for_gpt4o(self) -> None:
         adapter = OpenAICompatibleAdapter(

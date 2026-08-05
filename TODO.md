@@ -2,7 +2,7 @@
 
 ## 0. System Metadata
 
-- **Current Max ID**: `Next ID No: 77` (タスク追加時にインクリメント必須)
+- **Current Max ID**: `Next ID No: 78` (タスク追加時にインクリメント必須)
 - **ID Source of Truth**: このファイルの `Next ID No` 行が、全プロジェクトにおける唯一の ID 発番元である。
 
 ## 1. Task Lifecycle (State Machine)
@@ -527,6 +527,37 @@ Risk の詳細は `_docs/standards/quality_assurance.md` を参照する。
 - **Verification**: None
 
 ## In Progress
+
+### Core-Enhance-77: [Enhance] Remove application output token caps
+
+- **Title**: [Enhance] Remove application output token caps
+- **ID**: Core-Enhance-77
+- **Priority**: P1
+- **Size**: M
+- **Risk**: High
+- **Area**: Core
+- **Dependencies**: []
+- **Goal**: 被験・judge の評価 request にアプリ独自の一律出力 token 上限を課さず、provider native limit に委ねる。
+- **Acceptance Criteria**:
+  - AC-001: 通常被験、text tool loop、native tool loop、tool budget後の最終回答が adapter へ `max_tokens=None` を渡す。
+  - AC-002: 通常 judge と holistic judge が adapter へ `max_tokens=None` を渡し、被験と同じ上限なし契約を使う。
+  - AC-003: OpenRouter / OpenAI-compatible / LM Studio は `None` のとき `max_tokens` と `max_completion_tokens` を request から省略し、明示値がある非評価呼び出しでは従来どおり送る。
+  - AC-004: Anthropic は `None` のとき Models API のモデル別 `max_tokens` を使用し、cache / live lookup のどちらでも解決できない場合は旧固定値へ fallback せず明示エラーにする。
+  - AC-005: holistic context budgeting の output reserve は request cap から分離され、評価 request の上限として送信されない。
+  - AC-006: backend / frontend / docs の baseline suite がすべて成功する。
+- **Steps**:
+  1. [x] 現行 `16,384` の被験・judge・holistic 経路と adapter protocol を調査する
+  2. [x] optional max token contract と Anthropic limit resolver を実装する
+  3. [x] AC別 regression test と失敗系 test を追加する
+  4. [x] baseline suite と independent review を実行し verification を残す
+  5. [ ] commit / push 後に remote CI を確認する
+- **Description**:
+  - Context: `BenchmarkEngine` は被験とjudgeの全呼び出しへ一律 `16,384` を送り、provider/model native output limit より低いところで打ち切り得る。Anthropic Messages API は `max_tokens` 必須だが、Models API がモデル別の公式最大値を返す。
+  - Notes: provider 自身の context/output limit は残る。「撤廃」はアプリ独自の固定 cap を送らないことを指す。明示上限を使う connection probe 等は評価経路ではないため対象外。
+- **Plan**: `_docs/plan/Core/provider-native-output-limits/plan.md`
+- **Intent**: `_docs/intent/Core/provider-native-output-limits/decision.md`
+- **QA**: `_docs/qa/Core/provider-native-output-limits/test-plan.md`
+- **Verification**: `_docs/qa/Core/provider-native-output-limits/verification.md`
 
 ### Core-Bug-71: [Bug] Result index lost update and non-atomic write
 

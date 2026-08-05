@@ -70,6 +70,30 @@ class TestModelCatalogTTL(unittest.TestCase):
             )
             self.assertEqual(models, [{"id": f"{provider_id}/{upstream_model}"}])
 
+    def test_ac004_anthropic_model_limits_are_preserved_in_catalog(self):
+        raw = [
+            {
+                "id": "claude-sonnet-5",
+                "max_tokens": 128_000,
+                "max_input_tokens": 1_000_000,
+            }
+        ]
+        with patch.object(ModelCatalog, "_fetch_anthropic_models", return_value=raw):
+            models = ModelCatalog._fetch_anthropic_models_for_provider(
+                {"provider_id": "anthropic", "api_key": "test-key"}
+            )
+
+        self.assertEqual(
+            ModelCatalog._normalize_model_entries(models),
+            [
+                {
+                    "id": "anthropic/claude-sonnet-5",
+                    "max_tokens": 128_000,
+                    "max_input_tokens": 1_000_000,
+                }
+            ],
+        )
+
     def test_uses_cache_when_ttl_is_fresh(self):
         now = datetime.now(timezone.utc)
         self._write_cache(
