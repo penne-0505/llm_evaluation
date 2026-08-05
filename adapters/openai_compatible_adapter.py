@@ -80,10 +80,13 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 return model.split("/", 1)[1]
         return model
 
-    @staticmethod
-    def _should_use_max_completion_tokens(model: str) -> bool:
+    def _should_use_max_completion_tokens(self, model: str) -> bool:
         from core.model_parameter_support import uses_max_completion_tokens
 
+        # intent: DEC-002 (Core/official-cloud-providers) — OpenCode Go の
+        # Chat Completions gateway は max_tokens を共通形式として変換する。
+        if self._provider_id == "opencode-go":
+            return False
         return uses_max_completion_tokens("openai", model)
 
     def complete(

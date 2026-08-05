@@ -836,8 +836,15 @@ class TestProviderRegistryApi(unittest.TestCase):
         body = response.json()
         ids = [p["id"] for p in body["providers"]]
         self.assertEqual(
-            ids[:4],
-            ["openrouter", "openai", "google-ai-studio", "anthropic"],
+            ids[:6],
+            [
+                "openrouter",
+                "openai",
+                "google-ai-studio",
+                "anthropic",
+                "ollama-cloud",
+                "opencode-go",
+            ],
         )
         for provider in body["providers"]:
             self.assertIn("has_key", provider)

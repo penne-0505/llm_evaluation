@@ -159,6 +159,37 @@ class TestCostEstimator(unittest.TestCase):
         self.assertIsNone(summary["totals"]["estimated_cost_usd"])
         self.assertIn("openai:mystery-model", summary["totals"]["unpriced_models"])
 
+    def test_inv001_official_cloud_providers_do_not_reuse_other_pricing(self):
+        tasks = [
+            {
+                "subject_usage": {
+                    "provider": provider,
+                    "model": model,
+                    "input_tokens": 2000,
+                    "output_tokens": 1000,
+                    "total_tokens": 3000,
+                },
+                "judge_results": {},
+            }
+            for provider, model in (
+                ("ollama-cloud", "gpt-oss:120b"),
+                ("opencode-go", "gpt-5.6-luna"),
+            )
+        ]
+
+        summary = summarize_benchmark_usage(tasks)
+
+        self.assertEqual(summary["totals"]["pricing_status"], "unavailable")
+        self.assertIsNone(summary["totals"]["estimated_cost_usd"])
+        self.assertEqual(
+            set(summary["totals"]["unpriced_models"]),
+            {
+                "ollama-cloud:gpt-oss:120b",
+                "opencode-go:gpt-5.6-luna",
+            },
+        )
+        self.assertTrue(all(call["pricing_source"] is None for call in summary["calls"]))
+
     def test_summarize_benchmark_usage_openai_model_unpriced_fallback_fails(self):
         """静的表に無い OpenAI モデルは価格未設定となる"""
         tasks = [

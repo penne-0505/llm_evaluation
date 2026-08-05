@@ -792,6 +792,18 @@ function ApiKeySection() {
                                 </p>
                             )}
 
+                            {provider.id === 'ollama-cloud' && (
+                                <p className="mb-3 text-[11px] leading-5 text-text-secondary">
+                                    Ollama の API key を貼り付けてください。環境変数では OLLAMA_API_KEY を使います。
+                                </p>
+                            )}
+
+                            {provider.id === 'opencode-go' && (
+                                <p className="mb-3 text-[11px] leading-5 text-text-secondary">
+                                    OpenCode Go の API key を貼り付けてください。環境変数では OPENCODE_API_KEY を使います。
+                                </p>
+                            )}
+
                             {entry?.error && (
                                 <div className="mb-3 p-2 rounded bg-danger/8 border border-danger/15 text-[11px] text-score-low">
                                     {entry.error}

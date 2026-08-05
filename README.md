@@ -180,7 +180,13 @@ PowerShell から以下を実行すると、frontend build と PyInstaller bundl
   - OpenAI（`https://api.openai.com/v1`）
   - Google AI Studio（OpenAI 互換 endpoint。Gemini API キーを設定）
   - Anthropic（Messages API）
+  - Ollama Cloud（`https://ollama.com/v1`、Ollama API key）
+  - OpenCode Go（`https://opencode.ai/zen/go/v1`、OpenCode Go API key）
 - 追加の OpenAI 互換エンドポイントも、表示名・base URL・API キーで登録できます。
+- `.env` では Ollama Cloud に `OLLAMA_API_KEY`、OpenCode Go に `OPENCODE_API_KEY` を使います。
+- UI では各組み込み provider のカードに、サービス側で発行した API key を貼り付けます。
+- Ollama Cloud / OpenCode Go は `pricing_profile=none` のため、価格を検証できないモデルのコスト推定は
+  `partial` または `unavailable` になります（0 円としては扱いません）。
 - LM Studio の server URL は app data / config 配下の `provider_config.json` に保存されます（registry とは別枠）。
 - LM Studio の API Token を使う場合は app data / config 配下の `secrets.toml` に保存されます。
 - OpenRouter の残高確認用 `OPENROUTER_MANAGEMENT_KEY` は、推論用 `OPENROUTER_API_KEY` と分離して設定できます。

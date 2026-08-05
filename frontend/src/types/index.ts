@@ -23,6 +23,8 @@ export const PROVIDER_LABELS: Record<string, string> = {
     openai: 'OpenAI',
     'google-ai-studio': 'Google AI Studio',
     anthropic: 'Anthropic',
+    'ollama-cloud': 'Ollama Cloud',
+    'opencode-go': 'OpenCode Go',
 };
 
 export function providerDisplayName(

@@ -4,12 +4,14 @@ status: active
 draft_status: n/a
 intent_schema: 2
 created_at: 2026-07-23
-updated_at: 2026-07-24
+updated_at: 2026-08-05
 references:
   - "_docs/archives/draft/Core/openai-compat-anthropic-providers/notes.md"
   - "_docs/archives/survey/Core/openai-compat-anthropic-providers/survey.md"
   - "_docs/archives/plan/Core/openai-compat-anthropic-providers/plan.md"
   - "_docs/qa/Core/openai-compat-anthropic-providers/test-plan.md"
+  - "_docs/plan/Core/official-cloud-providers/plan.md"
+  - "_docs/qa/Core/official-cloud-providers/test-plan.md"
 related_issues: []
 related_prs: []
 ---
@@ -54,7 +56,8 @@ OpenRouter 経由の評価は credit 消費が重い。公式プロバイダの 
 ### DEC-004: provider id は slug 自動生成、display_name は自由
 
 - **What**: id は `[a-z0-9-]+` slug（display_name から生成、衝突時サフィックス）。reserved:
-  `openrouter`、`openai`、`google-ai-studio`、`anthropic`、`lmstudio`、`or`。
+  `openrouter`、`openai`、`google-ai-studio`、`anthropic`、`ollama-cloud`、`opencode-go`、
+  `lmstudio`、`or`。
   ユーザーは display_name を編集、id は作成後不変。
 - **Why**: モデル ID prefix と secrets キーに安全な識別子が必要。自由文字列 id は衝突・path 汚染のリスク。
 - **Change freedom**: slug 生成アルゴリズム（正規化規則）は変えられる。
@@ -95,6 +98,8 @@ OpenRouter 経由の評価は credit 消費が重い。公式プロバイダの 
 - **What**: secret キーを固定 enum だけに依存させない。環境変数は
   `PROVIDER_<ID_UPPER_UNDERSCORE>_API_KEY`（例: `PROVIDER_OPENAI_CREDIT_API_KEY`）。
   既存 `OPENROUTER_API_KEY` / secrets.toml `openrouter` は初回起動で openrouter プリセットへ写像。
+  組み込みの Ollama Cloud と OpenCode Go は各公式 client と同じ `OLLAMA_API_KEY` / `OPENCODE_API_KEY`
+  を使い、UI 保存時も同名 key へ永続化する。
   `LMSTUDIO_*` は従来どおり別枠。API key は結果 JSON / SSE / ログに出さない。
 - **Why**: 複数 openai_compatible を表現するには動的 id が必要。既存ユーザーの OpenRouter 設定を壊さない。
 - **Change freedom**: ファイル形式・暗号化はセキュリティ標準の範囲で変更可。
@@ -106,7 +111,7 @@ OpenRouter 経由の評価は credit 消費が重い。公式プロバイダの 
 - **Why**: 履歴と設定の寿命が異なる。表示破壊はデータ損失に見える。
 - **Change freedom**: UI 文言・エラーコードは変更可。
 
-### DEC-010: ビルドインプリセットは OpenRouter / OpenAI / Google AI Studio + Anthropic（集合 A）
+### DEC-010: 検証済み公式経路をビルドインプリセットとして常駐させる
 
 - **What**: 初回 seed（欠落時の再 seed）で次を常駐させる。いずれも `builtin=True`、削除不可、
   key のみクリア可。display_name / pricing_profile の上書きは可（OpenRouter の `profile=openrouter`
@@ -118,17 +123,21 @@ OpenRouter 経由の評価は credit 消費が重い。公式プロバイダの 
   | `openai` | openai_compatible | `https://api.openai.com/v1` | openai | （なし） |
   | `google-ai-studio` | openai_compatible | `https://generativelanguage.googleapis.com/v1beta/openai/` | google | （なし） |
   | `anthropic` | anthropic | 公式デフォルト（省略可） | anthropic | （なし） |
+  | `ollama-cloud` | openai_compatible | `https://ollama.com/v1` | none | （なし） |
+  | `opencode-go` | openai_compatible | `https://opencode.ai/zen/go/v1` | none | （なし） |
 
-  ユーザーはこれ以外の openai_compatible / anthropic を追加登録できる。Groq / DeepSeek 等は初版に含めない。
-- **Why**: 動機の公式 credit 経路（OpenAI / Google / Anthropic）と既存 OpenRouter を、手打ち
-  base_url なしで選べるようにする。網羅リストは保守コストと誤った pricing_profile 付与を増やす。
+  ユーザーはこれ以外の openai_compatible / anthropic を追加登録できる。Groq / DeepSeek 等は含めない。
+- **Why**: 公式 docs と endpoint contract を確認した経路を、base URL の手入力なしで選べるようにする。
+  Ollama Cloud / OpenCode Go は公式 key 名も固定し、generic alias との取り違えを避ける。網羅リストは
+  保守コストと誤った pricing_profile 付与を増やす。
 - **Change freedom**: display_name 文言、Anthropic の明示 base_url 有無、Settings での「プリセットから追加」UI 形。
-- **Why not**: DeepSeek / Groq 等を同時搭載 — 価格表が `none` になりやすく、初版の検証範囲を散らす。
+- **Why not**: OpenCode Go をモデルごとの Anthropic / Responses adapter へ分割 — gateway の
+  Chat Completions endpoint が upstream 形式を変換するため、provider id と credential を重複させる。
 - **Revisit when**: 利用頻度の高い互換エンドポイントが増え、静的価格または明示 `none` 運用が安定したとき。
 
 ## Consequences / Impact
 
-- Settings の cloud は「openrouter 1枠」から「builtin 4 + ユーザー追加」の registry 一覧へ。
+- Settings の cloud は「openrouter 1枠」から「builtin 6 + ユーザー追加」の registry 一覧へ。
 - usage.provider は registry id（openrouter プリセットは `openrouter` を維持し既存集計と整合）。
 - 公式経路のコストは静的表の鮮度に依存（`as_of` と partial で明示）。
 - Anthropic ネイティブ thinking は OpenRouter Claude 経路（Feat-38）と並存。

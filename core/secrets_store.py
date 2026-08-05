@@ -36,6 +36,10 @@ class SecretsStore:
         "anthropic": "ANTHROPIC_API_KEY",
         "gemini": "GEMINI_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
+        # intent: DEC-001 (Core/official-cloud-providers) — official clients と
+        # 同じ env 名を UI 保存と environment lookup の双方で使う。
+        "ollama-cloud": "OLLAMA_API_KEY",
+        "opencode-go": "OPENCODE_API_KEY",
         "lmstudio": "LMSTUDIO_API_TOKEN",
     }
     # intent: DEC-010 — google-ai-studio は既存 GEMINI_API_KEY スタブへ写像

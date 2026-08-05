@@ -21,6 +21,8 @@ RESERVED_PROVIDER_IDS = frozenset(
         "openai",
         "google-ai-studio",
         "anthropic",
+        "ollama-cloud",
+        "opencode-go",
         "lmstudio",
         "or",
     }
@@ -30,12 +32,16 @@ OPENROUTER_PRESET_ID = "openrouter"
 OPENAI_PRESET_ID = "openai"
 GOOGLE_AI_STUDIO_PRESET_ID = "google-ai-studio"
 ANTHROPIC_PRESET_ID = "anthropic"
+OLLAMA_CLOUD_PRESET_ID = "ollama-cloud"
+OPENCODE_GO_PRESET_ID = "opencode-go"
 
 OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 GOOGLE_AI_STUDIO_DEFAULT_BASE_URL = (
     "https://generativelanguage.googleapis.com/v1beta/openai/"
 )
+OLLAMA_CLOUD_DEFAULT_BASE_URL = "https://ollama.com/v1"
+OPENCODE_GO_DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1"
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
@@ -45,6 +51,8 @@ _BUILTIN_IDS = frozenset(
         OPENAI_PRESET_ID,
         GOOGLE_AI_STUDIO_PRESET_ID,
         ANTHROPIC_PRESET_ID,
+        OLLAMA_CLOUD_PRESET_ID,
+        OPENCODE_GO_PRESET_ID,
     }
 )
 
@@ -144,6 +152,22 @@ class ProviderRegistry:
                 pricing_profile="anthropic",
                 builtin=True,
             ),
+            ProviderEntry(
+                id=OLLAMA_CLOUD_PRESET_ID,
+                display_name="Ollama Cloud",
+                kind="openai_compatible",
+                pricing_profile="none",
+                base_url=OLLAMA_CLOUD_DEFAULT_BASE_URL,
+                builtin=True,
+            ),
+            ProviderEntry(
+                id=OPENCODE_GO_PRESET_ID,
+                display_name="OpenCode Go",
+                kind="openai_compatible",
+                pricing_profile="none",
+                base_url=OPENCODE_GO_DEFAULT_BASE_URL,
+                builtin=True,
+            ),
         ]
 
     @classmethod
@@ -223,6 +247,14 @@ class ProviderRegistry:
             elif preset.id == ANTHROPIC_PRESET_ID and existing.kind != "anthropic":
                 existing.kind = "anthropic"
                 changed = True
+            elif preset.id in (OLLAMA_CLOUD_PRESET_ID, OPENCODE_GO_PRESET_ID):
+                # intent: DEC-004 (Core/official-cloud-providers) — 同名の旧 custom entry を
+                # 複製せず、display name 以外を検証済み official contract へ収束させる。
+                for field in ("kind", "pricing_profile", "base_url", "profile"):
+                    expected = getattr(preset, field)
+                    if getattr(existing, field) != expected:
+                        setattr(existing, field, expected)
+                        changed = True
 
         builtin_order = [p.id for p in cls.builtin_presets()]
         builtins: List[ProviderEntry] = []
@@ -358,6 +390,8 @@ class ProviderRegistry:
                 OPENROUTER_PRESET_ID,
                 OPENAI_PRESET_ID,
                 GOOGLE_AI_STUDIO_PRESET_ID,
+                OLLAMA_CLOUD_PRESET_ID,
+                OPENCODE_GO_PRESET_ID,
             ):
                 raise ValueError(f"cannot clear base_url for builtin preset: {entry.id}")
             entry.base_url = None

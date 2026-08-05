@@ -34,6 +34,42 @@ class TestModelCatalogTTL(unittest.TestCase):
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
+    def test_ac003_official_cloud_models_use_base_url_and_provider_prefix(self):
+        cases = [
+            (
+                "ollama-cloud",
+                "https://ollama.com/v1",
+                "ollama-test-key",
+                "qwen3.5:397b",
+            ),
+            (
+                "opencode-go",
+                "https://opencode.ai/zen/go/v1",
+                "opencode-test-key",
+                "qwen3.7-max",
+            ),
+        ]
+
+        for provider_id, base_url, api_key, upstream_model in cases:
+            with self.subTest(provider_id=provider_id), patch.object(
+                ModelCatalog,
+                "_fetch_json",
+                return_value={"data": [{"id": upstream_model}]},
+            ) as fetch_json_mock:
+                models = ModelCatalog._fetch_openai_compatible_models(
+                    {
+                        "provider_id": provider_id,
+                        "base_url": base_url,
+                        "api_key": api_key,
+                    }
+                )
+
+            fetch_json_mock.assert_called_once_with(
+                url=f"{base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            self.assertEqual(models, [{"id": f"{provider_id}/{upstream_model}"}])
+
     def test_uses_cache_when_ttl_is_fresh(self):
         now = datetime.now(timezone.utc)
         self._write_cache(

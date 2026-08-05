@@ -216,6 +216,36 @@ class TestModelParameterSupport(unittest.TestCase):
         kwargs = mock_client.chat.completions.create.call_args.kwargs
         self.assertEqual(kwargs.get("temperature"), 0.6)
 
+    def test_ac003_opencode_go_uses_gateway_chat_completion_shape(self) -> None:
+        adapter = OpenAICompatibleAdapter(
+            provider_id="opencode-go",
+            api_key="opencode-test-key",
+            base_url="https://opencode.ai/zen/go/v1",
+        )
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "ok"
+        mock_response.choices[0].message.reasoning = None
+        mock_response.choices[0].message.reasoning_details = None
+        mock_response.usage = None
+        mock_client.chat.completions.create.return_value = mock_response
+        adapter._client = mock_client
+
+        adapter.complete_with_model_result(
+            model="opencode-go/gpt-5.6-luna",
+            system_prompt="sys",
+            user_prompt="user",
+            temperature=0.6,
+            max_tokens=321,
+        )
+
+        kwargs = mock_client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["model"], "gpt-5.6-luna")
+        self.assertEqual(kwargs["max_tokens"], 321)
+        self.assertNotIn("max_completion_tokens", kwargs)
+        self.assertNotIn("temperature", kwargs)
+
 
 if __name__ == "__main__":
     unittest.main()
