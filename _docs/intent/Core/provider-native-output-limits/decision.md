@@ -6,7 +6,7 @@ intent_schema: 2
 created_at: 2026-08-05
 updated_at: 2026-08-05
 references:
-  - "_docs/plan/Core/provider-native-output-limits/plan.md"
+  - "_docs/archives/plan/Core/provider-native-output-limits/plan.md"
   - "_docs/qa/Core/provider-native-output-limits/test-plan.md"
   - "_docs/intent/Core/model-parameter-support/decision.md"
   - "_docs/intent/Core/holistic-context-overflow/decision.md"

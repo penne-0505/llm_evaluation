@@ -9,7 +9,7 @@ created_at: 2026-08-05
 updated_at: 2026-08-05
 references:
   - "_docs/intent/Core/provider-native-output-limits/decision.md"
-  - "_docs/plan/Core/provider-native-output-limits/plan.md"
+  - "_docs/archives/plan/Core/provider-native-output-limits/plan.md"
   - "_docs/intent/Core/model-parameter-support/decision.md"
   - "_docs/intent/Core/holistic-context-overflow/decision.md"
 related_issues: []
@@ -21,7 +21,7 @@ related_prs: []
 ## Source of Intent
 
 - TODO: `Core-Enhance-77`
-- Plan: `_docs/plan/Core/provider-native-output-limits/plan.md`
+- Plan: `_docs/archives/plan/Core/provider-native-output-limits/plan.md`
 - Intent: `_docs/intent/Core/provider-native-output-limits/decision.md`
 
 ## Quality Goal
